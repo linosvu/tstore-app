@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'package:tstore/core/constants/app_colors.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/models/task.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
@@ -50,7 +51,7 @@ String formatTaskDueAt(String? dueAt) {
   if (dueAt == null || dueAt.isEmpty) return '—';
   final d = DateTime.tryParse(dueAt);
   if (d == null) return dueAt;
-  return DateFormat('dd/MM/yyyy HH:mm').format(d.toLocal());
+  return DateFormat('dd/MM/yyyy HH:mm').format(AppDateTime.toVn(d));
 }
 
 Widget taskMainAssigneeBadge(AppLocalizations l10n) {

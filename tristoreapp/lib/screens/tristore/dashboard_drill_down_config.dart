@@ -1,4 +1,5 @@
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/models/management_entity.dart';
 import 'package:tstore/models/management_filters.dart';
 
@@ -31,12 +32,8 @@ class DashboardDrillDownConfig {
   final String listScope;
   final String title;
 
-  static String todayDateStr([DateTime? now]) {
-    final d = now ?? DateTime.now();
-    final m = d.month.toString().padLeft(2, '0');
-    final day = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$m-$day';
-  }
+  static String todayDateStr([DateTime? now]) =>
+      AppDateTime.calendarDate(now);
 
   static DashboardDrillDownConfig fromKind(
     DashboardDrillDownKind kind, {

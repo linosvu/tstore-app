@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/models/delivery.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
@@ -185,7 +186,7 @@ String? deliveryScheduledFormatted(String? iso) {
   if (raw == null || raw.isEmpty) return null;
   final dt = DateTime.tryParse(raw);
   if (dt == null) return null;
-  return DateFormat('dd/MM/yyyy HH:mm').format(dt.toLocal());
+  return DateFormat('dd/MM/yyyy HH:mm').format(AppDateTime.toVn(dt));
 }
 
 /// Rút gọn cho card danh sách đơn: `01/06 - 09:00`.
@@ -194,7 +195,7 @@ String? orderExpectedDeliveryCompact(String? iso) {
   if (raw == null || raw.isEmpty) return null;
   final dt = DateTime.tryParse(raw);
   if (dt == null) return null;
-  return DateFormat('dd/MM - HH:mm').format(dt.toLocal());
+  return DateFormat('dd/MM - HH:mm').format(AppDateTime.toVn(dt));
 }
 
 /// Đếm ngược / quá hạn tới giờ hẹn giao; tự refresh mỗi 30 giây.

@@ -42,13 +42,3 @@ File output: `build/app/outputs/flutter-apk/app-release.apk`
 ```bash
 flutter build ipa
 ```
-
-## Dev local (tuỳ chọn)
-
-Khi cần test với backend chạy trên máy dev (LAN):
-
-```bash
-flutter run --dart-define=API_BASE_URL=http://192.168.1.9:3000
-```
-
-Backend phải lắng nghe `0.0.0.0` (không chỉ `localhost`) thì điện thoại/emulator mới gọi được.

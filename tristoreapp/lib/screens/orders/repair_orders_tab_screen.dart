@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/models/repair_order.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/repair_orders_provider.dart';
@@ -142,10 +143,7 @@ class _RepairOrdersTabScreenState extends State<RepairOrdersTabScreen> {
     super.dispose();
   }
 
-  String _todayYmd() {
-    final n = DateTime.now();
-    return '${n.year.toString().padLeft(4, '0')}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
-  }
+  String _todayYmd() => AppDateTime.calendarDate();
 
   Future<void> _submit(AppLocalizations l10n) async {
     final name = _nameCtrl.text.trim();
