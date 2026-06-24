@@ -303,9 +303,13 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
       final updated = await p.patch(item.id, {'assignedUserId': userId});
       if (!mounted) return;
       if (updated != null) {
+        var next = updated;
+        if (updated.assignedUserId != userId) {
+          next = await p.fetchOne(widget.preparationId) ?? updated;
+        }
         setState(() {
-          _item = updated;
-          _assigneeId = updated.assignedUserId;
+          _item = next;
+          _assigneeId = next.assignedUserId;
         });
         AppMessenger.showSnackBar(
           context,
