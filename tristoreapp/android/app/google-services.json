@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "385578944629",
+    "project_id": "tstore-9e7a0",
+    "storage_bucket": "tstore-9e7a0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:385578944629:android:a78da62783d5e8a971d03c",
+        "android_client_info": {
+          "package_name": "com.appmobile.tstore"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6MXTHJQeognd_XPhNClMZyNo7yKxbY3s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

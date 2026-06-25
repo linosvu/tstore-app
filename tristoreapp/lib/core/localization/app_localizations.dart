@@ -72,6 +72,7 @@ class AppLocalizations {
       'Xóa "$name" khỏi danh sách Truy cập nhanh.';
   String get ok => 'Đồng ý';
   String get cancel => 'Hủy';
+  String get reload => 'Tải lại';
   String get save => 'Lưu';
   String get delete => 'Xóa';
   String get edit => 'Chỉnh sửa';
@@ -297,6 +298,7 @@ class AppLocalizations {
   String get deliveryFilterEmpty =>
       'Không có đơn ở trạng thái này. Chọn bộ lọc khác.';
   String get prepTitle => 'Chuẩn bị hàng';
+  String get prepChangeStatus => 'Đổi trạng thái';
   String get prepTabMine => 'Của tôi';
   String get prepTabCreated => 'Đã tạo';
   String get prepTabBoard => 'Bảng chung';
@@ -600,6 +602,7 @@ class AppLocalizations {
       'Dữ liệu đơn hàng trên hệ thống sẽ bị ghi đè bởi dữ liệu mới nhất từ KiotViet. Tiếp tục?';
   String get saleOrderKiotPaymentsTitle => 'Chi tiết thanh toán (KiotViet)';
   String get saleOrderRecordPaymentPendingShort => 'Chờ duyệt';
+  String get saleOrderConfirmPaymentProposal => 'Duyệt';
   String get saleOrderRecordPaymentButton => 'Ghi nhận thanh toán';
   String get saleOrderRecordPaymentTitle => 'Ghi nhận thanh toán';
   String get saleOrderRecordPaymentTotalOrder => 'Tổng số tiền đơn hàng';
@@ -830,6 +833,8 @@ class AppLocalizations {
       'Số trả trước phải lớn hơn 0 và nhỏ hơn số còn phải thu.';
   String get saleOrderReviewSectionCustomer => 'Khách hàng';
   String get saleOrderCopyName => 'Sao chép tên';
+  String get customerMarkVip => 'Đánh dấu VIP';
+  String get customerRemoveVip => 'Bỏ VIP';
   String get saleOrderCopyPhone => 'Sao chép SĐT';
   String get saleOrderCopyAddress => 'Sao chép địa chỉ';
   String get saleOrderCopiedName => 'Đã sao chép tên khách hàng';

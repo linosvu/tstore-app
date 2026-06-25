@@ -73,17 +73,20 @@ class SaleOrderCustomerBrief {
     required this.id,
     required this.name,
     this.phone,
+    this.isVip = false,
   });
 
   final String id;
   final String name;
   final String? phone;
+  final bool isVip;
 
   factory SaleOrderCustomerBrief.fromJson(Map<String, dynamic> json) {
     return SaleOrderCustomerBrief(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       phone: json['phone'] as String?,
+      isVip: json['isVip'] as bool? ?? false,
     );
   }
 }
@@ -223,6 +226,8 @@ class SaleOrderPublic {
     required this.amountDue,
     this.linkedPreparationStatus,
     this.linkedDeliveryStatus,
+    this.linkedPreparationAssignedName,
+    this.linkedDeliveryAssignedName,
     this.notes,
     this.expectedDeliveryAt,
     this.createdBy,
@@ -259,6 +264,10 @@ class SaleOrderPublic {
   final String? linkedPreparationStatus;
   /// Trạng thái đơn giao mới nhất (chỉ có ở API danh sách đơn bán).
   final String? linkedDeliveryStatus;
+  /// Tên người chuẩn bị (chỉ có ở API danh sách đơn bán).
+  final String? linkedPreparationAssignedName;
+  /// Tên người giao hàng (chỉ có ở API danh sách đơn bán).
+  final String? linkedDeliveryAssignedName;
   final String? notes;
   /// ISO 8601 — thời gian dự kiến giao hàng (đơn bán).
   final String? expectedDeliveryAt;
@@ -363,6 +372,8 @@ class SaleOrderPublic {
       amountDue: (json['amountDue'] as num?)?.toInt() ?? 0,
       linkedPreparationStatus: json['linkedPreparationStatus'] as String?,
       linkedDeliveryStatus: json['linkedDeliveryStatus'] as String?,
+      linkedPreparationAssignedName: json['linkedPreparationAssignedName'] as String?,
+      linkedDeliveryAssignedName: json['linkedDeliveryAssignedName'] as String?,
       notes: json['notes'] as String?,
       expectedDeliveryAt: json['expectedDeliveryAt'] as String?,
       createdBy: byRaw is Map<String, dynamic>

@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,6 +8,7 @@ import 'core/config/app_template_config.dart';
 import 'core/constants/routes.dart';
 import 'core/navigation/app_navigator.dart';
 import 'core/services/api_client.dart';
+import 'core/services/push_notification_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/themes/app_theme.dart';
 import 'providers/auth_provider.dart';
@@ -21,6 +23,14 @@ void main() async {
 
   await StorageService.instance.init();
   await StorageService.instance.remove('is_dark_mode');
+
+  // Firebase init — chỉ chạy khi google-services.json đã được cấu hình.
+  try {
+    await Firebase.initializeApp();
+    await PushNotificationService.instance.init();
+  } catch (_) {
+    // Bỏ qua nếu chưa có google-services.json (dev environment)
+  }
 
   final api = ApiClient();
   final auth = AuthProvider(api: api);
