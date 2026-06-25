@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/routes.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../design_system/ts_bottom_nav.dart';
+import '../../providers/notification_provider.dart';
 import '../../screens/main_shell.dart';
 
-/// Bottom navigation: Home, Orders, Giao Hàng (hub), Profile.
+/// Bottom navigation: Home, Orders, Giao Hàng (hub), Thông báo.
 class PrimaryBottomNav extends StatelessWidget {
   const PrimaryBottomNav({
     super.key,
     required this.currentIndex,
   });
 
-  /// `0` = Home, `1` = Orders, `2` = Giao Hàng hub, `3` = Profile.
+  /// `0` = Home, `1` = Orders, `2` = Giao Hàng hub, `3` = Thông báo.
   final int currentIndex;
 
   static const List<String> _routes = [
     AppRoutes.home,
     AppRoutes.orders,
     AppRoutes.delivery,
-    AppRoutes.profile,
+    AppRoutes.notifications,
   ];
 
   void _onTap(BuildContext context, int index) {
@@ -35,6 +37,7 @@ class PrimaryBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final unread = context.watch<NotificationProvider>().unreadCount;
 
     return Semantics(
       container: true,
@@ -60,9 +63,10 @@ class PrimaryBottomNav extends StatelessWidget {
             label: l10n.deliveryNav,
           ),
           TsBottomNavItem(
-            icon: Icons.person_outline_rounded,
-            selectedIcon: Icons.person_rounded,
-            label: l10n.profile,
+            icon: Icons.notifications_outlined,
+            selectedIcon: Icons.notifications_rounded,
+            label: l10n.notificationsNav,
+            badgeCount: unread,
           ),
         ],
       ),

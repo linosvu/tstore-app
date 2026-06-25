@@ -996,32 +996,6 @@ class _OrderRowCard extends StatelessWidget {
                             ],
                           ),
                         ],
-                        if (managedByName.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.person_outline_rounded,
-                                size: 14,
-                                color: scheme.primary,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  managedByName,
-                                  style: AppTextStyles.dataSecondary(context)
-                                      .copyWith(
-                                    color: scheme.primary,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -1126,6 +1100,8 @@ class _OrderRowCard extends StatelessWidget {
                 preparationStatus: order.linkedPreparationStatus,
                 deliveryStatus: order.linkedDeliveryStatus,
                 amountDue: order.amountDue,
+                managedByName:
+                    managedByName.isNotEmpty ? managedByName : null,
                 preparationAssignedName: order.linkedPreparationAssignedName,
                 deliveryAssignedName: order.linkedDeliveryAssignedName,
                 l10n: l10n,
@@ -1167,6 +1143,7 @@ class _OrderProgressBar extends StatelessWidget {
     required this.deliveryStatus,
     required this.amountDue,
     required this.l10n,
+    this.managedByName,
     this.preparationAssignedName,
     this.deliveryAssignedName,
   });
@@ -1176,6 +1153,7 @@ class _OrderProgressBar extends StatelessWidget {
   final String? deliveryStatus;
   final int amountDue;
   final AppLocalizations l10n;
+  final String? managedByName;
   final String? preparationAssignedName;
   final String? deliveryAssignedName;
 
@@ -1335,12 +1313,13 @@ class _OrderProgressBar extends StatelessWidget {
           children: steps.asMap().entries.map((entry) {
             final i = entry.key;
             final s = entry.value;
-            // Người chuẩn bị ở bước 1 (prepNav), người giao ở bước 2 (deliveryNav)
-            final assignedName = i == 1
-                ? preparationAssignedName?.trim()
-                : i == 2
-                    ? deliveryAssignedName?.trim()
-                    : null;
+            // Bước Đơn: người nhận; Chuẩn bị / Giao hàng: NV được gán
+            final assignedName = switch (i) {
+              0 => managedByName?.trim(),
+              1 => preparationAssignedName?.trim(),
+              2 => deliveryAssignedName?.trim(),
+              _ => null,
+            };
             return Expanded(
               child: Column(
                 children: [

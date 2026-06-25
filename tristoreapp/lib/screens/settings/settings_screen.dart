@@ -9,7 +9,7 @@ import '../../core/localization/app_localizations.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/ui/branded_app_bar.dart';
 import '../../widgets/ui/menu_group_card.dart';
-import '../profile/profile_account_dialogs.dart';
+import '../profile/profile_content.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -46,45 +46,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: AppSpacing.space3),
-            MenuGroupCard(
-              items: [
-                MenuGroupItem(
-                  title: l10n.profileShortcutTitle,
-                  subtitle: l10n.profileShortcutSubtitle,
-                  icon: Icons.person_rounded,
-                  iconColor: AppColors.primary,
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.profile),
+            if (user != null)
+              const ProfileContent(embedInSettings: true)
+            else ...[
+              Text(
+                'Chưa đăng nhập.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                  AppRoutes.login,
+                  (_) => false,
                 ),
-              ],
-            ),
-            if (user != null) ...[
-              const SizedBox(height: AppSpacing.sectionGap),
-              MenuGroupCard(
-                title: l10n.settingsAccountSection,
-                items: [
-                  MenuGroupItem(
-                    title: l10n.profileEmail,
-                    subtitle: user.email,
-                    icon: Icons.email_outlined,
-                    iconColor: AppColors.primary,
-                    onTap: () =>
-                        ProfileAccountDialogs.editEmail(context, l10n, user),
-                  ),
-                  MenuGroupItem(
-                    title: l10n.profileChangePassword,
-                    icon: Icons.lock_outline_rounded,
-                    iconColor: AppColors.secondary,
-                    onTap: () =>
-                        ProfileAccountDialogs.changePassword(context, l10n),
-                  ),
-                  MenuGroupItem(
-                    title: l10n.profileLogoutTitle,
-                    icon: Icons.logout_rounded,
-                    iconColor: AppColors.error,
-                    onTap: () =>
-                        ProfileAccountDialogs.confirmLogout(context, l10n),
-                  ),
-                ],
+                child: const Text('Đăng nhập'),
               ),
             ],
             if (kDebugMode) ...[

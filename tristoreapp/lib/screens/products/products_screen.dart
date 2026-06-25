@@ -11,7 +11,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/routes.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../models/auth_user.dart';
-import '../../models/product.dart';
+import 'package:tstore/models/product.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/ui/app_search_bar.dart';
 import '../../widgets/ui/empty_state.dart';

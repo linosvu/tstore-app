@@ -313,7 +313,15 @@ class SaleOrderPublic {
   bool get isPaymentCollectedForFinish =>
       isPaymentStepDone && !hasPendingPaymentToConfirm;
 
-  bool isPrepReadyForFinish({String? linkedPrepStatus}) {
+  bool isPrepReadyForFinish({
+    String? linkedPrepStatus,
+    String? linkedDeliveryStatus,
+  }) {
+    final del = (linkedDeliveryStatus ?? this.linkedDeliveryStatus)?.trim();
+    if (del == 'cancelled' || del == 'failed') {
+      // Giao hàng đã hủy / thất bại — không bắt buộc phiếu chuẩn bị xong.
+      return true;
+    }
     final s = (linkedPrepStatus ?? linkedPreparationStatus)?.trim();
     if (s == null || s.isEmpty) return true;
     if (s == 'cancelled') return false;
@@ -332,7 +340,10 @@ class SaleOrderPublic {
     String? linkedDeliveryStatus,
   }) =>
       isPaymentCollectedForFinish &&
-      isPrepReadyForFinish(linkedPrepStatus: linkedPrepStatus) &&
+      isPrepReadyForFinish(
+        linkedPrepStatus: linkedPrepStatus,
+        linkedDeliveryStatus: linkedDeliveryStatus,
+      ) &&
       isDeliveryDoneForFinish(linkedDeliveryStatus: linkedDeliveryStatus);
 
   bool get isOnManagementBoard =>

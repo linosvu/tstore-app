@@ -13,6 +13,7 @@ import 'core/services/storage_service.dart';
 import 'core/themes/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/delivery_provider.dart';
+import 'providers/notification_provider.dart';
 import 'providers/preparation_provider.dart';
 import 'providers/repair_orders_provider.dart';
 import 'providers/tasks_provider.dart';
@@ -73,6 +74,15 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (ctx) => TasksProvider(api: ctx.read<AuthProvider>().api),
+        ),
+        ChangeNotifierProvider(
+          create: (_) {
+            final provider = NotificationProvider();
+            PushNotificationService.instance.onForegroundMessage =
+                provider.addFromRemoteMessage;
+            provider.load();
+            return provider;
+          },
         ),
       ],
       child: MaterialApp(

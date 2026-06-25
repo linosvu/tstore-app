@@ -54,6 +54,19 @@ List<String> preparationStatusDropdownOptions(String current) {
   return [normalized, ...next];
 }
 
+/// Trạng thái chọn được khi quản lý đổi nhảy cóc (khớp tab lọc + backend).
+List<String> preparationManagerSelectableStatuses(String current) {
+  final normalized = normalizePreparationStatus(current);
+  return kPreparationMineStatusFilterOrder
+      .where((s) => s != normalized)
+      .toList();
+}
+
+bool preparationTerminalStatus(String status) {
+  final normalized = normalizePreparationStatus(status);
+  return normalized == 'ready' || normalized == 'cancelled';
+}
+
 StatusBadgeTone preparationStatusTone(String status) {
   switch (normalizePreparationStatus(status)) {
     case 'ready':

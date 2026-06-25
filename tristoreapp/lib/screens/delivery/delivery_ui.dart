@@ -65,6 +65,27 @@ String _normalizeDeliveryStatus(String status) {
 bool deliveryStatusChangeNeedsReason(String to) =>
     to == 'failed' || to == 'cancelled';
 
+const List<String> kDeliveryManagerStatusOptions = [
+  'pending',
+  'delivering',
+  'completed',
+  'failed',
+  'cancelled',
+];
+
+/// Trạng thái chọn được khi quản lý đổi nhảy cóc.
+List<String> deliveryManagerSelectableStatuses(String current) {
+  final normalized = _normalizeDeliveryStatus(current);
+  return kDeliveryManagerStatusOptions
+      .where((s) => s != normalized)
+      .toList();
+}
+
+bool deliveryTerminalStatus(String status) =>
+    _normalizeDeliveryStatus(status) == 'completed' ||
+    _normalizeDeliveryStatus(status) == 'failed' ||
+    _normalizeDeliveryStatus(status) == 'cancelled';
+
 StatusBadgeTone deliveryStatusTone(String status) {
   switch (_normalizeDeliveryStatus(status)) {
     case 'completed':

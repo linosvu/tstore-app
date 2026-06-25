@@ -11,7 +11,7 @@ import 'main_shell_tabs.dart';
 import 'orders/orders_list_screen.dart';
 import 'delivery/fulfillment_tab_launch_args.dart';
 import 'orders/orders_tab_launch_args.dart';
-import 'profile/profile_screen.dart';
+import 'notifications/notifications_screen.dart';
 import 'tristore/tristore_dashboard_screen.dart';
 
 /// Holds the active primary tab. Shared via Provider so any descendant
@@ -130,7 +130,7 @@ class _MainShellState extends State<MainShell> {
       MainShellTab.home => const TristoreDashboardScreen(),
       MainShellTab.orders => const OrdersListScreen(),
       MainShellTab.delivery => const DeliveryScreen(),
-      MainShellTab.profile => const ProfileScreen(),
+      MainShellTab.notifications => const NotificationsScreen(),
       _ => const SizedBox.shrink(),
     };
   }

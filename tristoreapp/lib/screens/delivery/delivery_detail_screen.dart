@@ -23,6 +23,7 @@ import 'package:tstore/screens/delivery/delivery_ui.dart';
 import 'package:tstore/widgets/sale_order_code_link_row.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
+import 'package:tstore/widgets/ui/status_change_sheet.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 List<(String, StatusBadgeTone)> _deliveryLineOptionBadges(
@@ -203,6 +204,47 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   bool _terminal(String s) =>
       s == 'completed' || s == 'failed' || s == 'cancelled';
 
+  bool _isElevatedRole(String? role) =>
+      role == 'admin' || role == 'manager';
+
+  Future<void> _showManagerStatusSheet(DeliveryPublic d) async {
+    final l10n = AppLocalizations.of(context);
+    final options = deliveryManagerSelectableStatuses(d.status);
+    if (options.isEmpty) {
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.deliveryChangeStatusNoOptions)),
+      );
+      return;
+    }
+
+    final picked = await showStatusChangeSheet(
+      context: context,
+      title: l10n.deliveryChangeStatusTitle,
+      currentStatusLabel: deliveryStatusLabel(d.status, l10n),
+      currentStatusTone: deliveryStatusTone(d.status),
+      statusFieldLabel: l10n.deliveryStatus,
+      options: options
+          .map(
+            (s) => StatusChangeOption(
+              value: s,
+              label: deliveryStatusLabel(s, l10n),
+              tone: deliveryStatusTone(s),
+            ),
+          )
+          .toList(),
+      confirmLabel: l10n.saleOrderRecordPaymentConfirm,
+      cancelLabel: l10n.cancel,
+    );
+
+    if (picked == null || !mounted) return;
+    if (deliveryStatusChangeNeedsReason(picked)) {
+      await _promptReasonThenStatus(picked);
+      return;
+    }
+    await _patchStatus(picked, successMessage: l10n.deliveryChangeStatusSuccess);
+  }
+
   Widget _buildPinnedStatusActions(
     BuildContext context,
     AppLocalizations l10n,
@@ -291,7 +333,11 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     );
   }
 
-  Future<void> _patchStatus(String next, {String? reason}) async {
+  Future<void> _patchStatus(
+    String next, {
+    String? reason,
+    String? successMessage,
+  }) async {
     final l10n = AppLocalizations.of(context);
     setState(() => _busy = true);
     try {
@@ -300,7 +346,10 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
       if (!mounted) return;
       if (d != null) {
         setState(() => _d = d);
-        AppMessenger.showSnackBar(context, SnackBar(content: Text(l10n.success)));
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(successMessage ?? l10n.success)),
+        );
       }
     } on DioException catch (e) {
       final data = e.response?.data;
@@ -1025,11 +1074,24 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final isElevated = _isElevatedRole(
+      context.read<AuthProvider>().user?.role,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.deliveryTitle),
         actions: [
+          if (_d != null &&
+              isElevated &&
+              !deliveryTerminalStatus(_d!.status))
+            IconButton(
+              tooltip: l10n.deliveryChangeStatus,
+              onPressed: _loading || _busy
+                  ? null
+                  : () => _showManagerStatusSheet(_d!),
+              icon: const Icon(Icons.swap_vert_rounded),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _loading || _busy ? null : _load,
@@ -1047,7 +1109,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (!_terminal(_d!.status))
+                            if (!isElevated && !_terminal(_d!.status))
                               _buildPinnedStatusActions(
                                 context,
                                 l10n,
@@ -1055,7 +1117,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                                 _d!,
                               ),
                             Expanded(
-                              child: _body(context, l10n, scheme, _d!),
+                              child: _body(context, l10n, scheme, _d!, isElevated),
                             ),
                           ],
                         ),
@@ -1075,6 +1137,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     AppLocalizations l10n,
     ColorScheme scheme,
     DeliveryPublic d,
+    bool isElevated,
   ) {
     final cust = d.saleOrder?.customer;
     final addrLine = deliveryAddressLine(d);
@@ -1328,7 +1391,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
           title: l10n.deliveryImages,
           child: _checkinImagesTabs(context, l10n, scheme, d, terminal),
         ),
-        if (!terminal) ...[
+        if (!terminal && !isElevated) ...[
           const SizedBox(height: AppSpacing.space4),
           OutlinedButton(
             onPressed: _busy ? null : () => _promptReasonThenStatus('cancelled'),

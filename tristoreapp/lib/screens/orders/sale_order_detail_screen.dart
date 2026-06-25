@@ -32,6 +32,7 @@ import 'package:tstore/screens/preparation/preparation_ui.dart';
 import 'package:tstore/widgets/ui/error_banner.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
+import 'package:tstore/widgets/ui/status_change_sheet.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 const _thousandsSep = ThousandsGroupSeparatorKey.dot;
@@ -237,18 +238,18 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   String? _finishOrderBlockedMessage(SaleOrderPublic o, AppLocalizations l10n) {
     if (!_canShowFinishOrderButton(o)) return null;
+    final deliveryStatus =
+        _linkedDelivery?.status ?? o.linkedDeliveryStatus;
     if (!o.isPaymentCollectedForFinish) {
       return l10n.ordersFinishBlockedPayment;
     }
     if (!o.isPrepReadyForFinish(
       linkedPrepStatus: _linkedPreparation?.status,
+      linkedDeliveryStatus: deliveryStatus,
     )) {
       return l10n.ordersFinishBlockedPrep;
     }
-    if (_linkedDelivery != null &&
-        !o.isDeliveryDoneForFinish(
-          linkedDeliveryStatus: _linkedDelivery?.status,
-        )) {
+    if (!o.isDeliveryDoneForFinish(linkedDeliveryStatus: deliveryStatus)) {
       return l10n.ordersFinishBlockedDelivery;
     }
     return null;
@@ -438,21 +439,6 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _actionBusy = false);
-    }
-  }
-
-  String? _effectiveDeliveryStatus(SaleOrderPublic o) {
-    if (_linkedDelivery != null) return _linkedDelivery!.status;
-    switch (o.status) {
-      case 'delivery':
-        return 'delivering';
-      case 'completed':
-        return 'completed';
-      case 'cancelled':
-      case 'refund':
-        return 'cancelled';
-      default:
-        return null;
     }
   }
 
@@ -751,6 +737,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     final o = _order;
     if (o == null) return;
     final role = context.read<AuthProvider>().user?.role;
+    if (!_isElevatedRole(role)) return;
     final options = _selectableOrderStatuses(o, role);
     if (options.isEmpty) {
       AppMessenger.showSnackBar(
@@ -760,109 +747,29 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       return;
     }
 
-    String? selectedStatus;
-    final confirmed = await showModalBottomSheet<bool>(
+    final selectedStatus = await showStatusChangeSheet(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final scheme = Theme.of(ctx).colorScheme;
-        final maxListH = MediaQuery.sizeOf(ctx).height * 0.42;
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            final canConfirm = selectedStatus != null &&
-                selectedStatus != o.status;
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.screenHorizontal,
-                  0,
-                  AppSpacing.screenHorizontal,
-                  AppSpacing.space4 + MediaQuery.viewInsetsOf(ctx).bottom,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      l10n.saleOrderChangeStatusTitle,
-                      style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: AppSpacing.space3),
-                    Row(
-                      children: [
-                        Text(
-                          '${l10n.ordersStatusLabel}: ',
-                          style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                        ),
-                        StatusBadge(
-                          label: _orderStatusLabel(o.status, l10n),
-                          tone: _toneForOrderStatus(o.status),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.space2),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: maxListH),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: options.map((s) {
-                          return RadioListTile<String>(
-                            value: s,
-                            groupValue: selectedStatus,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(_orderStatusLabel(s, l10n)),
-                            secondary: StatusBadge(
-                              label: _orderStatusLabel(s, l10n),
-                              tone: _toneForOrderStatus(s),
-                            ),
-                            onChanged: (v) {
-                              setModalState(() => selectedStatus = v);
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.space3),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: Text(l10n.cancel),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.space2),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: canConfirm
-                                ? () => Navigator.pop(ctx, true)
-                                : null,
-                            child: Text(l10n.saleOrderRecordPaymentConfirm),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      title: l10n.saleOrderChangeStatusTitle,
+      currentStatusLabel: _orderStatusLabel(o.status, l10n),
+      currentStatusTone: _toneForOrderStatus(o.status),
+      statusFieldLabel: l10n.ordersStatusLabel,
+      options: options
+          .map(
+            (s) => StatusChangeOption(
+              value: s,
+              label: _orderStatusLabel(s, l10n),
+              tone: _toneForOrderStatus(s),
+            ),
+          )
+          .toList(),
+      confirmLabel: l10n.saleOrderRecordPaymentConfirm,
+      cancelLabel: l10n.cancel,
     );
 
-    if (confirmed != true ||
-        !mounted ||
-        selectedStatus == null ||
-        selectedStatus == o.status) {
+    if (selectedStatus == null || !mounted || selectedStatus == o.status) {
       return;
     }
-    await _patchOrderStatus(selectedStatus!, l10n);
+    await _patchOrderStatus(selectedStatus, l10n);
   }
 
   Future<void> _cancelOrder(AppLocalizations l10n) async {
@@ -1166,10 +1073,11 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                 onPressed: _actionBusy ? null : () => _openEdit(_order!),
                 icon: const Icon(Icons.edit_outlined),
               ),
-            if (_canChangeOrderStatus(
-              _order!,
-              context.read<AuthProvider>().user?.role,
-            ))
+            if (_isElevatedRole(context.read<AuthProvider>().user?.role) &&
+                _canChangeOrderStatus(
+                  _order!,
+                  context.read<AuthProvider>().user?.role,
+                ))
               IconButton(
                 tooltip: l10n.saleOrderChangeStatus,
                 onPressed: _actionBusy
@@ -1599,24 +1507,6 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                             ),
                           ),
                         ),
-                        if (_linkedDelivery != null &&
-                            _linkedDelivery!.status != 'cancelled') ...[
-                          StatusBadge(
-                            label: _deliveryStatusShort(_linkedDelivery!.status, l10n),
-                            tone: _toneForDeliveryStatus(_linkedDelivery!.status),
-                          ),
-                          const SizedBox(width: 8),
-                        ] else if (_linkedDelivery == null &&
-                            _effectiveDeliveryStatus(o) != null &&
-                            _effectiveDeliveryStatus(o) != 'cancelled') ...[
-                          StatusBadge(
-                            label: _deliveryStatusShort(
-                                _effectiveDeliveryStatus(o)!, l10n),
-                            tone: _toneForDeliveryStatus(
-                                _effectiveDeliveryStatus(o)!),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
                         if (o.amountDue > 0)
                           DecoratedBox(
                             decoration: BoxDecoration(
@@ -1755,33 +1645,33 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                 decoration: scheduleDeco,
                               ),
                             ),
-                            if (_isElevatedRole(
-                                  context.read<AuthProvider>().user?.role,
-                                ) &&
-                                p.recordStatus == 'pending') ...[
-                              const SizedBox(width: 8),
-                              FilledButton.tonal(
-                                onPressed: _actionBusy
-                                    ? null
-                                    : () => unawaited(
-                                          _confirmPaymentProposal(p.id),
-                                        ),
-                                style: FilledButton.styleFrom(
-                                  minimumSize: Size.zero,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: Text(
-                                  l10n.saleOrderConfirmPaymentProposal,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
+                        if (_isElevatedRole(
+                              context.read<AuthProvider>().user?.role,
+                            ) &&
+                            !p.isScheduleReminder &&
+                            p.recordStatus == 'pending') ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton(
+                              onPressed: _actionBusy
+                                  ? null
+                                  : () => unawaited(
+                                        _confirmPaymentProposal(p.id),
+                                      ),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(88, 36),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                              ),
+                              child: Text(l10n.saleOrderConfirmPaymentProposal),
+                            ),
+                          ),
+                        ],
                         if (dateLabel != null ||
                             statusLabel.isNotEmpty ||
                             code.isNotEmpty) ...[

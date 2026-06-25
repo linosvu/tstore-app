@@ -114,6 +114,21 @@ class AppLocalizations {
   String get profileLogoutTitle => 'Đăng xuất';
   String get profileLogoutMessage => 'Bạn có chắc muốn đăng xuất?';
 
+  // Notifications
+  String get notificationsNav => 'Thông báo';
+  String get notificationsTitle => 'Thông báo';
+  String get notificationsEmpty => 'Chưa có thông báo';
+  String get notificationsMarkAllRead => 'Đọc tất cả';
+  String get notificationsDeleteAll => 'Xóa tất cả';
+  String get notificationsDeleteConfirm =>
+      'Xóa toàn bộ thông báo? Hành động này không thể hoàn tác.';
+  String get notificationsDeleteOneConfirm => 'Xóa thông báo này?';
+  String get notificationsDeleted => 'Đã xóa thông báo';
+  String get notificationsCategoryOrder => 'Đơn hàng';
+  String get notificationsCategoryPreparation => 'Chuẩn bị';
+  String get notificationsCategoryDelivery => 'Giao hàng';
+  String get notificationsCategorySystem => 'Hệ thống';
+
   // Products (tab trước đây là Nhật ký)
   String get productsNav => 'Sản phẩm';
   String get productsTitle => 'Sản phẩm';
@@ -249,6 +264,11 @@ class AppLocalizations {
       'Chưa có mục checklist từ máy chủ.';
   String get deliveryStatus => 'Trạng thái';
   String get deliveryNextStatus => 'Bước tiếp';
+  String get deliveryChangeStatus => 'Đổi trạng thái';
+  String get deliveryChangeStatusTitle => 'Chuyển trạng thái giao hàng';
+  String get deliveryChangeStatusSuccess => 'Đã cập nhật trạng thái giao hàng';
+  String get deliveryChangeStatusNoOptions =>
+      'Đơn giao này không có trạng thái khác để chọn.';
   String get deliverySetStatus => 'Đổi trạng thái';
   String get deliveryReason => 'Lý do';
   String get deliveryImages => 'Ảnh check-in';
@@ -299,6 +319,10 @@ class AppLocalizations {
       'Không có đơn ở trạng thái này. Chọn bộ lọc khác.';
   String get prepTitle => 'Chuẩn bị hàng';
   String get prepChangeStatus => 'Đổi trạng thái';
+  String get prepChangeStatusTitle => 'Chuyển trạng thái chuẩn bị';
+  String get prepChangeStatusSuccess => 'Đã cập nhật trạng thái chuẩn bị';
+  String get prepChangeStatusNoOptions =>
+      'Phiếu này không có trạng thái khác để chọn.';
   String get prepTabMine => 'Của tôi';
   String get prepTabCreated => 'Đã tạo';
   String get prepTabBoard => 'Bảng chung';

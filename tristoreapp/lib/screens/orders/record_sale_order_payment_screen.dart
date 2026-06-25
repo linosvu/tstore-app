@@ -31,11 +31,12 @@ int _collectedExcludingPending(SaleOrderPublic o) {
       .fold<int>(0, (s, p) => s + p.amount);
 }
 
-SaleOrderPaymentPublic? _pendingPayment(SaleOrderPublic o) {
-  for (final p in o.payments) {
-    if (p.recordStatus == 'pending') return p;
-  }
-  return null;
+List<SaleOrderPaymentPublic> _pendingPayments(SaleOrderPublic o) {
+  return o.payments
+      .where(
+        (p) => p.recordStatus == 'pending' && !p.isScheduleReminder,
+      )
+      .toList();
 }
 
 SaleOrderPaymentPublic? _activeScheduleReminder(SaleOrderPublic o) {
@@ -335,22 +336,111 @@ class _RecordSaleOrderPaymentScreenState
     setState(() => _busy = true);
     try {
       final auth = context.read<AuthProvider>();
-      await auth.api.post<Map<String, dynamic>>(
+      final res = await auth.api.post<Map<String, dynamic>>(
         '/admin/sale-orders/payment-proposals/$proposalId/confirm',
       );
       if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        final updated = SaleOrderPublic.fromJson(data);
+        setState(() {
+          _order = updated;
+          _busy = false;
+        });
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(l10n.saleOrderRecordPaymentConfirmSuccess)),
+        );
+        if (_pendingPayments(updated).isEmpty) {
+          Navigator.of(context).pop(true);
+        }
+        return;
+      }
       setState(() => _busy = false);
-      AppMessenger.showSnackBar(context, 
-        SnackBar(content: Text(l10n.saleOrderRecordPaymentConfirmSuccess)),
-      );
-      Navigator.of(context).pop(true);
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      AppMessenger.showSnackBar(context, 
+      AppMessenger.showSnackBar(
+        context,
         SnackBar(content: Text(_dioMsg(e))),
       );
     }
+  }
+
+  Widget _buildPendingPaymentCard(
+    BuildContext context,
+    AppLocalizations l10n,
+    SaleOrderPaymentPublic pending, {
+    required bool manage,
+  }) {
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  pending.method ?? '—',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                _money(pending.amount),
+                style: AppTextStyles.amount(context),
+              ),
+            ],
+          ),
+          if ((pending.description ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              pending.description!.trim(),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if ((pending.scheduledPaymentDate ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${l10n.saleOrderRecordPaymentSchedule}: '
+              '${_formatScheduledLabel(pending.scheduledPaymentDate!)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+          if (pending.requestedBy != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              pending.requestedBy!.name,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+          if ((pending.transferProofUrl ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _buildTransferProofThumbnail(
+              context,
+              l10n,
+              pending.transferProofUrl!.trim(),
+            ),
+          ],
+          if (manage) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _busy
+                    ? null
+                    : () => _confirmProposal(l10n, pending.id),
+                child: Text(l10n.saleOrderRecordPaymentConfirm),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -511,8 +601,8 @@ class _RecordSaleOrderPaymentScreenState
     AuthUser? user,
     SaleOrderPublic o,
   ) {
-    final pending = _pendingPayment(o);
-    if (pending == null) return [];
+    final pendingList = _pendingPayments(o);
+    if (pendingList.isEmpty) return [];
     final manage = _canManage(user);
     return [
       Text(
@@ -522,74 +612,15 @@ class _RecordSaleOrderPaymentScreenState
             ),
       ),
       const SizedBox(height: 8),
-      SectionCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      pending.method ?? '—',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  Text(
-                    _money(pending.amount),
-                    style: AppTextStyles.amount(context),
-                  ),
-                ],
-              ),
-              if ((pending.description ?? '').trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  pending.description!.trim(),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              if ((pending.scheduledPaymentDate ?? '').trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '${l10n.saleOrderRecordPaymentSchedule}: '
-                  '${_formatScheduledLabel(pending.scheduledPaymentDate!)}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ],
-              if (pending.requestedBy != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  pending.requestedBy!.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ],
-              if ((pending.transferProofUrl ?? '').trim().isNotEmpty) ...[
-                const SizedBox(height: 10),
-                _buildTransferProofThumbnail(
-                  context,
-                  l10n,
-                  pending.transferProofUrl!.trim(),
-                ),
-              ],
-              if (manage) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _confirmProposal(l10n, pending.id),
-                    child: Text(l10n.saleOrderRecordPaymentConfirm),
-                  ),
-                ),
-              ],
-            ],
-          ),
-      ),
+      for (var i = 0; i < pendingList.length; i++) ...[
+        if (i > 0) const SizedBox(height: 8),
+        _buildPendingPaymentCard(
+          context,
+          l10n,
+          pendingList[i],
+          manage: manage,
+        ),
+      ],
       const SizedBox(height: AppSpacing.space3),
     ];
   }
@@ -599,7 +630,7 @@ class _RecordSaleOrderPaymentScreenState
     AppLocalizations l10n,
     SaleOrderPublic o,
   ) {
-    final hasPending = _pendingPayment(o) != null;
+    final hasPending = _pendingPayments(o).isNotEmpty;
     if (hasPending || o.amountDue <= 0) {
       return [];
     }

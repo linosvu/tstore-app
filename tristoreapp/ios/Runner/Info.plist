@@ -46,8 +46,10 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Ứng dụng cần truy cập ảnh để đặt ảnh đại diện, bill thanh toán và minh chứng giao hàng.</string>
+	<string>Ứng dụng cần truy cập ảnh và video để đặt ảnh đại diện, bill thanh toán và minh chứng giao hàng.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Ứng dụng cần camera để chụp ảnh đại diện, bill chuyển khoản và minh chứng giao hàng.</string>
+	<string>Ứng dụng cần camera để chụp ảnh, quay video minh chứng giao hàng và bill chuyển khoản.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ứng dụng cần micro để ghi âm khi quay video minh chứng giao hàng.</string>
 </dict>
 </plist>

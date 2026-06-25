@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../localization/app_localizations.dart';
 import '../utils/media_upload.dart';
+import 'app_messenger.dart';
 
 enum MediaPickKind {
   cameraPhoto,
@@ -85,28 +87,50 @@ Future<MediaPickResult?> showMediaPickerSheet(
   if (kind == null) return null;
 
   final picker = ImagePicker();
-  switch (kind) {
-    case MediaPickKind.cameraPhoto:
-      final x = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 92,
-      );
-      if (x == null) return null;
-      return MediaPickResult(path: x.path, isVideo: false);
-    case MediaPickKind.galleryPhoto:
-      final x = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 92,
-      );
-      if (x == null) return null;
-      return MediaPickResult(path: x.path, isVideo: false);
-    case MediaPickKind.cameraVideo:
-      final x = await picker.pickVideo(source: ImageSource.camera);
-      if (x == null) return null;
-      return MediaPickResult(path: x.path, isVideo: true);
-    case MediaPickKind.galleryVideo:
-      final x = await picker.pickVideo(source: ImageSource.gallery);
-      if (x == null) return null;
-      return MediaPickResult(path: x.path, isVideo: true);
+  final maxVideoDuration = config != null
+      ? Duration(seconds: config.maxVideoDurationSeconds)
+      : null;
+
+  try {
+    switch (kind) {
+      case MediaPickKind.cameraPhoto:
+        final x = await picker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 92,
+        );
+        if (x == null) return null;
+        return MediaPickResult(path: x.path, isVideo: false);
+      case MediaPickKind.galleryPhoto:
+        final x = await picker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 92,
+        );
+        if (x == null) return null;
+        return MediaPickResult(path: x.path, isVideo: false);
+      case MediaPickKind.cameraVideo:
+        final x = await picker.pickVideo(
+          source: ImageSource.camera,
+          maxDuration: maxVideoDuration,
+        );
+        if (x == null) return null;
+        return MediaPickResult(path: x.path, isVideo: true);
+      case MediaPickKind.galleryVideo:
+        final x = await picker.pickVideo(
+          source: ImageSource.gallery,
+          maxDuration: maxVideoDuration,
+        );
+        if (x == null) return null;
+        return MediaPickResult(path: x.path, isVideo: true);
+    }
+  } on PlatformException catch (e) {
+    if (context.mounted) {
+      final msg = e.code == 'camera_access_denied' ||
+              e.code == 'microphone_access_denied' ||
+              e.code == 'photo_access_denied'
+          ? 'Cần cấp quyền Camera và Micro trên iOS để quay video (Cài đặt → TStore).'
+          : 'Không mở được camera/video: ${e.message ?? e.code}';
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    }
+    return null;
   }
 }

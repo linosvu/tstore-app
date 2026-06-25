@@ -23,6 +23,7 @@ import 'package:tstore/screens/preparation/preparation_ui.dart';
 import 'package:tstore/widgets/sale_order_code_link_row.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
+import 'package:tstore/widgets/ui/status_change_sheet.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 class PreparationDetailScreen extends StatefulWidget {
@@ -161,17 +162,19 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
     }
   }
 
-  Future<void> _patchTo(String next) async {
+  Future<void> _patchTo(String next, {String? successMessage}) async {
     final item = _item;
     if (item == null || _busy) return;
     setState(() => _busy = true);
     final p = context.read<PreparationProvider>();
+    final l10n = AppLocalizations.of(context);
     try {
       final updated = await p.patchStatus(item.id, next);
       if (updated != null && mounted) {
         setState(() => _item = updated);
-        AppMessenger.showSnackBar(context, 
-          SnackBar(content: Text(AppLocalizations.of(context).success)),
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(successMessage ?? l10n.success)),
         );
       }
     } on DioException catch (e) {
@@ -256,62 +259,42 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
   bool _isElevatedRole(String? role) =>
       role == 'admin' || role == 'manager';
 
-  static const _allStatuses = [
-    'pending',
-    'in_progress',
-    'ready',
-    'cancelled',
-  ];
-
   Future<void> _showManagerStatusSheet(PreparationOrderPublic item) async {
     final l10n = AppLocalizations.of(context);
-    final options = _allStatuses.where((s) => s != item.status).toList();
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                l10n.prepChangeStatus,
-                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ),
-            const Divider(height: 1),
-            ...options.map(
-              (s) => ListTile(
-                title: Text(preparationStatusLabel(s, l10n)),
-                leading: Icon(_prepStatusIcon(s)),
-                onTap: () => Navigator.pop(ctx, s),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (picked != null && mounted) {
-      await _patchTo(picked);
+    final options = preparationManagerSelectableStatuses(item.status);
+    if (options.isEmpty) {
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.prepChangeStatusNoOptions)),
+      );
+      return;
     }
-  }
 
-  IconData _prepStatusIcon(String status) {
-    switch (status) {
-      case 'pending':
-        return Icons.hourglass_empty_rounded;
-      case 'in_progress':
-        return Icons.play_arrow_rounded;
-      case 'ready':
-        return Icons.check_circle_outline_rounded;
-      case 'cancelled':
-        return Icons.cancel_outlined;
-      default:
-        return Icons.circle_outlined;
+    final picked = await showStatusChangeSheet(
+      context: context,
+      title: l10n.prepChangeStatusTitle,
+      currentStatusLabel: preparationStatusLabel(item.status, l10n),
+      currentStatusTone: preparationStatusTone(item.status),
+      statusFieldLabel: l10n.deliveryStatus,
+      options: options
+          .map(
+            (s) => StatusChangeOption(
+              value: s,
+              label: preparationStatusLabel(s, l10n),
+              tone: preparationStatusTone(s),
+            ),
+          )
+          .toList(),
+      confirmLabel: l10n.saleOrderRecordPaymentConfirm,
+      cancelLabel: l10n.cancel,
+    );
+
+    if (picked == null || !mounted) return;
+    if (picked == 'cancelled') {
+      await _cancelPreparation();
+      return;
     }
+    await _patchTo(picked, successMessage: l10n.prepChangeStatusSuccess);
   }
 
   String? _saleOrderCreatorId(PreparationOrderPublic item) =>
@@ -584,7 +567,9 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
           if (isElevated)
             IconButton(
               tooltip: l10n.prepChangeStatus,
-              onPressed: _busy ? null : () => _showManagerStatusSheet(item),
+              onPressed: _busy || preparationTerminalStatus(item.status)
+                  ? null
+                  : () => _showManagerStatusSheet(item),
               icon: const Icon(Icons.swap_vert_rounded),
             ),
           IconButton(
@@ -810,30 +795,32 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.space4),
-          if (item.status == 'pending')
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _patchTo('in_progress'),
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: Text(l10n.prepStartPreparing),
-            ),
-          if (item.status == 'in_progress') ...[
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _patchTo('ready'),
-              icon: const Icon(Icons.check_circle_outline_rounded),
-              label: Text(l10n.prepMarkReady),
-            ),
-          ],
-          if (item.status == 'pending' ||
-              item.status == 'in_progress' ||
-              item.status == 'ready' ||
-              item.status == 'done') ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _cancelPreparation,
-              icon: const Icon(Icons.cancel_outlined),
-              label: Text(l10n.prepMarkCancelled),
-            ),
+          if (!isElevated) ...[
+            if (item.status == 'pending')
+              FilledButton.icon(
+                onPressed: _busy ? null : () => _patchTo('in_progress'),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: Text(l10n.prepStartPreparing),
+              ),
+            if (item.status == 'in_progress') ...[
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _busy ? null : () => _patchTo('ready'),
+                icon: const Icon(Icons.check_circle_outline_rounded),
+                label: Text(l10n.prepMarkReady),
+              ),
+            ],
+            if (item.status == 'pending' ||
+                item.status == 'in_progress' ||
+                item.status == 'ready' ||
+                item.status == 'done') ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _cancelPreparation,
+                icon: const Icon(Icons.cancel_outlined),
+                label: Text(l10n.prepMarkCancelled),
+              ),
+            ],
           ],
         ],
       ),

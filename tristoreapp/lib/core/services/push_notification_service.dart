@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 /// Xử lý background messages (phải là top-level function).
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Firebase đã được init trong main trước khi gọi hàm này.
   debugPrint('[FCM] Background message: ${message.notification?.title}');
 }
 
@@ -16,19 +15,19 @@ class PushNotificationService {
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
+  /// Gọi khi nhận push lúc app đang foreground (gán từ [NotificationProvider]).
+  Future<void> Function(RemoteMessage message)? onForegroundMessage;
+
   /// Gọi sau khi Firebase đã initializeApp().
   Future<void> init() async {
-    // Đăng ký handler background
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Xin quyền (iOS/macOS)
     await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // Lắng nghe khi app đang foreground
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
   }
 
@@ -49,6 +48,9 @@ class PushNotificationService {
     debugPrint(
       '[FCM] Foreground: ${message.notification?.title} — ${message.notification?.body}',
     );
-    // TODO: hiện in-app notification (SnackBar / overlay) nếu cần
+    final handler = onForegroundMessage;
+    if (handler != null) {
+      unawaited(handler(message));
+    }
   }
 }

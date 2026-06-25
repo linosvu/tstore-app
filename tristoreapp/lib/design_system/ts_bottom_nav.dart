@@ -8,11 +8,13 @@ class TsBottomNavItem {
     required this.icon,
     required this.selectedIcon,
     required this.label,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final IconData selectedIcon;
   final String label;
+  final int badgeCount;
 }
 
 /// Bottom nav: blue active icon/label + yellow line above icon.
@@ -52,6 +54,7 @@ class TsBottomNav extends StatelessWidget {
                     icon: selected ? item.selectedIcon : item.icon,
                     label: item.label,
                     selected: selected,
+                    badgeCount: item.badgeCount,
                     onTap: () => onTap(index),
                   ),
                 );
@@ -70,16 +73,19 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
     final color = selected ? AppColors.primary : AppColors.onSurfaceVariant;
+    final iconWidget = Icon(icon, size: 24, color: color);
     return InkWell(
       onTap: onTap,
       child: Column(
@@ -95,7 +101,16 @@ class _NavItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          Icon(icon, size: 24, color: color),
+          if (badgeCount > 0)
+            Badge(
+              label: Text(
+                badgeCount > 99 ? '99+' : '$badgeCount',
+                style: const TextStyle(fontSize: 10),
+              ),
+              child: iconWidget,
+            )
+          else
+            iconWidget,
           const SizedBox(height: 2),
           Text(
             label,
