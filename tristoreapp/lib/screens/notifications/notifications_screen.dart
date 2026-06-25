@@ -6,18 +6,30 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/routes.dart';
 import '../../core/localization/app_localizations.dart';
+import '../../core/navigation/notification_navigation.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_provider.dart';
-import '../../screens/delivery/delivery_detail_screen.dart';
 import '../../screens/main_shell.dart';
-import '../../screens/orders/sale_order_detail_screen.dart';
-import '../../screens/preparation/preparation_detail_screen.dart';
 import '../../widgets/ui/empty_state.dart';
 import '../../widgets/ui/notification_list_tile.dart';
 import '../../widgets/ui/screen_gradient_header.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<NotificationProvider>().reloadFromStorage();
+    });
+  }
 
   Future<void> _confirmDeleteAll(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
@@ -46,35 +58,7 @@ class NotificationsScreen extends StatelessWidget {
   void _openNotification(BuildContext context, AppNotification n) {
     final provider = context.read<NotificationProvider>();
     provider.markRead(n.id);
-
-    final entityId = n.entityId;
-    if (entityId == null || entityId.isEmpty) return;
-
-    switch (n.category) {
-      case AppNotificationCategory.order:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SaleOrderDetailScreen(orderId: entityId),
-          ),
-        );
-      case AppNotificationCategory.preparation:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PreparationDetailScreen(preparationId: entityId),
-          ),
-        );
-      case AppNotificationCategory.delivery:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DeliveryDetailScreen(deliveryId: entityId),
-          ),
-        );
-      case AppNotificationCategory.system:
-        break;
-    }
+    NotificationNavigation.openFromNotification(context, n);
   }
 
   @override

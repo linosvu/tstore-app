@@ -37,6 +37,7 @@ class AppNotification {
     String? orderCode,
     DateTime? readAt,
     bool clearReadAt = false,
+    bool clearEntityId = false,
     DateTime? createdAt,
   }) {
     return AppNotification(
@@ -44,7 +45,7 @@ class AppNotification {
       title: title ?? this.title,
       body: body ?? this.body,
       category: category ?? this.category,
-      entityId: entityId ?? this.entityId,
+      entityId: clearEntityId ? null : (entityId ?? this.entityId),
       orderCode: orderCode ?? this.orderCode,
       readAt: clearReadAt ? null : (readAt ?? this.readAt),
       createdAt: createdAt ?? this.createdAt,

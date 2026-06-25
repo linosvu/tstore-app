@@ -17,6 +17,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   final ApiClient _api;
+  StreamSubscription<String>? _fcmTokenRefreshSub;
 
   /// Gọi API đã gắn token (vd. `/admin/products`).
   ApiClient get api => _api;
@@ -51,6 +52,7 @@ class AuthProvider extends ChangeNotifier {
       _user = AuthUser.fromJson(data);
       _status = AuthStatus.authenticated;
       notifyListeners();
+      unawaited(_registerFcmToken());
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         await _clearSession();
@@ -116,13 +118,17 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _registerFcmToken() async {
     try {
+      await _fcmTokenRefreshSub?.cancel();
+      _fcmTokenRefreshSub = null;
+
       final token = await PushNotificationService.instance.getToken();
       if (token == null) return;
       await _api.post<void>(
         '/auth/device-token',
         data: {'token': token, 'platform': 'android'},
       );
-      PushNotificationService.instance.onTokenRefresh.listen((newToken) {
+      _fcmTokenRefreshSub =
+          PushNotificationService.instance.onTokenRefresh.listen((newToken) {
         _api.post<void>(
           '/auth/device-token',
           data: {'token': newToken, 'platform': 'android'},
@@ -134,6 +140,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _unregisterFcmToken() async {
+    await _fcmTokenRefreshSub?.cancel();
+    _fcmTokenRefreshSub = null;
     try {
       final token = await PushNotificationService.instance.getToken();
       if (token == null) return;

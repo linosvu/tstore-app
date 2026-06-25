@@ -53,16 +53,46 @@ void main() async {
   runApp(MyApp(auth: auth));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key, required this.auth});
 
   final AuthProvider auth;
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PushNotificationService.instance.handleInitialMessage();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final ctx = rootNavigatorKey.currentContext;
+      if (ctx != null) {
+        ctx.read<NotificationProvider>().reloadFromStorage();
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<AuthProvider>.value(value: auth),
+        ChangeNotifierProvider<AuthProvider>.value(value: widget.auth),
         ChangeNotifierProvider(
           create: (ctx) => DeliveryProvider(api: ctx.read<AuthProvider>().api),
         ),
