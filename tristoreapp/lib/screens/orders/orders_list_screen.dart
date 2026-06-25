@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:tstore/core/constants/app_colors.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
+import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
@@ -214,7 +215,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   String _shortDate(String iso) {
     final d = DateTime.tryParse(iso);
     if (d == null) return iso;
-    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final vn = AppDateTime.toVn(d);
+    return '${vn.day.toString().padLeft(2, '0')}/${vn.month.toString().padLeft(2, '0')} ${vn.hour.toString().padLeft(2, '0')}:${vn.minute.toString().padLeft(2, '0')}';
   }
 
   Future<void> _openNewOrder() async {
@@ -426,6 +428,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 },
               ),
               actions: [
+                IconButton(
+                  tooltip: l10n.reload,
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: AppColors.onPrimary,
+                  ),
+                  onPressed: _loading ? null : () => _load(reset: true),
+                ),
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.onPrimary,
@@ -857,6 +867,7 @@ class _OrderRowCard extends StatelessWidget {
     final expectedDelivery =
         orderExpectedDeliveryCompact(order.expectedDeliveryAt);
     final managedByName = (order.managedBy?.name ?? '').trim();
+    final createdByName = (order.createdBy?.name ?? '').trim();
     final notesText = (order.notes ?? '').trim();
     return Material(
       color: scheme.surface,
@@ -961,6 +972,30 @@ class _OrderRowCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (createdByName.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 13,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  createdByName,
+                                  style: AppTextStyles.dataSecondary(context)
+                                      .copyWith(
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (managedByName.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Row(
@@ -1091,6 +1126,8 @@ class _OrderRowCard extends StatelessWidget {
                 preparationStatus: order.linkedPreparationStatus,
                 deliveryStatus: order.linkedDeliveryStatus,
                 amountDue: order.amountDue,
+                preparationAssignedName: order.linkedPreparationAssignedName,
+                deliveryAssignedName: order.linkedDeliveryAssignedName,
                 l10n: l10n,
               ),
               if (showAssignButton && onAssign != null) ...[
@@ -1130,6 +1167,8 @@ class _OrderProgressBar extends StatelessWidget {
     required this.deliveryStatus,
     required this.amountDue,
     required this.l10n,
+    this.preparationAssignedName,
+    this.deliveryAssignedName,
   });
 
   final String orderStatus;
@@ -1137,6 +1176,8 @@ class _OrderProgressBar extends StatelessWidget {
   final String? deliveryStatus;
   final int amountDue;
   final AppLocalizations l10n;
+  final String? preparationAssignedName;
+  final String? deliveryAssignedName;
 
   _FlowStepState _orderStepState() {
     if (orderStatus == 'cancelled' || orderStatus == 'refund') {
@@ -1290,10 +1331,20 @@ class _OrderProgressBar extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Row(
-          children: steps
-              .map(
-                (s) => Expanded(
-                  child: Text(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: steps.asMap().entries.map((entry) {
+            final i = entry.key;
+            final s = entry.value;
+            // Người chuẩn bị ở bước 1 (prepNav), người giao ở bước 2 (deliveryNav)
+            final assignedName = i == 1
+                ? preparationAssignedName?.trim()
+                : i == 2
+                    ? deliveryAssignedName?.trim()
+                    : null;
+            return Expanded(
+              child: Column(
+                children: [
+                  Text(
                     s.$1,
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -1303,9 +1354,23 @@ class _OrderProgressBar extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                   ),
-                ),
-              )
-              .toList(),
+                  if (assignedName != null && assignedName.isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      assignedName,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: scheme.primary,
+                            fontSize: 9,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
         ),
       ],
     );

@@ -256,6 +256,64 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
   bool _isElevatedRole(String? role) =>
       role == 'admin' || role == 'manager';
 
+  static const _allStatuses = [
+    'pending',
+    'in_progress',
+    'ready',
+    'cancelled',
+  ];
+
+  Future<void> _showManagerStatusSheet(PreparationOrderPublic item) async {
+    final l10n = AppLocalizations.of(context);
+    final options = _allStatuses.where((s) => s != item.status).toList();
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                l10n.prepChangeStatus,
+                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            const Divider(height: 1),
+            ...options.map(
+              (s) => ListTile(
+                title: Text(preparationStatusLabel(s, l10n)),
+                leading: Icon(_prepStatusIcon(s)),
+                onTap: () => Navigator.pop(ctx, s),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (picked != null && mounted) {
+      await _patchTo(picked);
+    }
+  }
+
+  IconData _prepStatusIcon(String status) {
+    switch (status) {
+      case 'pending':
+        return Icons.hourglass_empty_rounded;
+      case 'in_progress':
+        return Icons.play_arrow_rounded;
+      case 'ready':
+        return Icons.check_circle_outline_rounded;
+      case 'cancelled':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.circle_outlined;
+    }
+  }
+
   String? _saleOrderCreatorId(PreparationOrderPublic item) =>
       _linkedSaleOrder?.createdByUserId ??
       item.saleOrder?.createdByUserId;
@@ -516,10 +574,19 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
       );
     }
     final item = _item!;
+    final isElevated = _isElevatedRole(
+      context.read<AuthProvider>().user?.role,
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.prepTitle),
         actions: [
+          if (isElevated)
+            IconButton(
+              tooltip: l10n.prepChangeStatus,
+              onPressed: _busy ? null : () => _showManagerStatusSheet(item),
+              icon: const Icon(Icons.swap_vert_rounded),
+            ),
           IconButton(
             onPressed: _load,
             icon: const Icon(Icons.refresh_rounded),

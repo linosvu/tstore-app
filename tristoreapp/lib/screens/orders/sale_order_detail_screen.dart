@@ -10,6 +10,7 @@ import 'package:tstore/core/config/api_config.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/core/utils/dio_error_message.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
@@ -178,6 +179,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   Timer? _notesDebounce;
   bool _suppressNotesAutosave = false;
   bool _savingNotes = false;
+  bool _notesDirty = false;
   String? _managedById;
   List<(String id, String name)> _users = [];
   bool _loadingUsers = false;
@@ -185,7 +187,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _notesCtrl.addListener(_onOrderNotesChanged);
+    _notesCtrl.addListener(_onNotesDirtyChanged);
     _fetch();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -198,17 +200,18 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   @override
   void dispose() {
     _notesDebounce?.cancel();
-    _notesCtrl.removeListener(_onOrderNotesChanged);
+    _notesCtrl.removeListener(_onNotesDirtyChanged);
     _notesCtrl.dispose();
     super.dispose();
   }
 
-  void _onOrderNotesChanged() {
+  void _onNotesDirtyChanged() {
     if (_suppressNotesAutosave) return;
-    _notesDebounce?.cancel();
-    _notesDebounce = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) unawaited(_saveOrderNotes());
-    });
+    final current = (_order?.notes ?? '').trim();
+    final next = _notesCtrl.text.trim();
+    if (_notesDirty != (next != current)) {
+      setState(() => _notesDirty = next != current);
+    }
   }
 
   bool _canEdit(SaleOrderPublic o) => o.status == 'draft';
@@ -383,6 +386,61 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     }
   }
 
+  Future<void> _toggleCustomerVip(String customerId, bool newVip) async {
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      await auth.api.patch<void>(
+        '/admin/customers/$customerId',
+        data: {'isVip': newVip},
+      );
+      if (mounted) {
+        await _fetch();
+        _markListNeedsRefresh();
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data is Map &&
+              (e.response!.data as Map)['message'] != null
+          ? (e.response!.data as Map)['message'].toString()
+          : (e.message ?? AppLocalizations.of(context).error);
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Future<void> _confirmPaymentProposal(String proposalId) async {
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.post<Map<String, dynamic>>(
+        '/admin/sale-orders/payment-proposals/$proposalId/confirm',
+      );
+      if (!mounted) return;
+      if (res.data != null) {
+        setState(() {
+          _order = SaleOrderPublic.fromJson(res.data!);
+          _notesDirty = false;
+        });
+        _markListNeedsRefresh();
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(AppLocalizations.of(context).success)),
+        );
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data is Map &&
+              (e.response!.data as Map)['message'] != null
+          ? (e.response!.data as Map)['message'].toString()
+          : (e.message ?? AppLocalizations.of(context).error);
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
   String? _effectiveDeliveryStatus(SaleOrderPublic o) {
     if (_linkedDelivery != null) return _linkedDelivery!.status;
     switch (o.status) {
@@ -434,8 +492,17 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       final data = res.data;
       if (data != null) {
         _suppressNotesAutosave = true;
-        setState(() => _order = SaleOrderPublic.fromJson(data));
+        setState(() {
+          _order = SaleOrderPublic.fromJson(data);
+          _notesDirty = false;
+        });
         _suppressNotesAutosave = false;
+        if (mounted) {
+          AppMessenger.showSnackBar(
+            context,
+            SnackBar(content: Text(AppLocalizations.of(context).success)),
+          );
+        }
       }
     } on DioException catch (e) {
       if (!mounted) return;
@@ -493,6 +560,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
         _loading = false;
         if (!notesDirty) {
           _notesCtrl.text = order.notes ?? '';
+          _notesDirty = false;
         }
       });
       _suppressNotesAutosave = false;
@@ -1005,14 +1073,6 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   String _money(int v) => '${formatIntegerWithSeparator(v, _thousandsSep)} đ';
 
-  String _formatDateOnlyLabel(String iso) {
-    final d = DateTime.tryParse(iso);
-    if (d == null) return iso;
-    return '${d.day.toString().padLeft(2, '0')}/'
-        '${d.month.toString().padLeft(2, '0')}/'
-        '${d.year}';
-  }
-
   void _openTransferProofViewer(AppLocalizations l10n, String url) {
     Navigator.of(context).push<void>(
       PageRouteBuilder<void>(
@@ -1043,18 +1103,29 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   String? _fmtIsoDate(String? iso) {
     if (iso == null || iso.isEmpty) return null;
-    final d = DateTime.tryParse(iso);
-    if (d == null) return iso;
+    final raw = DateTime.tryParse(iso);
+    if (raw == null) return iso;
+    final d = AppDateTime.toVn(raw);
     return '${d.day.toString().padLeft(2, '0')}/'
         '${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
   String _fmtIsoDateTime(String iso) {
-    final d = DateTime.tryParse(iso);
-    if (d == null) return iso;
+    final raw = DateTime.tryParse(iso);
+    if (raw == null) return iso;
+    final d = AppDateTime.toVn(raw);
     return '${d.day.toString().padLeft(2, '0')}/'
         '${d.month.toString().padLeft(2, '0')}/${d.year} '
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateOnlyLabel(String iso) {
+    final raw = DateTime.tryParse(iso);
+    if (raw == null) return iso;
+    final d = AppDateTime.toVn(raw);
+    return '${d.day.toString().padLeft(2, '0')}/'
+        '${d.month.toString().padLeft(2, '0')}/'
+        '${d.year}';
   }
 
   String _snap(SaleOrderPublic o, String key) {
@@ -1318,18 +1389,62 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                       (cust != null && cust.name.trim().isNotEmpty)
                           ? cust.name.trim()
                           : '—';
+                  final isElevated = _isElevatedRole(
+                    context.read<AuthProvider>().user?.role,
+                  );
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: Text(
-                          nameText,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                nameText,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (cust != null && cust.isVip) ...[
+                              const SizedBox(width: 6),
+                              StatusBadge(
+                                label: 'VIP',
+                                tone: StatusBadgeTone.warning,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
+                      if (cust != null && isElevated)
+                        IconButton(
+                          tooltip: cust.isVip
+                              ? l10n.customerRemoveVip
+                              : l10n.customerMarkVip,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          icon: Icon(
+                            cust.isVip
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            size: 20,
+                            color: cust.isVip
+                                ? const Color(0xFFFFA000)
+                                : scheme.onSurfaceVariant,
+                          ),
+                          onPressed: _actionBusy
+                              ? null
+                              : () => unawaited(
+                                    _toggleCustomerVip(cust.id, !cust.isVip),
+                                  ),
+                        ),
                       if (nameText != '—')
                         IconButton(
                           tooltip: l10n.saleOrderCopyName,
@@ -1484,13 +1599,16 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                             ),
                           ),
                         ),
-                        if (_linkedDelivery != null) ...[
+                        if (_linkedDelivery != null &&
+                            _linkedDelivery!.status != 'cancelled') ...[
                           StatusBadge(
                             label: _deliveryStatusShort(_linkedDelivery!.status, l10n),
                             tone: _toneForDeliveryStatus(_linkedDelivery!.status),
                           ),
                           const SizedBox(width: 8),
-                        ] else if (_effectiveDeliveryStatus(o) != null) ...[
+                        ] else if (_linkedDelivery == null &&
+                            _effectiveDeliveryStatus(o) != null &&
+                            _effectiveDeliveryStatus(o) != 'cancelled') ...[
                           StatusBadge(
                             label: _deliveryStatusShort(
                                 _effectiveDeliveryStatus(o)!, l10n),
@@ -1637,6 +1755,31 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                 decoration: scheduleDeco,
                               ),
                             ),
+                            if (_isElevatedRole(
+                                  context.read<AuthProvider>().user?.role,
+                                ) &&
+                                p.recordStatus == 'pending') ...[
+                              const SizedBox(width: 8),
+                              FilledButton.tonal(
+                                onPressed: _actionBusy
+                                    ? null
+                                    : () => unawaited(
+                                          _confirmPaymentProposal(p.id),
+                                        ),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  l10n.saleOrderConfirmPaymentProposal,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         if (dateLabel != null ||
@@ -1693,7 +1836,10 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
             ],
           ),
         ),
-        if (_canOpenRecordPayment(o)) ...[
+        if (_canOpenRecordPayment(o) &&
+            _isElevatedRole(
+              context.read<AuthProvider>().user?.role,
+            )) ...[
           const SizedBox(height: AppSpacing.space2),
           SizedBox(
             width: double.infinity,
@@ -1802,14 +1948,25 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                           counterText: '',
                         ),
                       ),
-                      if (_savingNotes)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: LinearProgressIndicator(
-                            minHeight: 2,
-                            color: scheme.primary,
-                          ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.tonal(
+                          onPressed: (_notesDirty && !_savingNotes && !_actionBusy)
+                              ? () => unawaited(_saveOrderNotes())
+                              : null,
+                          child: _savingNotes
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: scheme.onSecondaryContainer,
+                                  ),
+                                )
+                              : Text(l10n.save),
                         ),
+                      ),
                     ],
                   )
                 : Text(
@@ -2093,7 +2250,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
             ),
           ),
         ],
-        if (_canCreateDelivery(o)) ...[
+        if (_canCreateDelivery(o) || _linkedDelivery != null) ...[
           const SizedBox(height: AppSpacing.space4),
           SafeArea(
             top: false,

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/config/api_config.dart';
 import '../core/services/api_client.dart';
+import '../core/services/push_notification_service.dart';
 import '../core/services/token_storage.dart';
 import '../models/auth_user.dart';
 
@@ -96,6 +99,7 @@ class AuthProvider extends ChangeNotifier {
       _user = AuthUser.fromJson(userJson);
       _status = AuthStatus.authenticated;
       notifyListeners();
+      unawaited(_registerFcmToken());
     } on DioException catch (e) {
       _lastError = _messageFromDio(e);
       notifyListeners();
@@ -106,7 +110,40 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await _unregisterFcmToken();
     await _clearSession();
+  }
+
+  Future<void> _registerFcmToken() async {
+    try {
+      final token = await PushNotificationService.instance.getToken();
+      if (token == null) return;
+      await _api.post<void>(
+        '/auth/device-token',
+        data: {'token': token, 'platform': 'android'},
+      );
+      PushNotificationService.instance.onTokenRefresh.listen((newToken) {
+        _api.post<void>(
+          '/auth/device-token',
+          data: {'token': newToken, 'platform': 'android'},
+        );
+      });
+    } catch (_) {
+      // Non-critical — không block login
+    }
+  }
+
+  Future<void> _unregisterFcmToken() async {
+    try {
+      final token = await PushNotificationService.instance.getToken();
+      if (token == null) return;
+      await _api.delete<void>(
+        '/auth/device-token',
+        data: {'token': token},
+      );
+    } catch (_) {
+      // Non-critical
+    }
   }
 
   /// Làm mới profile từ `/auth/me` (kéo để làm mới, sau khi admin đổi ảnh trên web, …).
