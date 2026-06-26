@@ -77,8 +77,8 @@ class AppNotification {
       readAt: json['readAt'] != null
           ? DateTime.tryParse(json['readAt'] as String)
           : null,
-      createdAt: DateTime.tryParse(json['createdAt'] as String) ??
-          DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now(),
     );
   }
 

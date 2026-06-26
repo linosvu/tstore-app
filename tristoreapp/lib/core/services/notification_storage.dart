@@ -60,8 +60,7 @@ class NotificationStorage {
       final list = jsonDecode(raw) as List<dynamic>;
       return [
         for (final entry in list)
-          if (entry is Map<String, dynamic>)
-            AppNotification.fromJson(entry),
+          if (entry is Map<String, dynamic>) AppNotification.fromJson(entry),
       ];
     } catch (_) {
       return [];
