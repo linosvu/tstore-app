@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -118,20 +119,22 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _registerFcmToken() async {
     try {
+      await PushNotificationService.ensureFirebaseReady();
       await _fcmTokenRefreshSub?.cancel();
       _fcmTokenRefreshSub = null;
 
       final token = await PushNotificationService.instance.getToken();
       if (token == null) return;
+      final platform = !kIsWeb && Platform.isIOS ? 'ios' : 'android';
       await _api.post<void>(
         '/auth/device-token',
-        data: {'token': token, 'platform': 'android'},
+        data: {'token': token, 'platform': platform},
       );
       _fcmTokenRefreshSub =
           PushNotificationService.instance.onTokenRefresh.listen((newToken) {
         _api.post<void>(
           '/auth/device-token',
-          data: {'token': newToken, 'platform': 'android'},
+          data: {'token': newToken, 'platform': platform},
         );
       });
     } catch (_) {

@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -22,19 +20,14 @@ import 'providers/repair_orders_provider.dart';
 import 'providers/tasks_provider.dart';
 import 'screens/splash_screen.dart';
 
-Future<void>? _firebaseInitFuture;
-
-Future<void> _ensureFirebaseInitialized() =>
-    _firebaseInitFuture ??= _initFirebase();
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await StorageService.instance.init();
   await StorageService.instance.remove('is_dark_mode');
 
-  // Khởi tạo Firebase song song, không chặn runApp.
-  unawaited(_ensureFirebaseInitialized());
+  // Khởi tạo Firebase song song — splash cũng await ensureFirebaseReady trước login.
+  unawaited(PushNotificationService.ensureFirebaseReady().catchError((_) {}));
 
   final api = ApiClient();
   final auth = AuthProvider(api: api);
@@ -56,15 +49,6 @@ void main() async {
   runApp(MyApp(auth: auth));
 }
 
-Future<void> _initFirebase() async {
-  try {
-    await Firebase.initializeApp();
-    await PushNotificationService.instance.init();
-  } catch (e, stack) {
-    debugPrint('[Firebase] init skipped: $e\n$stack');
-  }
-}
-
 class MyApp extends StatefulWidget {
   const MyApp({super.key, required this.auth});
 
@@ -80,7 +64,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureFirebaseInitialized().then((_) {
+      PushNotificationService.ensureFirebaseReady().then((_) {
         PushNotificationService.instance.handleInitialMessage();
       });
     });

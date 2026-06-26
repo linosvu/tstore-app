@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -25,6 +27,23 @@ class PushNotificationService {
   PushNotificationService._();
   static final PushNotificationService instance = PushNotificationService._();
 
+  static Future<void>? _firebaseReadyFuture;
+
+  /// Khởi tạo Firebase + push (gọi trước khi đăng ký token với server).
+  static Future<void> ensureFirebaseReady() {
+    return _firebaseReadyFuture ??= _bootstrapFirebase();
+  }
+
+  static Future<void> _bootstrapFirebase() async {
+    try {
+      await Firebase.initializeApp();
+      await instance.init();
+    } catch (e, stack) {
+      debugPrint('[Firebase] init failed: $e\n$stack');
+      rethrow;
+    }
+  }
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -44,11 +63,20 @@ class PushNotificationService {
 
     await _initLocalNotifications();
 
-    await _messaging.requestPermission(
+    final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
+    debugPrint('[FCM] permission: ${settings.authorizationStatus}');
+
+    if (!kIsWeb && Platform.isIOS) {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
 
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
     await _openedAppSub?.cancel();
@@ -68,7 +96,14 @@ class PushNotificationService {
   /// Lấy FCM token hiện tại. Trả về null nếu chưa sẵn sàng.
   Future<String?> getToken() async {
     try {
-      return await _messaging.getToken();
+      if (!kIsWeb && Platform.isIOS) {
+        await _waitForApnsToken();
+      }
+      final token = await _messaging.getToken();
+      debugPrint(
+        '[FCM] getToken: ${token != null ? '${token.substring(0, 12)}…' : 'null'}',
+      );
+      return token;
     } catch (e) {
       debugPrint('[FCM] getToken error: $e');
       return null;
@@ -78,9 +113,29 @@ class PushNotificationService {
   /// Callback khi token thay đổi (app cần đăng ký lại với server).
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
+  Future<void> _waitForApnsToken() async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final apns = await _messaging.getAPNSToken();
+      if (apns != null) {
+        debugPrint('[FCM] APNs token ready');
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    debugPrint('[FCM] APNs token still null after wait');
+  }
+
   Future<void> _initLocalNotifications() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidInit);
+    const darwinInit = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: darwinInit,
+    );
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
@@ -139,6 +194,11 @@ class PushNotificationService {
           channelDescription: 'Thông báo đơn hàng, chuẩn bị, giao hàng',
           importance: Importance.high,
           priority: Priority.high,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
         ),
       ),
       payload: payload,
