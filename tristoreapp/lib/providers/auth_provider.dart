@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -119,26 +118,41 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _registerFcmToken() async {
     try {
-      await PushNotificationService.ensureFirebaseReady();
       await _fcmTokenRefreshSub?.cancel();
       _fcmTokenRefreshSub = null;
 
       final token = await PushNotificationService.instance.getToken();
       if (token == null) return;
-      final platform = !kIsWeb && Platform.isIOS ? 'ios' : 'android';
+      final platform = _deviceTokenPlatform();
       await _api.post<void>(
         '/auth/device-token',
         data: {'token': token, 'platform': platform},
       );
-      _fcmTokenRefreshSub =
-          PushNotificationService.instance.onTokenRefresh.listen((newToken) {
-        _api.post<void>(
-          '/auth/device-token',
-          data: {'token': newToken, 'platform': platform},
-        );
+      _fcmTokenRefreshSub = PushNotificationService.instance.onTokenRefresh
+          .listen((newToken) async {
+        try {
+          await _api.post<void>(
+            '/auth/device-token',
+            data: {'token': newToken, 'platform': platform},
+          );
+        } catch (e) {
+          debugPrint('[FCM] token refresh register failed: $e');
+        }
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[FCM] register token failed: $e');
       // Non-critical — không block login
+    }
+  }
+
+  String _deviceTokenPlatform() {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+        return 'ios';
+      case TargetPlatform.android:
+        return 'android';
+      default:
+        return defaultTargetPlatform.name;
     }
   }
 

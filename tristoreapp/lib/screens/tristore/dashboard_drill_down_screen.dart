@@ -18,12 +18,14 @@ class DashboardDrillDownScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = context.read<AuthProvider>().user;
-    final isElevated =
-        user != null && (user.role == 'admin' || user.role == 'manager');
+    final canListAll = user != null &&
+        (user.role == 'staff' ||
+            user.role == 'admin' ||
+            user.role == 'manager');
     final config = DashboardDrillDownConfig.fromKind(
       kind,
       l10n: AppLocalizations.of(context),
-      isElevated: isElevated,
+      isElevated: canListAll,
     );
     return ManagementResultsScreen(
       entity: config.entity,

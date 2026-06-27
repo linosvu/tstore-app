@@ -1109,7 +1109,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (!isElevated && !_terminal(_d!.status))
+                            if (!_terminal(_d!.status))
                               _buildPinnedStatusActions(
                                 context,
                                 l10n,
@@ -1117,7 +1117,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                                 _d!,
                               ),
                             Expanded(
-                              child: _body(context, l10n, scheme, _d!, isElevated),
+                              child: _body(context, l10n, scheme, _d!),
                             ),
                           ],
                         ),
@@ -1137,7 +1137,6 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     AppLocalizations l10n,
     ColorScheme scheme,
     DeliveryPublic d,
-    bool isElevated,
   ) {
     final cust = d.saleOrder?.customer;
     final addrLine = deliveryAddressLine(d);
@@ -1391,7 +1390,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
           title: l10n.deliveryImages,
           child: _checkinImagesTabs(context, l10n, scheme, d, terminal),
         ),
-        if (!terminal && !isElevated) ...[
+        if (!terminal) ...[
           const SizedBox(height: AppSpacing.space4),
           OutlinedButton(
             onPressed: _busy ? null : () => _promptReasonThenStatus('cancelled'),

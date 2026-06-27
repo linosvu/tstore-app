@@ -59,9 +59,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     'delivering',
   };
 
-  bool _isElevated(BuildContext context) {
+  bool _isStaffOrAbove(BuildContext context) {
     final u = context.read<AuthProvider>().user;
-    return u != null && (u.role == 'admin' || u.role == 'manager');
+    return u != null &&
+        (u.role == 'staff' || u.role == 'admin' || u.role == 'manager');
   }
 
   void _consumePendingLaunch() {
@@ -75,7 +76,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         _filtersExpanded = true;
       }
     }
-    if (launch.useListAll && _isElevated(context)) {
+    if (launch.useListAll && _isStaffOrAbove(context)) {
       _scopeSegment = 0;
     }
   }
@@ -83,7 +84,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   String? _listQueryParam() {
     final scope = _scopeValues[_scopeSegment.clamp(0, _scopeValues.length - 1)];
     if (scope == 'all') {
-      return _isElevated(context) ? 'all' : null;
+      return _isStaffOrAbove(context) ? 'all' : null;
     }
     return scope;
   }

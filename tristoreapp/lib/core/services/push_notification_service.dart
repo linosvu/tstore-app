@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -27,23 +26,6 @@ class PushNotificationService {
   PushNotificationService._();
   static final PushNotificationService instance = PushNotificationService._();
 
-  static Future<void>? _firebaseReadyFuture;
-
-  /// Khởi tạo Firebase + push (gọi trước khi đăng ký token với server).
-  static Future<void> ensureFirebaseReady() {
-    return _firebaseReadyFuture ??= _bootstrapFirebase();
-  }
-
-  static Future<void> _bootstrapFirebase() async {
-    try {
-      await Firebase.initializeApp();
-      await instance.init();
-    } catch (e, stack) {
-      debugPrint('[Firebase] init failed: $e\n$stack');
-      rethrow;
-    }
-  }
-
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -63,20 +45,11 @@ class PushNotificationService {
 
     await _initLocalNotifications();
 
-    final settings = await _messaging.requestPermission(
+    await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-    debugPrint('[FCM] permission: ${settings.authorizationStatus}');
-
-    if (!kIsWeb && Platform.isIOS) {
-      await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }
 
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
     await _openedAppSub?.cancel();
@@ -96,14 +69,15 @@ class PushNotificationService {
   /// Lấy FCM token hiện tại. Trả về null nếu chưa sẵn sàng.
   Future<String?> getToken() async {
     try {
-      if (!kIsWeb && Platform.isIOS) {
-        await _waitForApnsToken();
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        // iOS cần APNs token trước; nếu gọi quá sớm Firebase có thể trả null/lỗi.
+        for (var i = 0; i < 10; i++) {
+          final apnsToken = await _messaging.getAPNSToken();
+          if (apnsToken != null && apnsToken.isNotEmpty) break;
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
       }
-      final token = await _messaging.getToken();
-      debugPrint(
-        '[FCM] getToken: ${token != null ? '${token.substring(0, 12)}…' : 'null'}',
-      );
-      return token;
+      return await _messaging.getToken();
     } catch (e) {
       debugPrint('[FCM] getToken error: $e');
       return null;
@@ -113,28 +87,16 @@ class PushNotificationService {
   /// Callback khi token thay đổi (app cần đăng ký lại với server).
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
-  Future<void> _waitForApnsToken() async {
-    for (var attempt = 0; attempt < 20; attempt++) {
-      final apns = await _messaging.getAPNSToken();
-      if (apns != null) {
-        debugPrint('[FCM] APNs token ready');
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
-    debugPrint('[FCM] APNs token still null after wait');
-  }
-
   Future<void> _initLocalNotifications() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const darwinInit = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
+    const iosInit = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
     );
     const initSettings = InitializationSettings(
       android: androidInit,
-      iOS: darwinInit,
+      iOS: iosInit,
     );
     await _localNotifications.initialize(
       initSettings,
@@ -158,6 +120,10 @@ class PushNotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
@@ -187,7 +153,7 @@ class PushNotificationService {
       id,
       title,
       body,
-      NotificationDetails(
+      const NotificationDetails(
         android: AndroidNotificationDetails(
           _androidChannelId,
           _androidChannelName,
@@ -195,7 +161,7 @@ class PushNotificationService {
           importance: Importance.high,
           priority: Priority.high,
         ),
-        iOS: const DarwinNotificationDetails(
+        iOS: DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,

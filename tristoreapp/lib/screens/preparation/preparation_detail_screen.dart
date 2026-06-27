@@ -795,8 +795,7 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.space4),
-          if (!isElevated) ...[
-            if (item.status == 'pending')
+          if (item.status == 'pending')
               FilledButton.icon(
                 onPressed: _busy ? null : () => _patchTo('in_progress'),
                 icon: const Icon(Icons.play_arrow_rounded),
@@ -821,7 +820,6 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
                 label: Text(l10n.prepMarkCancelled),
               ),
             ],
-          ],
         ],
       ),
     );

@@ -222,7 +222,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       o.status != 'cancelled' &&
       o.status != 'refund';
 
-  bool _canEditOrderNotes(SaleOrderPublic o) => _canEditKiotViet(o);
+  bool _canEditOrderNotes(SaleOrderPublic o) =>
+      o.status != 'cancelled' && o.status != 'refund';
 
   bool _canOpenEdit(SaleOrderPublic o) => _canEdit(o) || _canEditKiotViet(o);
 
@@ -300,6 +301,9 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   bool _isElevatedRole(String? role) =>
       role == 'admin' || role == 'manager';
+
+  bool _isStaffRole(String? role) =>
+      role == 'staff' || _isElevatedRole(role);
 
   /// Khớp [SaleOrderService.allowedTransition] trên backend (chọn tự do, không theo bước).
   List<String> _selectableOrderStatuses(SaleOrderPublic o, String? role) {
@@ -737,7 +741,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     final o = _order;
     if (o == null) return;
     final role = context.read<AuthProvider>().user?.role;
-    if (!_isElevatedRole(role)) return;
+    if (!_isStaffRole(role)) return;
     final options = _selectableOrderStatuses(o, role);
     if (options.isEmpty) {
       AppMessenger.showSnackBar(
@@ -1073,7 +1077,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                 onPressed: _actionBusy ? null : () => _openEdit(_order!),
                 icon: const Icon(Icons.edit_outlined),
               ),
-            if (_isElevatedRole(context.read<AuthProvider>().user?.role) &&
+            if (_isStaffRole(context.read<AuthProvider>().user?.role) &&
                 _canChangeOrderStatus(
                   _order!,
                   context.read<AuthProvider>().user?.role,
@@ -1727,9 +1731,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
           ),
         ),
         if (_canOpenRecordPayment(o) &&
-            _isElevatedRole(
-              context.read<AuthProvider>().user?.role,
-            )) ...[
+            _isStaffRole(context.read<AuthProvider>().user?.role)) ...[
           const SizedBox(height: AppSpacing.space2),
           SizedBox(
             width: double.infinity,

@@ -1,5 +1,4 @@
-import 'dart:async';
-
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -26,8 +25,13 @@ void main() async {
   await StorageService.instance.init();
   await StorageService.instance.remove('is_dark_mode');
 
-  // Khởi tạo Firebase song song — splash cũng await ensureFirebaseReady trước login.
-  unawaited(PushNotificationService.ensureFirebaseReady().catchError((_) {}));
+  // Firebase init — chỉ chạy khi Android/iOS đã có file cấu hình Firebase.
+  try {
+    await Firebase.initializeApp();
+    await PushNotificationService.instance.init();
+  } catch (e) {
+    debugPrint('[Firebase] init skipped/failed: $e');
+  }
 
   final api = ApiClient();
   final auth = AuthProvider(api: api);
@@ -64,9 +68,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      PushNotificationService.ensureFirebaseReady().then((_) {
-        PushNotificationService.instance.handleInitialMessage();
-      });
+      PushNotificationService.instance.handleInitialMessage();
     });
   }
 
@@ -95,10 +97,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (ctx) => DeliveryProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
-          create: (ctx) => PreparationProvider(api: ctx.read<AuthProvider>().api),
+          create: (ctx) =>
+              PreparationProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
-          create: (ctx) => RepairOrdersProvider(api: ctx.read<AuthProvider>().api),
+          create: (ctx) =>
+              RepairOrdersProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
           create: (ctx) => TasksProvider(api: ctx.read<AuthProvider>().api),
