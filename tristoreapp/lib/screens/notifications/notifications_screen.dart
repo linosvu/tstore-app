@@ -69,12 +69,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ScreenGradientHeader(
-            title: l10n.notificationsTitle,
-            leading: IconButton(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ScreenGradientHeader(
+              title: l10n.notificationsNav,
+              leading: IconButton(
               tooltip: l10n.homeNav,
               icon: const Icon(
                 Icons.home_rounded,
@@ -197,6 +198,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

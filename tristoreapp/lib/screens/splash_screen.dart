@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../core/config/app_template_config.dart';
 import '../core/constants/app_colors.dart';
 import '../core/constants/routes.dart';
-import '../core/services/push_notification_service.dart';
 import '../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -85,9 +84,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final auth = Provider.of<AuthProvider>(context, listen: false);
     await Future.wait([
       Future.delayed(const Duration(milliseconds: 1400)),
-      PushNotificationService.ensureFirebaseReady().catchError((_) {}),
+      auth.tryRestore(),
     ]);
-    await auth.tryRestore();
 
     if (!mounted) return;
     final next =

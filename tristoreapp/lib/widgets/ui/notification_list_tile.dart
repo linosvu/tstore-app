@@ -72,8 +72,11 @@ class NotificationListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final categoryColor = notificationCategoryColor(notification.category);
+    final displayCategory = _displayCategory(notification);
+    final categoryColor = notificationCategoryColor(displayCategory);
     final timeLabel = formatNotificationRelativeTime(notification.createdAt);
+    final showCategoryLabel =
+        displayCategory != AppNotificationCategory.system;
 
     return Material(
       color: notification.isUnread
@@ -94,7 +97,7 @@ class NotificationListTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  notificationCategoryIcon(notification.category),
+                  notificationCategoryIcon(displayCategory),
                   color: categoryColor,
                   size: 22,
                 ),
@@ -141,20 +144,32 @@ class NotificationListTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Text(
-                          notificationCategoryLabel(
-                            l10n,
-                            notification.category,
+                        if (showCategoryLabel)
+                          Text(
+                            notificationCategoryLabel(
+                              l10n,
+                              displayCategory,
+                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: categoryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: categoryColor,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
                         if (notification.orderCode != null &&
                             notification.orderCode!.isNotEmpty) ...[
+                          if (showCategoryLabel)
+                            Text(
+                              ' · ',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
                           Text(
-                            ' · #${notification.orderCode}',
+                            '#${notification.orderCode}',
                             style: Theme.of(context)
                                 .textTheme
                                 .labelSmall
@@ -179,4 +194,14 @@ class NotificationListTile extends StatelessWidget {
       ),
     );
   }
+}
+
+AppNotificationCategory _displayCategory(AppNotification notification) {
+  if (notification.category != AppNotificationCategory.system) {
+    return notification.category;
+  }
+  if (notification.orderCode != null && notification.orderCode!.isNotEmpty) {
+    return AppNotificationCategory.order;
+  }
+  return AppNotificationCategory.system;
 }
