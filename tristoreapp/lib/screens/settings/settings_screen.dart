@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +9,7 @@ import '../../core/localization/app_localizations.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/ui/branded_app_bar.dart';
 import '../../widgets/ui/menu_group_card.dart';
+import '../../widgets/app_version_label.dart';
 import '../profile/profile_content.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -40,48 +41,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: AppSpacing.space3),
-            if (user != null)
-              const ProfileContent(embedInSettings: true)
-            else ...[
-              Text(
-                'Chưa đăng nhập.',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
-                  AppRoutes.login,
-                  (_) => false,
-                ),
-                child: const Text('Đăng nhập'),
-              ),
-            ],
-            if (kDebugMode) ...[
-              const SizedBox(height: AppSpacing.sectionGap),
-              MenuGroupCard(
-                items: [
-                  MenuGroupItem(
-                    title: 'Design System Gallery',
-                    subtitle: 'Chỉ bản debug',
-                    icon: Icons.palette_outlined,
-                    iconColor: AppColors.primary,
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      AppRoutes.designSystemGallery,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: AppSpacing.space3),
+                  if (user != null)
+                    const ProfileContent(embedInSettings: true)
+                  else ...[
+                    Text(
+                      'Chưa đăng nhập.',
+                      style: Theme.of(context).textTheme.bodyLarge,
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                        AppRoutes.login,
+                        (_) => false,
+                      ),
+                      child: const Text('Đăng nhập'),
+                    ),
+                  ],
+                  if (kDebugMode) ...[
+                    const SizedBox(height: AppSpacing.sectionGap),
+                    MenuGroupCard(
+                      items: [
+                        MenuGroupItem(
+                          title: 'Design System Gallery',
+                          subtitle: 'Chỉ bản debug',
+                          icon: Icons.palette_outlined,
+                          iconColor: AppColors.primary,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.designSystemGallery,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.space3),
                 ],
               ),
-            ],
-            const SizedBox(height: AppSpacing.space6),
-          ],
-        ),
+            ),
+          ),
+          const AppVersionLabel(),
+        ],
       ),
     );
   }

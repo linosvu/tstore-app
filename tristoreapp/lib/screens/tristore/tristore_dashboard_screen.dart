@@ -7,6 +7,7 @@ import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/user_role_labels.dart';
+import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/models/dashboard_today.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/screens/main_shell.dart';
@@ -104,6 +105,11 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
     return '${v ?? 0}';
   }
 
+  String _money(int? v) {
+    if (_loading || v == null) return '—';
+    return '${formatIntegerWithSeparator(v, ThousandsGroupSeparatorKey.dot)} đ';
+  }
+
   void _launchOrders({String? status, bool useListAll = true}) {
     MainShellController.maybeOf(context)
         ?.launchOrdersTab(status: status, useListAll: useListAll);
@@ -123,6 +129,42 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
     final l10n = AppLocalizations.of(context);
     final s = _summary;
     final user = context.watch<AuthProvider>().user;
+    final isAdmin = user?.role == 'admin';
+    final todayOverviewItems = <TsTodayOverviewItem>[
+      TsTodayOverviewItem(
+        label: l10n.dashboardStatOrdersToday,
+        value: _num(s?.todayOrders),
+        hint: l10n.dashboardStatOrdersTodayHint,
+        icon: Icons.receipt_long_rounded,
+        color: AppColors.primary,
+        onTap: () => _openDrillDown(DashboardDrillDownKind.ordersToday),
+      ),
+      if (isAdmin)
+        TsTodayOverviewItem(
+          label: l10n.dashboardStatOrdersTodayTotal,
+          value: _money(s?.todayOrdersTotalAmount),
+          hint: l10n.dashboardStatOrdersTodayTotalHint,
+          icon: Icons.payments_rounded,
+          color: AppColors.secondary,
+          onTap: () => _openDrillDown(DashboardDrillDownKind.ordersToday),
+        ),
+      TsTodayOverviewItem(
+        label: l10n.dashboardStatPrepToday,
+        value: _num(s?.todayPreparations),
+        hint: l10n.dashboardStatPrepTodayHint,
+        icon: Icons.checklist_rounded,
+        color: AppColors.success,
+        onTap: () => _openDrillDown(DashboardDrillDownKind.prepToday),
+      ),
+      TsTodayOverviewItem(
+        label: l10n.dashboardStatDeliveryToday,
+        value: _num(s?.todayDeliveries),
+        hint: l10n.dashboardStatDeliveryTodayHint,
+        icon: Icons.local_shipping_rounded,
+        color: AppColors.primary,
+        onTap: () => _openDrillDown(DashboardDrillDownKind.deliveryToday),
+      ),
+    ];
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: RefreshIndicator(
@@ -315,38 +357,7 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                       ),
                     ),
                   const SizedBox(height: AppSpacing.space3),
-                  TsTodayOverviewList(
-                    items: [
-                      TsTodayOverviewItem(
-                        label: l10n.dashboardStatOrdersToday,
-                        value: _num(s?.todayOrders),
-                        hint: l10n.dashboardStatOrdersTodayHint,
-                        icon: Icons.receipt_long_rounded,
-                        color: AppColors.primary,
-                        onTap: () =>
-                            _openDrillDown(DashboardDrillDownKind.ordersToday),
-                      ),
-                      TsTodayOverviewItem(
-                        label: l10n.dashboardStatPrepToday,
-                        value: _num(s?.todayPreparations),
-                        hint: l10n.dashboardStatPrepTodayHint,
-                        icon: Icons.checklist_rounded,
-                        color: AppColors.success,
-                        onTap: () =>
-                            _openDrillDown(DashboardDrillDownKind.prepToday),
-                      ),
-                      TsTodayOverviewItem(
-                        label: l10n.dashboardStatDeliveryToday,
-                        value: _num(s?.todayDeliveries),
-                        hint: l10n.dashboardStatDeliveryTodayHint,
-                        icon: Icons.local_shipping_rounded,
-                        color: AppColors.primary,
-                        onTap: () => _openDrillDown(
-                          DashboardDrillDownKind.deliveryToday,
-                        ),
-                      ),
-                    ],
-                  ),
+                  TsTodayOverviewList(items: todayOverviewItems),
                   const SizedBox(height: AppSpacing.sectionGap),
                   Row(
                     children: [

@@ -75,8 +75,7 @@ class NotificationListTile extends StatelessWidget {
     final displayCategory = _displayCategory(notification);
     final categoryColor = notificationCategoryColor(displayCategory);
     final timeLabel = formatNotificationRelativeTime(notification.createdAt);
-    final showCategoryLabel =
-        displayCategory != AppNotificationCategory.system;
+    final showCategoryLabel = displayCategory != AppNotificationCategory.system;
 
     return Material(
       color: notification.isUnread
@@ -179,9 +178,10 @@ class NotificationListTile extends StatelessWidget {
                         const Spacer(),
                         Text(
                           timeLabel,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                       ],
                     ),

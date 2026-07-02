@@ -88,9 +88,9 @@ class ManagementStatsCard extends StatelessWidget {
               style: TextStyle(color: scheme.error, fontSize: 13),
             ),
             TextButton(onPressed: onRetry, child: Text(l10n.productsRetry)),
-          ] else if (loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+          ]           else if (loading)
+            const SizedBox(
+              height: 132,
               child: Center(child: CircularProgressIndicator()),
             )
           else ...[

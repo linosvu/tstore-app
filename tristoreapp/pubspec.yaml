@@ -3,7 +3,7 @@ description: "TStore - Mobile management app."
 
 publish_to: "none"
 
-version: 2.0.4+24
+version: 2.9.0+29
 
 environment:
   sdk: ">=3.4.3 <4.0.0"
@@ -44,6 +44,7 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.2
   gal: ^2.3.1
+  package_info_plus: ^8.3.0
 
 dev_dependencies:
   flutter_test:

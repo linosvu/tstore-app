@@ -23,6 +23,17 @@ class AppLocalizations {
   String get managementCardDeliveries => 'Giao hàng';
   String get managementCardPreparations => 'Phiếu chuẩn bị';
   String get managementCardTasks => 'Nhiệm vụ';
+  String get managementCardReceivables => 'Quản lý công nợ';
+  String get managementReceivableUnpaid => 'Đơn còn thiếu';
+  String get managementReceivableUnpaidHint => 'Đơn còn phải thu';
+  String get managementReceivableScheduledDelivery => 'Ngày hẹn giao';
+  String get managementReceivableScheduledDeliveryHint =>
+      'Đơn đã đặt ngày giao hàng';
+  String get managementReceivablePendingApproval => 'Đơn chờ duyệt';
+  String get managementReceivablePendingApprovalHint =>
+      'Ghi nhận thu tiền chờ xác nhận';
+  String get managementReceivableUnpaidOrders => 'đơn chưa thanh toán';
+  String get managementReceivableTotalDue => 'Tổng còn phải thu';
   String get managementFilterTitle => 'Bộ lọc';
   String get managementApplyFilter => 'Áp dụng';
   String get managementClearFilter => 'Xóa bộ lọc';
@@ -91,6 +102,8 @@ class AppLocalizations {
   String get prepNav => 'Chuẩn bị';
   String get points => 'Điểm';
   String get settings => 'Cài Đặt';
+  String get settingsAppVersion => 'Phiên bản';
+  String get settingsAppBuild => 'Build';
   String get profile => 'Hồ sơ';
   String get profileTitle => 'Hồ sơ';
   String get profileEmail => 'Email';
@@ -603,6 +616,11 @@ class AppLocalizations {
   String get ordersSubtotal => 'Tạm tính';
   String get ordersAmountDue => 'Còn phải thu';
   String get ordersOrderIdCopied => 'Đã sao chép mã đơn';
+  String get ordersSaleChannelStore => 'Cửa hàng';
+  String get ordersSaleChannelOnline => 'Online';
+  String get ordersSaleChannelUnset => 'Chưa chọn';
+  String get ordersSaleChannelShortStore => 'Đơn CH';
+  String get ordersSaleChannelShortOnline => 'Đơn Online';
   String get saleOrderNotesSectionTitle => 'Ghi chú đơn hàng';
   String get saleOrderNotesHint => 'Tối đa 500 ký tự';
   String get saleOrderExpectedDeliveryTitle => 'Thời gian dự kiến giao hàng';
@@ -794,6 +812,9 @@ class AppLocalizations {
   String get tasksDashboardEmpty => 'Không có nhiệm vụ phù hợp.';
 
   String get dashboardTodayTitle => 'Tổng quan hôm nay';
+  String get dashboardStatOrdersTodayTotal => 'Tổng tiền đơn hôm nay';
+  String get dashboardStatOrdersTodayTotalHint =>
+      'Tổng giá trị đơn được tạo trong ngày';
   String get dashboardScopeAll => 'Toàn hệ thống';
   String get dashboardScopeMine => 'Công việc của tôi';
   String get dashboardStatOrdersToday => 'Đơn hàng hôm nay';

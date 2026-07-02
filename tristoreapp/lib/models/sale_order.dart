@@ -211,6 +211,7 @@ class SaleOrderPublic {
     required this.id,
     required this.createdByUserId,
     this.orderSource = 'internal',
+    this.saleChannel,
     this.kiotVietOrderCode,
     this.kiotVietPurchaseDate,
     this.customerId,
@@ -248,6 +249,8 @@ class SaleOrderPublic {
   final String createdByUserId;
   /// `internal` | `kiotviet`
   final String orderSource;
+  /// `store` | `online` | null — kênh bán (cửa hàng / online).
+  final String? saleChannel;
   final String? kiotVietOrderCode;
   /// ISO datetime từ KiotViet `purchaseDate` (nếu có).
   final String? kiotVietPurchaseDate;
@@ -295,6 +298,12 @@ class SaleOrderPublic {
       orderSource == 'kiotviet' ||
       (kiotVietOrderCode?.trim().isNotEmpty ?? false) ||
       (kiotVietPurchaseDate?.trim().isNotEmpty ?? false);
+
+  String? get saleChannelShortLabel => switch (saleChannel) {
+        'store' => 'Đơn CH',
+        'online' => 'Đơn Online',
+        _ => null,
+      };
 
   /// Mã hiển thị: ưu tiên [kiotVietOrderCode], ngược lại 8 ký tự đầu UUID.
   String get displayCode {
@@ -381,6 +390,7 @@ class SaleOrderPublic {
       id: json['id'] as String,
       createdByUserId: json['createdByUserId'] as String? ?? '',
       orderSource: (json['orderSource'] as String?) ?? 'internal',
+      saleChannel: _jsonOptionalString(json['saleChannel']),
       kiotVietOrderCode: _jsonOptionalString(json['kiotVietOrderCode']),
       kiotVietPurchaseDate: _jsonOptionalString(json['kiotVietPurchaseDate']),
       customerId: json['customerId'] as String?,

@@ -5,6 +5,7 @@ class DashboardTodayResponse {
     required this.todayOrders,
     required this.todayPreparations,
     required this.todayDeliveries,
+    this.todayOrdersTotalAmount,
     required this.reminderDraftOrTemp,
     required this.reminderPrepToDo,
     required this.reminderDeliveriesToDo,
@@ -21,6 +22,8 @@ class DashboardTodayResponse {
   final int todayOrders;
   final int todayPreparations;
   final int todayDeliveries;
+  /// Tổng tiền đơn tạo hôm nay — chỉ API trả khi user là admin.
+  final int? todayOrdersTotalAmount;
   final int reminderDraftOrTemp;
   final int reminderPrepToDo;
   final int reminderDeliveriesToDo;
@@ -40,6 +43,7 @@ class DashboardTodayResponse {
       todayOrders: (today['orders'] as num?)?.toInt() ?? 0,
       todayPreparations: (today['preparations'] as num?)?.toInt() ?? 0,
       todayDeliveries: (today['deliveries'] as num?)?.toInt() ?? 0,
+      todayOrdersTotalAmount: (today['ordersTotalAmount'] as num?)?.toInt(),
       reminderDraftOrTemp:
           (reminders['draftOrTempOrders'] as num?)?.toInt() ?? 0,
       reminderPrepToDo:

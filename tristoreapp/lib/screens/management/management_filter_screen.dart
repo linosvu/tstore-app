@@ -16,10 +16,12 @@ class ManagementFilterScreen extends StatefulWidget {
     super.key,
     required this.entity,
     required this.initialFilters,
+    this.titleOverride,
   });
 
   final ManagementEntity entity;
   final ManagementFilters initialFilters;
+  final String? titleOverride;
 
   @override
   State<ManagementFilterScreen> createState() => _ManagementFilterScreenState();
@@ -54,6 +56,9 @@ class _ManagementFilterScreenState extends State<ManagementFilterScreen> {
   }
 
   String _title(AppLocalizations l10n) {
+    if (widget.titleOverride != null && widget.titleOverride!.isNotEmpty) {
+      return widget.titleOverride!;
+    }
     switch (widget.entity) {
       case ManagementEntity.saleOrders:
         return '${l10n.managementFilterTitle} — ${l10n.managementCardOrders}';

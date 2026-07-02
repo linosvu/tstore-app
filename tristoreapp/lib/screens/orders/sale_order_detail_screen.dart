@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tstore/core/config/api_config.dart';
+import 'package:tstore/core/constants/app_colors.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
@@ -183,6 +184,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   bool _savingNotes = false;
   bool _notesDirty = false;
   String? _managedById;
+  String? _saleChannel;
   List<(String id, String name)> _users = [];
   bool _loadingUsers = false;
 
@@ -594,6 +596,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
         _linkedDelivery = linked;
         _linkedPreparation = prep;
         _managedById = order.managedByUserId;
+        _saleChannel = order.saleChannel;
         _loading = false;
         if (!notesDirty) {
           _notesCtrl.text = order.notes ?? '';
@@ -999,6 +1002,121 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     }
   }
 
+  String _saleChannelShortLabel(String? channel, AppLocalizations l10n) {
+    switch (channel) {
+      case 'store':
+        return l10n.ordersSaleChannelShortStore;
+      case 'online':
+        return l10n.ordersSaleChannelShortOnline;
+      default:
+        return '—';
+    }
+  }
+
+  String _saleChannelMenuLabel(String? channel, AppLocalizations l10n) {
+    switch (channel) {
+      case 'store':
+        return l10n.ordersSaleChannelStore;
+      case 'online':
+        return l10n.ordersSaleChannelOnline;
+      default:
+        return l10n.ordersSaleChannelUnset;
+    }
+  }
+
+  Future<void> _patchSaleChannel(String? channel, {String? revertTo}) async {
+    setState(() => _actionBusy = true);
+    try {
+      final res = await context.read<AuthProvider>().api.patch<Map<String, dynamic>>(
+        '/admin/sale-orders/${widget.orderId}/sale-channel',
+        data: {'saleChannel': channel},
+      );
+      if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        setState(() {
+          _order = SaleOrderPublic.fromJson(data);
+          _saleChannel = _order?.saleChannel;
+        });
+      } else {
+        await _fetch();
+      }
+      _markListNeedsRefresh();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _saleChannel = revertTo);
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(dioErrorMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Widget _buildSaleChannelControl(SaleOrderPublic o, AppLocalizations l10n) {
+    if (!_canEditOrderNotes(o)) {
+      final label = o.saleChannelShortLabel;
+      if (label == null) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: StatusBadge(
+          label: label,
+          tone: StatusBadgeTone.neutral,
+        ),
+      );
+    }
+
+    const channels = <String?>[null, 'store', 'online'];
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: channels.contains(_saleChannel) ? _saleChannel : null,
+          isDense: true,
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: scheme.onSurfaceVariant,
+          ),
+          selectedItemBuilder: (context) => channels
+              .map(
+                (c) => Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    _saleChannelShortLabel(c, l10n),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: c == null
+                              ? scheme.onSurfaceVariant
+                              : AppColors.primary,
+                        ),
+                  ),
+                ),
+              )
+              .toList(),
+          items: channels
+              .map(
+                (c) => DropdownMenuItem<String?>(
+                  value: c,
+                  child: Text(_saleChannelMenuLabel(c, l10n)),
+                ),
+              )
+              .toList(),
+          onChanged: _actionBusy
+              ? null
+              : (v) {
+                  if (v == _saleChannel) return;
+                  final prev = _saleChannel;
+                  setState(() => _saleChannel = v);
+                  unawaited(_patchSaleChannel(v, revertTo: prev));
+                },
+        ),
+      ),
+    );
+  }
+
   Future<void> _finishOrder(SaleOrderPublic o) async {
     final l10n = AppLocalizations.of(context);
     setState(() => _actionBusy = true);
@@ -1297,22 +1415,37 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       ),
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: Text(
-                '#${o.displayCode}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: l10n.copyText,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
                     ),
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    onPressed: () => _copyToClipboard(
+                      o.displayCode,
+                      l10n.ordersOrderIdCopied,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '#${o.displayCode}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            IconButton(
-              tooltip: l10n.copyText,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.copy_rounded, size: 18),
-              onPressed: () => _copyToClipboard(o.displayCode, l10n.ordersOrderIdCopied),
-            ),
+            _buildSaleChannelControl(o, l10n),
             StatusBadge(
               label: _orderStatusLabel(o.status, l10n),
               tone: _toneForOrderStatus(o.status),

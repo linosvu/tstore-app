@@ -4,6 +4,7 @@ import '../core/services/api_client.dart';
 import '../models/delivery.dart';
 import '../models/management_entity.dart';
 import '../models/management_filters.dart';
+import '../models/management_receivables_summary.dart';
 import '../models/management_stats.dart';
 import '../models/preparation_order.dart';
 import '../models/sale_order.dart';
@@ -29,6 +30,18 @@ class ManagementProvider {
     final data = res.data;
     if (data == null) throw Exception('Dữ liệu rỗng');
     return ManagementStatsResponse.fromJson(data);
+  }
+
+  Future<ManagementReceivablesSummary> fetchReceivablesSummary({
+    ManagementFilters filters = ManagementFilters.empty,
+  }) async {
+    final res = await _api.get<Map<String, dynamic>>(
+      '/admin/management/receivables',
+      queryParameters: filters.toQueryParams(includeStatus: true),
+    );
+    final data = res.data;
+    if (data == null) throw Exception('Dữ liệu rỗng');
+    return ManagementReceivablesSummary.fromJson(data);
   }
 
   Future<({List<SaleOrderPublic> items, int totalPages})> fetchSaleOrdersPage({

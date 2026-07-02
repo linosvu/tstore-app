@@ -69,34 +69,33 @@ class ManagementQuickAccessSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.space2),
-          if (items.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.space2),
-              child: Text(
-                l10n.managementQuickAccessEmpty,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+          SizedBox(
+            height: 88,
+            child: items.isEmpty
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.managementQuickAccessEmpty,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                     ),
-              ),
-            )
-          else
-            SizedBox(
-              height: 88,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final item = items[i];
-                  return _QuickAccessTile(
-                    item: item,
-                    entityLabel: _entityLabel(item.entity, l10n),
-                    onTap: () => onOpen(item),
-                    onLongPress: () => onDelete(item),
-                  );
-                },
-              ),
-            ),
+                  )
+                : ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final item = items[i];
+                      return _QuickAccessTile(
+                        item: item,
+                        entityLabel: _entityLabel(item.entity, l10n),
+                        onTap: () => onOpen(item),
+                        onLongPress: () => onDelete(item),
+                      );
+                    },
+                  ),
+          ),
         ],
       ),
     );

@@ -869,6 +869,9 @@ class _OrderRowCard extends StatelessWidget {
         orderExpectedDeliveryCompact(order.expectedDeliveryAt);
     final managedByName = (order.managedBy?.name ?? '').trim();
     final createdByName = (order.createdBy?.name ?? '').trim();
+    final saleChannelLabel = order.saleChannelShortLabel;
+    final showCreatorRow =
+        createdByName.isNotEmpty || saleChannelLabel != null;
     final notesText = (order.notes ?? '').trim();
     return Material(
       color: scheme.surface,
@@ -990,7 +993,7 @@ class _OrderRowCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                        if (createdByName.isNotEmpty) ...[
+                        if (showCreatorRow) ...[
                           const SizedBox(height: 2),
                           Row(
                             children: [
@@ -1001,11 +1004,36 @@ class _OrderRowCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Expanded(
-                                child: Text(
-                                  createdByName,
-                                  style: AppTextStyles.dataSecondary(context)
-                                      .copyWith(
-                                    fontSize: 11,
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      if (createdByName.isNotEmpty)
+                                        TextSpan(
+                                          text: createdByName,
+                                          style: AppTextStyles.dataSecondary(
+                                            context,
+                                          ).copyWith(fontSize: 11),
+                                        ),
+                                      if (createdByName.isNotEmpty &&
+                                          saleChannelLabel != null)
+                                        TextSpan(
+                                          text: ' · ',
+                                          style: AppTextStyles.dataSecondary(
+                                            context,
+                                          ).copyWith(fontSize: 11),
+                                        ),
+                                      if (saleChannelLabel != null)
+                                        TextSpan(
+                                          text: saleChannelLabel,
+                                          style: AppTextStyles.dataSecondary(
+                                            context,
+                                          ).copyWith(
+                                            fontSize: 11,
+                                            color: AppColors.secondary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
