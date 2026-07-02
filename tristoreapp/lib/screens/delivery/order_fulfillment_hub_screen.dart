@@ -46,8 +46,8 @@ class _OrderFulfillmentHubScreenState extends State<OrderFulfillmentHubScreen> {
   bool _loading = false;
   bool _loadingMore = false;
   String? _error;
-  String _scope = 'mine';
-  int _scopeSegment = 1;
+  String _scope = 'all';
+  int _scopeSegment = 0;
   /// `null` | open | completed | cancelled
   String? _outcomeFilter;
   /// `null` | due_soon | overdue
@@ -62,7 +62,7 @@ class _OrderFulfillmentHubScreenState extends State<OrderFulfillmentHubScreen> {
       _expectedDeliveryFilter = launch.expectedDelivery;
     }
     if (launch.scope != null) {
-      const scopeValues = ['board', 'mine'];
+      const scopeValues = ['all', 'board', 'mine'];
       final idx = scopeValues.indexOf(launch.scope!);
       if (idx >= 0) {
         _scope = launch.scope!;
@@ -74,10 +74,10 @@ class _OrderFulfillmentHubScreenState extends State<OrderFulfillmentHubScreen> {
   @override
   void initState() {
     super.initState();
-    const allowedScopes = {'mine', 'board'};
+    const allowedScopes = {'all', 'board', 'mine'};
     if (!allowedScopes.contains(_scope)) {
-      _scope = 'mine';
-      _scopeSegment = 1;
+      _scope = 'all';
+      _scopeSegment = 0;
     }
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -130,8 +130,8 @@ class _OrderFulfillmentHubScreenState extends State<OrderFulfillmentHubScreen> {
     });
 
     final api = context.read<AuthProvider>().api;
-    const allowedScopes = {'mine', 'board'};
-    final listScope = allowedScopes.contains(_scope) ? _scope : 'mine';
+    const allowedScopes = {'all', 'board', 'mine'};
+    final listScope = allowedScopes.contains(_scope) ? _scope : 'all';
     final q = <String, dynamic>{
       'page': nextPage,
       'limit': 20,
@@ -197,7 +197,7 @@ class _OrderFulfillmentHubScreenState extends State<OrderFulfillmentHubScreen> {
         )} đ';
   }
 
-  static const _scopeValues = ['board', 'mine'];
+  static const _scopeValues = ['all', 'board', 'mine'];
 
   static String _dioErrorMessage(DioException e) {
     final data = e.response?.data;
@@ -259,11 +259,16 @@ class _OrderFulfillmentHubScreenState extends State<OrderFulfillmentHubScreen> {
                 segments: [
                   ButtonSegment<int>(
                     value: 0,
+                    label: Text(l10n.fulfillmentScopeAll),
+                    icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                  ),
+                  ButtonSegment<int>(
+                    value: 1,
                     label: Text(l10n.fulfillmentScopeBoard),
                     icon: const Icon(Icons.dashboard_outlined, size: 18),
                   ),
                   ButtonSegment<int>(
-                    value: 1,
+                    value: 2,
                     label: Text(l10n.fulfillmentScopeMine),
                     icon: const Icon(Icons.person_outline, size: 18),
                   ),

@@ -81,6 +81,10 @@ List<String> deliveryManagerSelectableStatuses(String current) {
       .toList();
 }
 
+/// Quản lý vẫn đổi được trạng thái sau khi huỷ (mở lại phiếu nhỡ huỷ nhầm).
+bool deliveryManagerCanChangeStatus(String status) =>
+    deliveryManagerSelectableStatuses(status).isNotEmpty;
+
 bool deliveryTerminalStatus(String status) =>
     _normalizeDeliveryStatus(status) == 'completed' ||
     _normalizeDeliveryStatus(status) == 'failed' ||

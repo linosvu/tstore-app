@@ -12,6 +12,7 @@ import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/core/utils/product_image_compress.dart';
+import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/auth_user.dart';
 import 'package:tstore/models/sale_order.dart';
 import 'package:tstore/providers/auth_provider.dart';
@@ -220,7 +221,7 @@ class _RecordSaleOrderPaymentScreenState
         );
         return;
       }
-      if (amt > o.amountDue) {
+      if (amt > o.availableToRecordPayment) {
         AppMessenger.showSnackBar(
           context,
           SnackBar(
@@ -241,16 +242,34 @@ class _RecordSaleOrderPaymentScreenState
     setState(() => _busy = true);
     try {
       final auth = context.read<AuthProvider>();
-      await auth.api.post<Map<String, dynamic>>(
+      final res = await auth.api.post<Map<String, dynamic>>(
         '/admin/sale-orders/${widget.orderId}/payment-proposals',
         data: data,
       );
       if (!mounted) return;
+      final responseData = res.data;
+      if (responseData != null) {
+        final updated = SaleOrderPublic.fromJson(responseData);
+        setState(() {
+          _order = updated;
+          _busy = false;
+          _amountCtrl.clear();
+          _noteCtrl.clear();
+          _clearTransferProof();
+          _method = 'cash';
+          _scheduleEnabled = false;
+          _scheduledDate = null;
+        });
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(l10n.saleOrderRecordPaymentSuccess)),
+        );
+        if (updated.availableToRecordPayment <= 0) {
+          Navigator.of(context).pop(true);
+        }
+        return;
+      }
       setState(() => _busy = false);
-      AppMessenger.showSnackBar(context, 
-        SnackBar(content: Text(l10n.saleOrderRecordPaymentSuccess)),
-      );
-      Navigator.of(context).pop(true);
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -303,28 +322,11 @@ class _RecordSaleOrderPaymentScreenState
 
   void _openTransferProofViewer(String url) {
     Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierColor: Colors.black87,
-        pageBuilder: (ctx, _, __) {
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              backgroundColor: Colors.black54,
-              foregroundColor: Colors.white,
-              title: Text(AppLocalizations.of(ctx).saleOrderRecordPaymentTransferProofView),
-            ),
-            body: Center(
-              child: InteractiveViewer(
-                child: ProductImageUrl(
-                  url: url,
-                  baseUrl: ApiConfig.baseUrl,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          );
-        },
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerPage(
+          items: [MediaViewerItem(url: url)],
+          initialIndex: 0,
+        ),
       ),
     );
   }
@@ -499,6 +501,8 @@ class _RecordSaleOrderPaymentScreenState
     final rawBase = o.subtotal - o.linesPrepaidTotal;
     final base = rawBase < 0 ? 0 : rawBase;
     final collected = _collectedExcludingPending(o);
+    final pendingTotal = o.pendingPaymentsTotal;
+    final available = o.availableToRecordPayment;
     final dueSettled = o.amountDue <= 0;
     Widget row(String label, String value, {bool strike = false}) {
       final deco = strike ? TextDecoration.lineThrough : null;
@@ -532,11 +536,18 @@ class _RecordSaleOrderPaymentScreenState
         children: [
           row(l10n.saleOrderRecordPaymentTotalOrder, _money(base)),
           row(l10n.saleOrderRecordPaymentCollected, _money(collected)),
+          if (pendingTotal > 0)
+            row(l10n.saleOrderRecordPaymentPendingTotal, _money(pendingTotal)),
           row(
             l10n.saleOrderRecordPaymentRemaining,
             _money(o.amountDue),
             strike: dueSettled,
           ),
+          if (pendingTotal > 0 && available > 0)
+            row(
+              l10n.saleOrderRecordPaymentAvailableToRecord,
+              _money(available),
+            ),
         ],
       ),
     );
@@ -630,14 +641,25 @@ class _RecordSaleOrderPaymentScreenState
     AppLocalizations l10n,
     SaleOrderPublic o,
   ) {
-    final hasPending = _pendingPayments(o).isNotEmpty;
-    if (hasPending || o.amountDue <= 0) {
+    if (o.availableToRecordPayment <= 0) {
       return [];
     }
+    final hasPending = _pendingPayments(o).isNotEmpty;
     return [
-      _buildScheduleRow(context, l10n, o),
-      const SizedBox(height: 16),
-      if (_scheduleEnabled) ...[
+      if (hasPending) ...[
+        Text(
+          l10n.saleOrderRecordPaymentAddAnotherHint,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (!hasPending) ...[
+        _buildScheduleRow(context, l10n, o),
+        const SizedBox(height: 16),
+      ],
+      if (!hasPending && _scheduleEnabled) ...[
         const SizedBox(height: 12),
         Text(
           l10n.saleOrderRecordPaymentScheduleModeHint,
@@ -693,7 +715,10 @@ class _RecordSaleOrderPaymentScreenState
           labelText: l10n.saleOrderRecordPaymentThisTime,
           hintText: '0',
           suffixText: 'đ',
-          helperText: l10n.saleOrderIntegerThousandsHint,
+          helperText: hasPending
+              ? '${l10n.saleOrderRecordPaymentAvailableToRecord}: '
+                  '${_money(o.availableToRecordPayment)}'
+              : l10n.saleOrderIntegerThousandsHint,
           helperMaxLines: 2,
         ),
       ),

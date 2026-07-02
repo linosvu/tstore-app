@@ -961,17 +961,34 @@ class _OrderRowCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          order.customer == null
-                              ? '—'
-                              : (order.customer!.phone?.trim().isNotEmpty ?? false)
-                                  ? '${order.customer!.name} · ${order.customer!.phone!.trim()}'
-                                  : order.customer!.name,
-                          style: AppTextStyles.dataSecondary(context).copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            if (order.customer?.isVip == true) ...[
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 14,
+                                color: Color(0xFFFFA000),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Expanded(
+                              child: Text(
+                                order.customer == null
+                                    ? '—'
+                                    : (order.customer!.phone?.trim().isNotEmpty ??
+                                            false)
+                                        ? '${order.customer!.name} · ${order.customer!.phone!.trim()}'
+                                        : order.customer!.name,
+                                style:
+                                    AppTextStyles.dataSecondary(context)
+                                        .copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                         if (createdByName.isNotEmpty) ...[
                           const SizedBox(height: 2),

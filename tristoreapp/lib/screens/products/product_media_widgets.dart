@@ -3,6 +3,11 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:tstore/core/utils/media_save_service.dart';
+import 'package:tstore/core/widgets/app_messenger.dart';
+
+import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/widgets/media_viewer_controls.dart';
 
 /// Ảnh sản phẩm từ URL http(s), URL tương đối (/uploads/...) hoặc data URL.
 ///
@@ -105,6 +110,7 @@ class ProductImageGalleryDialog extends StatefulWidget {
 class _ProductImageGalleryDialogState extends State<ProductImageGalleryDialog> {
   late final PageController _pageController;
   late int _index;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -121,9 +127,64 @@ class _ProductImageGalleryDialogState extends State<ProductImageGalleryDialog> {
     super.dispose();
   }
 
+  void _goToPage(int target) {
+    if (target < 0 ||
+        target >= widget.urls.length ||
+        target == _index ||
+        !_pageController.hasClients) {
+      return;
+    }
+    _pageController.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _goPrevious() => _goToPage(_index - 1);
+
+  void _goNext() => _goToPage(_index + 1);
+
+  Future<void> _downloadCurrent(BuildContext context) async {
+    if (_saving) return;
+    final l10n = AppLocalizations.of(context);
+    setState(() => _saving = true);
+    try {
+      await MediaSaveService.saveToGallery(
+        url: widget.urls[_index],
+        baseUrl: widget.baseUrl,
+      );
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.mediaViewerDownloadSuccess)),
+      );
+    } on MediaSaveException catch (e) {
+      if (!mounted) return;
+      final msg = switch (e.failure) {
+        MediaSaveFailure.permissionDenied =>
+          l10n.mediaViewerDownloadPermissionDenied,
+        _ => l10n.mediaViewerDownloadFailed,
+      };
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    } catch (_) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.mediaViewerDownloadFailed)),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    final l10n = AppLocalizations.of(context);
+    final n = widget.urls.length;
+    final canPrev = _index > 0;
+    final canNext = _index < n - 1;
     return Material(
       color: Colors.black,
       child: Stack(
@@ -155,29 +216,47 @@ class _ProductImageGalleryDialogState extends State<ProductImageGalleryDialog> {
             },
           ),
           Positioned(
-            top: mq.padding.top + 4,
-            right: 4,
-            child: IconButton(
-              style: IconButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.white24,
-              ),
-              icon: const Icon(Icons.close_rounded, size: 26),
-              onPressed: () => Navigator.of(context).pop(),
+            top: mq.padding.top + 8,
+            left: 12,
+            right: 12,
+            child: Row(
+              children: [
+                MediaViewerCounterBadge(current: _index + 1, total: n),
+                const Spacer(),
+                MediaViewerDownloadButton(
+                  busy: _saving,
+                  onPressed: () => _downloadCurrent(context),
+                ),
+                const SizedBox(width: 8),
+                const MediaViewerCloseButton(),
+              ],
             ),
           ),
-          if (widget.urls.length > 1)
+          if (n > 1)
             Positioned(
-              bottom: mq.padding.bottom + 20,
-              left: 16,
-              right: 16,
-              child: Text(
-                '${_index + 1} / ${widget.urls.length}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+              left: 8,
+              top: 0,
+              bottom: mq.padding.bottom + 16,
+              child: Center(
+                child: MediaViewerNavButton(
+                  icon: Icons.chevron_left_rounded,
+                  label: l10n.mediaViewerPrevious,
+                  enabled: canPrev,
+                  onTap: _goPrevious,
+                ),
+              ),
+            ),
+          if (n > 1)
+            Positioned(
+              right: 8,
+              top: 0,
+              bottom: mq.padding.bottom + 16,
+              child: Center(
+                child: MediaViewerNavButton(
+                  icon: Icons.chevron_right_rounded,
+                  label: l10n.mediaViewerNext,
+                  enabled: canNext,
+                  onTap: _goNext,
                 ),
               ),
             ),

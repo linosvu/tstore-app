@@ -62,6 +62,10 @@ List<String> preparationManagerSelectableStatuses(String current) {
       .toList();
 }
 
+/// Quản lý vẫn đổi được trạng thái sau khi huỷ (mở lại phiếu nhỡ huỷ nhầm).
+bool preparationManagerCanChangeStatus(String status) =>
+    preparationManagerSelectableStatuses(status).isNotEmpty;
+
 bool preparationTerminalStatus(String status) {
   final normalized = normalizePreparationStatus(status);
   return normalized == 'ready' || normalized == 'cancelled';

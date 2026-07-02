@@ -567,7 +567,8 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
           if (isElevated)
             IconButton(
               tooltip: l10n.prepChangeStatus,
-              onPressed: _busy || preparationTerminalStatus(item.status)
+              onPressed: _busy ||
+                      !preparationManagerCanChangeStatus(item.status)
                   ? null
                   : () => _showManagerStatusSheet(item),
               icon: const Icon(Icons.swap_vert_rounded),

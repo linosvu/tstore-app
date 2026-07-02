@@ -1084,7 +1084,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
         actions: [
           if (_d != null &&
               isElevated &&
-              !deliveryTerminalStatus(_d!.status))
+              deliveryManagerCanChangeStatus(_d!.status))
             IconButton(
               tooltip: l10n.deliveryChangeStatus,
               onPressed: _loading || _busy

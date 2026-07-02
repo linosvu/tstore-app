@@ -1,10 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:video_player/video_player.dart';
 
+import '../localization/app_localizations.dart';
+import '../utils/media_save_service.dart';
 import '../utils/media_video_cache.dart';
 import 'media_tile.dart';
+import 'media_viewer_controls.dart';
 
 class MediaViewerItem {
   const MediaViewerItem({
@@ -37,6 +41,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   int _videoGeneration = 0;
   bool _videoLoading = false;
   bool _videoError = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -61,6 +66,58 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     _videoController?.removeListener(_onVideoStateChanged);
     _videoController?.dispose();
     _videoController = null;
+  }
+
+  void _goToPage(int target) {
+    if (target < 0 ||
+        target >= widget.items.length ||
+        target == _index ||
+        !_pageController.hasClients) {
+      return;
+    }
+    _pageController.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _goPrevious() => _goToPage(_index - 1);
+
+  void _goNext() => _goToPage(_index + 1);
+
+  Future<void> _downloadCurrent(BuildContext context) async {
+    if (_saving) return;
+    final l10n = AppLocalizations.of(context);
+    final item = widget.items[_index];
+    setState(() => _saving = true);
+    try {
+      await MediaSaveService.saveToGallery(
+        url: item.url,
+        mediaType: item.mediaType,
+      );
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.mediaViewerDownloadSuccess)),
+      );
+    } on MediaSaveException catch (e) {
+      if (!mounted) return;
+      final msg = switch (e.failure) {
+        MediaSaveFailure.permissionDenied =>
+          l10n.mediaViewerDownloadPermissionDenied,
+        _ => l10n.mediaViewerDownloadFailed,
+      };
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.mediaViewerDownloadFailed)),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _initVideoForIndex(int i) async {
@@ -107,44 +164,90 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   @override
   Widget build(BuildContext context) {
     final n = widget.items.length;
+    final mq = MediaQuery.of(context);
+    final l10n = AppLocalizations.of(context);
+    final canPrev = _index > 0;
+    final canNext = _index < n - 1;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black54,
-        foregroundColor: Colors.white,
-        title: Text('${_index + 1} / $n'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.of(context).pop(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: n,
+            onPageChanged: (i) {
+              setState(() => _index = i);
+              _initVideoForIndex(i);
+            },
+            itemBuilder: (ctx, i) {
+              final item = widget.items[i];
+              if (isVideoMediaType(item.mediaType, item.url)) {
+                return _buildVideo(i);
+              }
+              return InteractiveViewer(
+                minScale: 0.85,
+                maxScale: 4,
+                child: Center(
+                  child: CachedNetworkImage(
+                    imageUrl: resolveMediaUrl(item.url),
+                    fit: BoxFit.contain,
+                    errorWidget: (_, __, ___) => const Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
-      body: PageView.builder(
-        controller: _pageController,
-        itemCount: n,
-        onPageChanged: (i) {
-          setState(() => _index = i);
-          _initVideoForIndex(i);
-        },
-        itemBuilder: (ctx, i) {
-          final item = widget.items[i];
-          if (isVideoMediaType(item.mediaType, item.url)) {
-            return _buildVideo(i);
-          }
-          return InteractiveViewer(
-            minScale: 0.85,
-            maxScale: 4,
-            child: Center(
-              child: CachedNetworkImage(
-                imageUrl: resolveMediaUrl(item.url),
-                fit: BoxFit.contain,
-                errorWidget: (_, __, ___) =>
-                    const Icon(Icons.broken_image_outlined, color: Colors.white54),
+          Positioned(
+            top: mq.padding.top + 8,
+            left: 12,
+            right: 12,
+            child: Row(
+              children: [
+                MediaViewerCounterBadge(current: _index + 1, total: n),
+                const Spacer(),
+                MediaViewerDownloadButton(
+                  busy: _saving,
+                  onPressed: () => _downloadCurrent(context),
+                ),
+                const SizedBox(width: 8),
+                const MediaViewerCloseButton(),
+              ],
+            ),
+          ),
+          if (n > 1)
+            Positioned(
+              left: 8,
+              top: 0,
+              bottom: mq.padding.bottom + 16,
+              child: Center(
+                child: MediaViewerNavButton(
+                  icon: Icons.chevron_left_rounded,
+                  label: l10n.mediaViewerPrevious,
+                  enabled: canPrev,
+                  onTap: _goPrevious,
+                ),
               ),
             ),
-          );
-        },
+          if (n > 1)
+            Positioned(
+              right: 8,
+              top: 0,
+              bottom: mq.padding.bottom + 16,
+              child: Center(
+                child: MediaViewerNavButton(
+                  icon: Icons.chevron_right_rounded,
+                  label: l10n.mediaViewerNext,
+                  enabled: canNext,
+                  onTap: _goNext,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

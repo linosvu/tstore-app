@@ -228,6 +228,8 @@ class SaleOrderPublic {
     this.linkedDeliveryStatus,
     this.linkedPreparationAssignedName,
     this.linkedDeliveryAssignedName,
+    this.linkedPreparationId,
+    this.linkedDeliveryId,
     this.notes,
     this.expectedDeliveryAt,
     this.createdBy,
@@ -268,6 +270,10 @@ class SaleOrderPublic {
   final String? linkedPreparationAssignedName;
   /// Tên người giao hàng (chỉ có ở API danh sách đơn bán).
   final String? linkedDeliveryAssignedName;
+  /// Id phiếu chuẩn bị mới nhất (danh sách / chi tiết đơn).
+  final String? linkedPreparationId;
+  /// Id đơn giao mới nhất (danh sách / chi tiết đơn).
+  final String? linkedDeliveryId;
   final String? notes;
   /// ISO 8601 — thời gian dự kiến giao hàng (đơn bán).
   final String? expectedDeliveryAt;
@@ -309,6 +315,17 @@ class SaleOrderPublic {
       payments.any(
         (p) => p.recordStatus == 'pending' && !p.isScheduleReminder,
       );
+
+  /// Tổng tiền các ghi nhận chờ duyệt (chưa trừ vào amountDue).
+  int get pendingPaymentsTotal => payments
+      .where((p) => p.recordStatus == 'pending' && !p.isScheduleReminder)
+      .fold<int>(0, (s, p) => s + p.amount);
+
+  /// Số tiền còn có thể ghi nhận thêm khi đã có proposal chờ duyệt.
+  int get availableToRecordPayment {
+    final rem = amountDue - pendingPaymentsTotal;
+    return rem < 0 ? 0 : rem;
+  }
 
   bool get isPaymentCollectedForFinish =>
       isPaymentStepDone && !hasPendingPaymentToConfirm;
@@ -385,6 +402,8 @@ class SaleOrderPublic {
       linkedDeliveryStatus: json['linkedDeliveryStatus'] as String?,
       linkedPreparationAssignedName: json['linkedPreparationAssignedName'] as String?,
       linkedDeliveryAssignedName: json['linkedDeliveryAssignedName'] as String?,
+      linkedPreparationId: json['linkedPreparationId'] as String?,
+      linkedDeliveryId: json['linkedDeliveryId'] as String?,
       notes: json['notes'] as String?,
       expectedDeliveryAt: json['expectedDeliveryAt'] as String?,
       createdBy: byRaw is Map<String, dynamic>

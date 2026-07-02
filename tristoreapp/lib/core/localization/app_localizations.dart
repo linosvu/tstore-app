@@ -183,6 +183,15 @@ class AppLocalizations {
     final vidMb = (maxVideoBytes / (1024 * 1024)).round();
     return 'Ảnh tối đa ${imgMb}MB · Video tối đa ${vidMb}MB · Thời lượng video tối đa ${maxVideoSec}s';
   }
+  String get mediaViewerClose => 'Đóng';
+  String get mediaViewerDownload => 'Tải về';
+  String get mediaViewerDownloading => 'Đang lưu…';
+  String get mediaViewerDownloadSuccess => 'Đã lưu vào thư viện ảnh';
+  String get mediaViewerDownloadFailed => 'Không tải được file';
+  String get mediaViewerDownloadPermissionDenied =>
+      'Cần quyền lưu vào thư viện ảnh';
+  String get mediaViewerPrevious => 'Trước';
+  String get mediaViewerNext => 'Tiếp';
   String get productsImageFromUrl => 'Dán URL ảnh';
   String get productsImageUrlPasteTitle => 'Thêm ảnh bằng URL';
   String get productsImageUrlPasteHint => 'http(s) hoặc data:image…';
@@ -219,6 +228,7 @@ class AppLocalizations {
   String get fulfillmentScopeCreated => 'Do tôi tạo';
   String get fulfillmentScopeCreatedShort => 'Tôi tạo';
   String get fulfillmentScopeBoard => 'Bảng chung';
+  String get fulfillmentScopeAll => 'Tất cả';
   String get fulfillmentScopeMineHint =>
       'Chỉ hiển thị đơn liên quan đến bạn (theo quyền nhân viên).';
   String get fulfillmentLegUnassigned => 'Chưa gán';
@@ -632,6 +642,10 @@ class AppLocalizations {
   String get saleOrderRecordPaymentTotalOrder => 'Tổng số tiền đơn hàng';
   String get saleOrderRecordPaymentCollected => 'Đã thu';
   String get saleOrderRecordPaymentRemaining => 'Còn phải thu';
+  String get saleOrderRecordPaymentPendingTotal => 'Chờ duyệt (chưa trừ)';
+  String get saleOrderRecordPaymentAvailableToRecord => 'Có thể ghi nhận thêm';
+  String get saleOrderRecordPaymentAddAnotherHint =>
+      'Có thể ghi nhận thêm khoản khác trong khi chờ duyệt các khoản trên.';
   String get saleOrderRecordPaymentThisTime => 'Số tiền thu lần này';
   String get saleOrderRecordPaymentMethod => 'Hình thức';
   String get saleOrderRecordPaymentMethodCash => 'Tiền mặt';

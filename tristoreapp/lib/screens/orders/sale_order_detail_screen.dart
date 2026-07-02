@@ -14,6 +14,7 @@ import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/core/utils/dio_error_message.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
+import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/delivery.dart';
 import 'package:tstore/models/preparation_order.dart';
 import 'package:tstore/models/sale_order.dart';
@@ -269,9 +270,52 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   bool _canCreateDelivery(SaleOrderPublic o) =>
       o.status == 'confirmed' || o.status == 'delivery';
 
+  String? _effectivePrepId(SaleOrderPublic o) =>
+      _linkedPreparation?.id ?? o.linkedPreparationId;
+
+  String? _effectivePrepStatus(SaleOrderPublic o) =>
+      _linkedPreparation?.status ?? o.linkedPreparationStatus;
+
+  String? _effectiveDeliveryId(SaleOrderPublic o) =>
+      _linkedDelivery?.id ?? o.linkedDeliveryId;
+
+  String? _effectiveDeliveryStatus(SaleOrderPublic o) =>
+      _linkedDelivery?.status ?? o.linkedDeliveryStatus;
+
+  String _effectivePrepAssigneeName(SaleOrderPublic o, AppLocalizations l10n) {
+    final fromLinked = _linkedPreparation?.assignedUser?.name;
+    if (fromLinked != null && fromLinked.trim().isNotEmpty) {
+      return fromLinked.trim();
+    }
+    return _assigneeDisplayName(o.linkedPreparationAssignedName, l10n);
+  }
+
+  String _effectiveDeliveryAssigneeName(
+    SaleOrderPublic o,
+    AppLocalizations l10n,
+  ) {
+    final fromLinked = _linkedDelivery?.assignedUser?.name;
+    if (fromLinked != null && fromLinked.trim().isNotEmpty) {
+      return fromLinked.trim();
+    }
+    return _assigneeDisplayName(o.linkedDeliveryAssignedName, l10n);
+  }
+
+  bool _hasLinkedPreparation(SaleOrderPublic o) {
+    final id = _effectivePrepId(o);
+    final status = _effectivePrepStatus(o);
+    return id != null && id.isNotEmpty && status != null && status.isNotEmpty;
+  }
+
+  bool _hasLinkedDelivery(SaleOrderPublic o) {
+    final id = _effectiveDeliveryId(o);
+    final status = _effectiveDeliveryStatus(o);
+    return id != null && id.isNotEmpty && status != null && status.isNotEmpty;
+  }
+
   bool _canCreatePreparation(SaleOrderPublic o) {
     if (o.status == 'cancelled' || o.status == 'refund') return false;
-    if (_linkedPreparation != null) return false;
+    if (_hasLinkedPreparation(o)) return false;
     return true;
   }
 
@@ -281,8 +325,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
         o.status == 'refund') {
       return false;
     }
-    if (o.payments.any((p) => p.recordStatus == 'pending')) return true;
-    return o.amountDue > 0;
+    if (o.hasPendingPaymentToConfirm) return true;
+    return o.availableToRecordPayment > 0;
   }
 
   bool _canEditExpectedDelivery(SaleOrderPublic o) =>
@@ -306,17 +350,20 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       role == 'staff' || _isElevatedRole(role);
 
   /// Khớp [SaleOrderService.allowedTransition] trên backend (chọn tự do, không theo bước).
+  /// Chỉ elevated (admin/manager) mới dùng sheet này; ẩn Đang giao & Hoàn tiền,
+  /// thêm Phiếu Tạm để mở lại đơn nhỡ huỷ nhầm.
   List<String> _selectableOrderStatuses(SaleOrderPublic o, String? role) {
     if (o.status == 'draft') return [];
+    if (!_isElevatedRole(role)) {
+      // Nhân viên chỉ đổi bước tiếp theo, không dùng sheet nhảy cóc.
+      return const [];
+    }
     final options = <String>[
+      'draft',
       'confirmed',
-      'delivery',
       'completed',
       'cancelled',
     ];
-    if (_isElevatedRole(role)) {
-      options.add('refund');
-    }
     return options.where((s) => s != o.status).toList();
   }
 
@@ -986,28 +1033,11 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   void _openTransferProofViewer(AppLocalizations l10n, String url) {
     Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierColor: Colors.black87,
-        pageBuilder: (ctx, _, __) {
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              backgroundColor: Colors.black54,
-              foregroundColor: Colors.white,
-              title: Text(l10n.saleOrderRecordPaymentTransferProofView),
-            ),
-            body: Center(
-              child: InteractiveViewer(
-                child: ProductImageUrl(
-                  url: url,
-                  baseUrl: ApiConfig.baseUrl,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          );
-        },
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerPage(
+          items: [MediaViewerItem(url: url)],
+          initialIndex: 0,
+        ),
       ),
     );
   }
@@ -2049,7 +2079,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
         ),
         if (_canCreatePreparation(o)) ...[
           const SizedBox(height: AppSpacing.space3),
-          if (_linkedDelivery != null) ...[
+          if (_hasLinkedDelivery(o)) ...[
             Text(
               l10n.saleOrderPrepDeliveryAlreadyExists,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2072,7 +2102,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
             ),
           ),
         ],
-        if (_linkedPreparation != null) ...[
+        if (_hasLinkedPreparation(o)) ...[
           const SizedBox(height: AppSpacing.space4),
           SafeArea(
             top: false,
@@ -2091,11 +2121,11 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                           child: Center(
                             child: StatusBadge(
                               label: preparationStatusLabel(
-                                _linkedPreparation!.status,
+                                _effectivePrepStatus(o)!,
                                 l10n,
                               ),
                               tone: preparationStatusTone(
-                                _linkedPreparation!.status,
+                                _effectivePrepStatus(o)!,
                               ),
                             ),
                           ),
@@ -2112,7 +2142,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                     .push<void>(
                                   MaterialPageRoute<void>(
                                     builder: (_) => PreparationDetailScreen(
-                                      preparationId: _linkedPreparation!.id,
+                                      preparationId: _effectivePrepId(o)!,
                                     ),
                                   ),
                                 )
@@ -2133,7 +2163,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                 const SizedBox(height: 6),
                 Text(
                   '${l10n.saleOrderWorkerLabel}: '
-                  '${_assigneeDisplayName(_linkedPreparation!.assignedUser?.name, l10n)}',
+                  '${_effectivePrepAssigneeName(o, l10n)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -2142,20 +2172,13 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
             ),
           ),
         ],
-        if (_canCreateDelivery(o) || _linkedDelivery != null) ...[
+        if (_canCreateDelivery(o) || _hasLinkedDelivery(o)) ...[
           const SizedBox(height: AppSpacing.space4),
           SafeArea(
             top: false,
             minimum: const EdgeInsets.only(bottom: AppSpacing.space2),
-            child: _linkedDelivery == null
-                ? FilledButton.icon(
-                    onPressed: _actionBusy || _deliveryBlockedByCancelledPrep
-                        ? null
-                        : () => _openCreateDelivery(o),
-                    icon: const Icon(Icons.local_shipping_outlined, size: 20),
-                    label: Text(l10n.deliveryCreateFromOrder),
-                  )
-                : Column(
+            child: _hasLinkedDelivery(o)
+                ? Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
@@ -2169,11 +2192,11 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                 child: Center(
                                   child: StatusBadge(
                                     label: _deliveryStatusShort(
-                                      _linkedDelivery!.status,
+                                      _effectiveDeliveryStatus(o)!,
                                       l10n,
                                     ),
                                     tone: _toneForDeliveryStatus(
-                                      _linkedDelivery!.status,
+                                      _effectiveDeliveryStatus(o)!,
                                     ),
                                   ),
                                 ),
@@ -2190,7 +2213,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                           .push<void>(
                                         MaterialPageRoute<void>(
                                           builder: (_) => DeliveryDetailScreen(
-                                            deliveryId: _linkedDelivery!.id,
+                                            deliveryId: _effectiveDeliveryId(o)!,
                                           ),
                                         ),
                                       )
@@ -2211,12 +2234,19 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                       const SizedBox(height: 6),
                       Text(
                         '${l10n.saleOrderWorkerLabel}: '
-                        '${_assigneeDisplayName(_linkedDelivery!.assignedUser?.name, l10n)}',
+                        '${_effectiveDeliveryAssigneeName(o, l10n)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
                       ),
                     ],
+                  )
+                : FilledButton.icon(
+                    onPressed: _actionBusy || _deliveryBlockedByCancelledPrep
+                        ? null
+                        : () => _openCreateDelivery(o),
+                    icon: const Icon(Icons.local_shipping_outlined, size: 20),
+                    label: Text(l10n.deliveryCreateFromOrder),
                   ),
           ),
         ],
