@@ -12,6 +12,15 @@ const notificationStorageKey = 'app_notifications_v1';
 class NotificationStorage {
   NotificationStorage._();
 
+  static String idForRemoteMessage(RemoteMessage message) {
+    final messageId = message.messageId?.trim();
+    if (messageId != null && messageId.isNotEmpty) return messageId;
+    return const Uuid().v4();
+  }
+
+  static int trayNotificationIdFor(String notificationId) =>
+      notificationId.hashCode & 0x7fffffff;
+
   static AppNotification notificationFromRemoteMessage(RemoteMessage message) {
     final notification = message.notification;
     final data = message.data;
@@ -22,7 +31,7 @@ class NotificationStorage {
     final orderCode = data['orderCode']?.trim();
 
     return AppNotification(
-      id: const Uuid().v4(),
+      id: idForRemoteMessage(message),
       title: title,
       body: body,
       category: AppNotification.categoryFromScreen(screen),
@@ -67,8 +76,18 @@ class NotificationStorage {
     }
   }
 
-  static Future<void> persist(AppNotification notification) async {
+  static int unreadCountFrom(List<AppNotification> items) =>
+      items.where((n) => n.isUnread).length;
+
+  static Future<int> unreadCount() async {
     final items = await loadAll();
+    return unreadCountFrom(items);
+  }
+
+  /// Trả về `true` nếu thêm mới; `false` nếu đã có (tránh đếm trùng khi tap push).
+  static Future<bool> persist(AppNotification notification) async {
+    final items = await loadAll();
+    if (items.any((n) => n.id == notification.id)) return false;
     items.insert(0, notification);
     items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final prefs = await SharedPreferences.getInstance();
@@ -76,9 +95,10 @@ class NotificationStorage {
       notificationStorageKey,
       jsonEncode(items.map((n) => n.toJson()).toList()),
     );
+    return true;
   }
 
-  static Future<void> persistFromRemoteMessage(RemoteMessage message) async {
-    await persist(notificationFromRemoteMessage(message));
+  static Future<bool> persistFromRemoteMessage(RemoteMessage message) async {
+    return persist(notificationFromRemoteMessage(message));
   }
 }

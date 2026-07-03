@@ -2,14 +2,14 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/services/api_client.dart';
-import '../models/repair_order.dart';
+import '../models/support_ticket.dart';
 
-class RepairOrdersProvider extends ChangeNotifier {
-  RepairOrdersProvider({required ApiClient api}) : _api = api;
+class SupportTicketsProvider extends ChangeNotifier {
+  SupportTicketsProvider({required ApiClient api}) : _api = api;
 
   final ApiClient _api;
 
-  List<RepairOrderPublic> _items = [];
+  List<SupportTicketPublic> _items = [];
   int _page = 1;
   int _totalPages = 1;
   bool _loading = false;
@@ -17,11 +17,11 @@ class RepairOrdersProvider extends ChangeNotifier {
   String? _error;
   String _list = 'mine';
   String? _statusFilter;
-  String? _priorityFilter;
-  bool _overdueFilter = false;
+  String? _categoryFilter;
+  bool _unassignedFilter = false;
   String _search = '';
 
-  List<RepairOrderPublic> get items => _items;
+  List<SupportTicketPublic> get items => _items;
   int get page => _page;
   int get totalPages => _totalPages;
   bool get isLoading => _loading;
@@ -29,7 +29,7 @@ class RepairOrdersProvider extends ChangeNotifier {
   String? get error => _error;
   String get listScope => _list;
   String? get statusFilter => _statusFilter;
-  bool get overdueFilter => _overdueFilter;
+  bool get unassignedFilter => _unassignedFilter;
 
   void setScope(String list) {
     if (_list == list) return;
@@ -39,18 +39,18 @@ class RepairOrdersProvider extends ChangeNotifier {
 
   void setStatusFilter(String? status) {
     _statusFilter = status;
-    _overdueFilter = false;
+    _unassignedFilter = false;
     notifyListeners();
   }
 
-  void setOverdueFilter(bool value) {
-    _overdueFilter = value;
+  void setUnassignedFilter(bool value) {
+    _unassignedFilter = value;
     if (value) _statusFilter = null;
     notifyListeners();
   }
 
-  void setPriorityFilter(String? priority) {
-    _priorityFilter = priority;
+  void setCategoryFilter(String? category) {
+    _categoryFilter = category;
     notifyListeners();
   }
 
@@ -84,23 +84,23 @@ class RepairOrdersProvider extends ChangeNotifier {
     if (_statusFilter != null && _statusFilter!.isNotEmpty) {
       q['status'] = _statusFilter;
     }
-    if (_priorityFilter != null && _priorityFilter!.isNotEmpty) {
-      q['priority'] = _priorityFilter;
+    if (_categoryFilter != null && _categoryFilter!.isNotEmpty) {
+      q['category'] = _categoryFilter;
     }
-    if (_overdueFilter) q['overdue'] = true;
+    if (_unassignedFilter) q['unassigned'] = true;
     final st = _search.trim();
     if (st.isNotEmpty) q['search'] = st;
 
     try {
       final res = await _api.get<Map<String, dynamic>>(
-        '/admin/repair-orders',
+        '/admin/support-tickets',
         queryParameters: q,
       );
       final data = res.data;
       if (data == null) {
         _error = 'Dữ liệu rỗng';
       } else {
-        final parsed = RepairOrdersListResult.fromJson(data);
+        final parsed = SupportTicketsListResult.fromJson(data);
         if (reset) {
           _items = List.from(parsed.items);
         } else {
@@ -120,71 +120,65 @@ class RepairOrdersProvider extends ChangeNotifier {
     }
   }
 
-  Future<RepairOrderPublic?> fetchOne(String id) async {
+  Future<SupportTicketPublic?> fetchOne(String id) async {
     final res = await _api.get<Map<String, dynamic>>(
-      '/admin/repair-orders/$id',
+      '/admin/support-tickets/$id',
     );
     final data = res.data;
     if (data == null) return null;
-    return RepairOrderPublic.fromJson(data);
+    return SupportTicketPublic.fromJson(data);
   }
 
-  Future<RepairOrderPublic?> create(Map<String, dynamic> body) async {
+  Future<SupportTicketPublic?> create(Map<String, dynamic> body) async {
     final res = await _api.post<Map<String, dynamic>>(
-      '/admin/repair-orders',
+      '/admin/support-tickets',
       data: body,
     );
     final data = res.data;
     if (data == null) return null;
-    return RepairOrderPublic.fromJson(data);
+    return SupportTicketPublic.fromJson(data);
   }
 
-  Future<RepairOrderPublic?> patchStatus(String id, String status) async {
+  Future<SupportTicketPublic?> patch(String id, Map<String, dynamic> body) async {
     final res = await _api.patch<Map<String, dynamic>>(
-      '/admin/repair-orders/$id/status',
+      '/admin/support-tickets/$id',
+      data: body,
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return SupportTicketPublic.fromJson(data);
+  }
+
+  Future<SupportTicketPublic?> patchStatus(String id, String status) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/support-tickets/$id/status',
       data: {'status': status},
     );
     final data = res.data;
     if (data == null) return null;
-    return RepairOrderPublic.fromJson(data);
+    return SupportTicketPublic.fromJson(data);
   }
 
-  Future<RepairOrderPublic?> patch(String id, Map<String, dynamic> body) async {
-    final res = await _api.patch<Map<String, dynamic>>(
-      '/admin/repair-orders/$id',
-      data: body,
-    );
-    final data = res.data;
-    if (data == null) return null;
-    return RepairOrderPublic.fromJson(data);
-  }
-
-  Future<RepairOrderPublic?> assign(String id, String? assignedUserId) async {
-    final res = await _api.patch<Map<String, dynamic>>(
-      '/admin/repair-orders/$id/assign',
-      data: {'assignedUserId': assignedUserId},
-    );
-    final data = res.data;
-    if (data == null) return null;
-    return RepairOrderPublic.fromJson(data);
-  }
-
-  Future<RepairOrderPublic?> addNote(String id, String content) async {
+  Future<SupportTicketPublic?> addNote(String id, String content) async {
     final res = await _api.post<Map<String, dynamic>>(
-      '/admin/repair-orders/$id/notes',
+      '/admin/support-tickets/$id/notes',
       data: {'content': content},
     );
     final data = res.data;
     if (data == null) return null;
-    return RepairOrderPublic.fromJson(data);
+    return SupportTicketPublic.fromJson(data);
   }
 
-  Future<RepairSupportStats?> fetchStats() async {
-    final res = await _api.get<Map<String, dynamic>>(
-      '/admin/dashboard/repair-support',
+  Future<ConvertToRepairResult?> convertToRepair(
+    String id, {
+    Map<String, dynamic>? body,
+  }) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      '/admin/support-tickets/$id/convert-to-repair',
+      data: body ?? {},
     );
     final data = res.data;
     if (data == null) return null;
-    return RepairSupportStats.fromJson(data);
+    return ConvertToRepairResult.fromJson(data);
   }
 }

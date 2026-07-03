@@ -16,6 +16,7 @@ import 'providers/delivery_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/preparation_provider.dart';
 import 'providers/repair_orders_provider.dart';
+import 'providers/support_tickets_provider.dart';
 import 'providers/tasks_provider.dart';
 import 'screens/splash_screen.dart';
 
@@ -105,13 +106,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               RepairOrdersProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
+          create: (ctx) =>
+              SupportTicketsProvider(api: ctx.read<AuthProvider>().api),
+        ),
+        ChangeNotifierProvider(
           create: (ctx) => TasksProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
           create: (_) {
             final provider = NotificationProvider();
-            PushNotificationService.instance.onForegroundMessage =
-                provider.addFromRemoteMessage;
+            final push = PushNotificationService.instance;
+            push.onForegroundMessage = provider.addFromRemoteMessage;
+            push.onNotificationOpened = provider.markReadFromRemoteMessage;
+            push.onPayloadOpened = provider.markReadFromPayload;
             provider.load();
             return provider;
           },

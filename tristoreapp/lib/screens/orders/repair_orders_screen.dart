@@ -1,20 +1,32 @@
 import 'package:flutter/material.dart';
 
-import 'package:tstore/core/localization/app_localizations.dart';
-import 'package:tstore/screens/orders/repair_orders_tab_screen.dart';
+import 'package:tstore/screens/repair/repair_support_hub_screen.dart';
 
-/// Full-screen Sửa chữa (mở từ Dashboard, không còn trong tab Đơn hàng).
+/// Full-screen Sửa chữa & Hỗ trợ (mở từ Dashboard).
 class RepairOrdersScreen extends StatelessWidget {
-  const RepairOrdersScreen({super.key});
+  const RepairOrdersScreen({
+    super.key,
+    this.initialTab = 1,
+    this.repairStatusFilter,
+    this.repairOverdue = false,
+    this.supportStatusFilter,
+    this.supportUnassigned = false,
+  });
+
+  final int initialTab;
+  final String? repairStatusFilter;
+  final bool repairOverdue;
+  final String? supportStatusFilter;
+  final bool supportUnassigned;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.ordersSubTabRepair),
-      ),
-      body: const RepairOrdersTabScreen(),
+    return RepairSupportHubScreen(
+      initialTab: initialTab,
+      repairStatusFilter: repairStatusFilter,
+      repairOverdue: repairOverdue,
+      supportStatusFilter: supportStatusFilter,
+      supportUnassigned: supportUnassigned,
     );
   }
 }

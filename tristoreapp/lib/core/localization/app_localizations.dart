@@ -758,6 +758,25 @@ class AppLocalizations {
   String get repairListEmpty => 'Chưa có đơn sửa chữa.';
   String get repairLoadFailed => 'Không tải được danh sách sửa chữa.';
   String get repairCreated => 'Đã tạo đơn sửa chữa.';
+  String get repairSupportHubTitle => 'Sửa chữa & Hỗ trợ';
+  String get repairSearchHint => 'Tìm đơn sửa, khách, thiết bị…';
+  String get supportTicketsNav => 'Ticket hỗ trợ';
+  String get supportSearchHint => 'Tìm ticket, khách, tiêu đề…';
+  String get supportTicketCreate => 'Tạo ticket';
+  String get supportListEmpty => 'Chưa có ticket hỗ trợ.';
+  String get supportTicketCreated => 'Đã tạo ticket hỗ trợ.';
+  String get supportSubject => 'Tiêu đề';
+  String get supportDescription => 'Nội dung';
+  String get supportCategory => 'Loại ticket';
+  String get supportConvertToRepair => 'Chuyển thành đơn sửa chữa';
+  String get supportViewRepairOrder => 'Xem đơn sửa chữa';
+  String get dashboardStatRepairsOpen => 'Sửa chữa đang mở';
+  String get dashboardStatRepairsToday => 'Nhận sửa hôm nay';
+  String get dashboardStatSupportOpen => 'Ticket đang mở';
+  String get dashboardStatSupportToday => 'Ticket mới hôm nay';
+  String get dashboardReminderRepairOverdue => 'Sửa chữa quá hạn trả';
+  String get dashboardReminderSupportWaiting => 'Ticket chờ phản hồi khách';
+  String get dashboardReminderRepairWaitingParts => 'Sửa chữa chờ linh kiện';
 
   // Tasks
   String get tasksDashboardSection => 'Nhiệm vụ của tôi';

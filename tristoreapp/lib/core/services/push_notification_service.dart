@@ -12,6 +12,7 @@ import 'notification_storage.dart';
 
 const _androidChannelId = 'tstore_orders';
 const _androidChannelName = 'Đơn hàng & vận hành';
+const _badgeOnlyNotificationId = 999999;
 
 /// Xử lý background messages (phải là top-level function).
 @pragma('vm:entry-point')
@@ -19,6 +20,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await NotificationStorage.persistFromRemoteMessage(message);
+  await PushNotificationService.syncApplicationBadgeFromStorage();
 }
 
 /// Quản lý FCM token, tray notification và điều hướng khi tap.
@@ -32,6 +34,12 @@ class PushNotificationService {
 
   /// Gọi khi nhận push lúc app đang foreground (gán từ [NotificationProvider]).
   Future<void> Function(RemoteMessage message)? onForegroundMessage;
+
+  /// Gọi khi user mở app từ push (tray / terminated).
+  Future<void> Function(RemoteMessage message)? onNotificationOpened;
+
+  /// Gọi khi user tap local notification (foreground tray).
+  Future<void> Function(String? payload)? onPayloadOpened;
 
   StreamSubscription<RemoteMessage>? _openedAppSub;
   bool _initialized = false;
@@ -62,6 +70,7 @@ class PushNotificationService {
     final message = await _messaging.getInitialMessage();
     if (message != null) {
       await NotificationStorage.persistFromRemoteMessage(message);
+      await onNotificationOpened?.call(message);
       NotificationNavigation.openFromRemoteMessage(message);
     }
   }
@@ -87,6 +96,68 @@ class PushNotificationService {
   /// Callback khi token thay đổi (app cần đăng ký lại với server).
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
+  /// Đồng bộ badge icon app (iOS) với số chưa đọc trong app.
+  Future<void> syncApplicationBadge(int unreadCount) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+
+    await _localNotifications.show(
+      _badgeOnlyNotificationId,
+      '',
+      '',
+      NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentAlert: false,
+          presentBanner: false,
+          presentList: false,
+          presentSound: false,
+          presentBadge: true,
+          badgeNumber: unreadCount,
+        ),
+      ),
+    );
+    await _localNotifications.cancel(_badgeOnlyNotificationId);
+  }
+
+  /// Dùng trong background isolate — đọc storage rồi cập nhật badge.
+  static Future<void> syncApplicationBadgeFromStorage() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+
+    final unread = await NotificationStorage.unreadCount();
+    final plugin = FlutterLocalNotificationsPlugin();
+    const initSettings = InitializationSettings(
+      iOS: DarwinInitializationSettings(),
+    );
+    await plugin.initialize(initSettings);
+    await plugin.show(
+      _badgeOnlyNotificationId,
+      '',
+      '',
+      NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentAlert: false,
+          presentBanner: false,
+          presentList: false,
+          presentSound: false,
+          presentBadge: true,
+          badgeNumber: unread,
+        ),
+      ),
+    );
+    await plugin.cancel(_badgeOnlyNotificationId);
+  }
+
+  /// Gỡ thông báo khỏi tray (local notification do app hiển thị).
+  Future<void> dismissTrayNotification(String notificationId) async {
+    await _localNotifications.cancel(
+      NotificationStorage.trayNotificationIdFor(notificationId),
+    );
+  }
+
+  /// Gỡ tất cả local notification do app hiển thị (foreground).
+  Future<void> dismissAllLocalTrayNotifications() async {
+    await _localNotifications.cancelAll();
+  }
+
   Future<void> _initLocalNotifications() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
@@ -100,7 +171,8 @@ class PushNotificationService {
     );
     await _localNotifications.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (response) {
+      onDidReceiveNotificationResponse: (response) async {
+        await onPayloadOpened?.call(response.payload);
         NotificationNavigation.openFromPayload(response.payload);
       },
     );
@@ -133,28 +205,36 @@ class PushNotificationService {
 
     final handler = onForegroundMessage;
     if (handler != null) {
-      unawaited(handler(message));
+      await handler(message);
     }
 
-    await _showLocalNotification(message);
+    final unread = await NotificationStorage.unreadCount();
+    await _showLocalNotification(message, badgeNumber: unread);
   }
 
-  Future<void> _showLocalNotification(RemoteMessage message) async {
+  Future<void> _showLocalNotification(
+    RemoteMessage message, {
+    required int badgeNumber,
+  }) async {
     final notification = message.notification;
     final data = message.data;
     final title = notification?.title ?? data['title'] ?? 'Thông báo';
     final body = notification?.body ?? data['body'] ?? '';
     if (title.isEmpty && body.isEmpty) return;
 
-    final payload = jsonEncode(data);
-    final id = DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
+    final notificationId = NotificationStorage.idForRemoteMessage(message);
+    final payload = jsonEncode({
+      ...data,
+      'fcmMessageId': notificationId,
+    });
+    final trayId = NotificationStorage.trayNotificationIdFor(notificationId);
 
     await _localNotifications.show(
-      id,
+      trayId,
       title,
       body,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
+      NotificationDetails(
+        android: const AndroidNotificationDetails(
           _androidChannelId,
           _androidChannelName,
           channelDescription: 'Thông báo đơn hàng, chuẩn bị, giao hàng',
@@ -165,6 +245,7 @@ class PushNotificationService {
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
+          badgeNumber: badgeNumber,
         ),
       ),
       payload: payload,
@@ -173,6 +254,7 @@ class PushNotificationService {
 
   Future<void> _handleOpenedRemoteMessage(RemoteMessage message) async {
     await NotificationStorage.persistFromRemoteMessage(message);
+    await onNotificationOpened?.call(message);
     NotificationNavigation.openFromRemoteMessage(message);
   }
 }

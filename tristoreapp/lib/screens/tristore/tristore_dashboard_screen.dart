@@ -12,6 +12,8 @@ import 'package:tstore/models/dashboard_today.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/screens/main_shell.dart';
 import 'package:tstore/models/task.dart';
+import 'package:tstore/models/repair_order.dart';
+import 'package:tstore/providers/repair_orders_provider.dart';
 import 'package:tstore/providers/tasks_provider.dart';
 import 'package:tstore/screens/orders/repair_orders_screen.dart';
 import 'package:tstore/screens/tasks/task_create_screen.dart';
@@ -37,6 +39,7 @@ class TristoreDashboardScreen extends StatefulWidget {
 
 class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
   DashboardTodayResponse? _summary;
+  RepairSupportStats? _repairSupport;
   String? _err;
   bool _loading = true;
   String? _taskFilter;
@@ -85,6 +88,10 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
         _summary = DashboardTodayResponse.fromJson(data);
         _loading = false;
       });
+      final stats = await context.read<RepairOrdersProvider>().fetchStats();
+      if (mounted && stats != null) {
+        setState(() => _repairSupport = stats);
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -124,10 +131,32 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
     );
   }
 
+  void _openRepairHub({
+    int tab = 1,
+    String? repairStatus,
+    bool repairOverdue = false,
+    String? supportStatus,
+    bool supportUnassigned = false,
+  }) {
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => RepairOrdersScreen(
+          initialTab: tab,
+          repairStatusFilter: repairStatus,
+          repairOverdue: repairOverdue,
+          supportStatusFilter: supportStatus,
+          supportUnassigned: supportUnassigned,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final s = _summary;
+    final rs = _repairSupport;
     final user = context.watch<AuthProvider>().user;
     final isAdmin = user?.role == 'admin';
     final todayOverviewItems = <TsTodayOverviewItem>[
@@ -163,6 +192,22 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
         icon: Icons.local_shipping_rounded,
         color: AppColors.primary,
         onTap: () => _openDrillDown(DashboardDrillDownKind.deliveryToday),
+      ),
+      TsTodayOverviewItem(
+        label: l10n.dashboardStatRepairsOpen,
+        value: _num(rs?.repairs.openCount),
+        hint: l10n.ordersSubTabRepair,
+        icon: Icons.build_outlined,
+        color: AppColors.warning,
+        onTap: () => _openRepairHub(tab: 1),
+      ),
+      TsTodayOverviewItem(
+        label: l10n.dashboardStatSupportOpen,
+        value: _num(rs?.support.openCount),
+        hint: l10n.supportTicketsNav,
+        icon: Icons.support_agent_outlined,
+        color: AppColors.secondary,
+        onTap: () => _openRepairHub(tab: 0),
       ),
     ];
     return Scaffold(
@@ -644,6 +689,51 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                         ),
                         onTap: () => _openDrillDown(
                           DashboardDrillDownKind.noDeliveryAssignee,
+                        ),
+                      ),
+                      MenuGroupItem(
+                        title: l10n.dashboardReminderRepairOverdue,
+                        icon: Icons.build_circle_outlined,
+                        iconColor: AppColors.error,
+                        trailing: Text(
+                          _num(rs?.repairs.overduePromised),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        onTap: () => _openRepairHub(tab: 1, repairOverdue: true),
+                      ),
+                      MenuGroupItem(
+                        title: l10n.dashboardReminderSupportWaiting,
+                        icon: Icons.mark_chat_unread_outlined,
+                        iconColor: AppColors.warning,
+                        trailing: Text(
+                          _num(rs?.support.waitingCustomer),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        onTap: () => _openRepairHub(
+                          tab: 0,
+                          supportStatus: 'waiting_customer',
+                        ),
+                      ),
+                      MenuGroupItem(
+                        title: l10n.dashboardReminderRepairWaitingParts,
+                        icon: Icons.settings_outlined,
+                        iconColor: AppColors.secondary,
+                        trailing: Text(
+                          _num(rs?.repairs.waitingParts),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        onTap: () => _openRepairHub(
+                          tab: 1,
+                          repairStatus: 'waiting_parts',
                         ),
                       ),
                     ],
