@@ -84,7 +84,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final ctx = rootNavigatorKey.currentContext;
       if (ctx != null) {
-        ctx.read<NotificationProvider>().reloadFromStorage();
+        ctx.read<NotificationProvider>().syncFromNotificationCenter();
       }
     }
   }

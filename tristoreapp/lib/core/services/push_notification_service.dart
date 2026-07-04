@@ -158,6 +158,34 @@ class PushNotificationService {
     await _localNotifications.cancelAll();
   }
 
+  /// iOS/Android có thể hiển thị remote push trong Notification Center khi app
+  /// đang background mà Dart chưa kịp persist. Khi app quay lại foreground hoặc
+  /// mở màn Thông báo, đồng bộ bù các notification đang còn trên tray.
+  Future<bool> syncDeliveredNotificationsToStorage() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
+
+    final List<ActiveNotification> active;
+    try {
+      active = await _localNotifications.getActiveNotifications();
+    } catch (e) {
+      debugPrint('[Notifications] getActiveNotifications error: $e');
+      return false;
+    }
+    var added = false;
+    for (final notification in active) {
+      final didAdd =
+          await NotificationStorage.persistFromActiveNotification(notification);
+      added = added || didAdd;
+    }
+    if (added) {
+      await syncApplicationBadgeFromStorage();
+    }
+    return added;
+  }
+
   Future<void> _initLocalNotifications() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(

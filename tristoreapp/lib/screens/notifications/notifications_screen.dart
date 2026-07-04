@@ -27,7 +27,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<NotificationProvider>().reloadFromStorage();
+      context.read<NotificationProvider>().syncFromNotificationCenter();
     });
   }
 
@@ -124,7 +124,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: provider.load,
+              onRefresh: provider.syncFromNotificationCenter,
               child: items.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),

@@ -60,6 +60,13 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Đồng bộ bù các notification đang nằm trên notification tray rồi reload
+  /// storage. Cần cho case hệ điều hành đã hiện push nhưng Dart chưa kịp persist.
+  Future<void> syncFromNotificationCenter() async {
+    await PushNotificationService.instance.syncDeliveredNotificationsToStorage();
+    await reloadFromStorage();
+  }
+
   List<AppNotification> _sanitizeStored(List<AppNotification> stored) {
     return [
       for (final n in stored)
