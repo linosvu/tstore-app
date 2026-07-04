@@ -3,7 +3,7 @@ description: "TStore - Mobile management app."
 
 publish_to: "none"
 
-version: 2.9.0+29
+version: 2.10.2+32
 
 environment:
   sdk: ">=3.4.3 <4.0.0"
