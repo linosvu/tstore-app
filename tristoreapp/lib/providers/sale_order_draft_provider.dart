@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:tstore/core/services/api_client.dart';
+import 'package:tstore/models/address_catalog.dart';
 import 'package:tstore/models/sale_order.dart';
 
 /// Dòng sản phẩm trong form tạo đơn (giá là bản sao tại thời điểm thêm).
@@ -49,8 +50,8 @@ class SaleOrderDraftProvider extends ChangeNotifier {
   String customerName = '';
   String customerPhone = '';
   String houseNumber = '';
-  String wardId = 'A';
-  String provinceId = 'X';
+  String wardId = AddressCatalog.fallbackWardId;
+  String provinceId = AddressCatalog.fallbackProvinceId;
   final List<SaleOrderDraftLine> lines = [];
   String paymentTerms = 'pay_on_delivery';
   DateTime? scheduledPaymentDate;
@@ -88,8 +89,8 @@ class SaleOrderDraftProvider extends ChangeNotifier {
       provinceId = a.provinceId;
     } else {
       houseNumber = '';
-      wardId = 'A';
-      provinceId = 'X';
+      wardId = AddressCatalog.fallbackWardId;
+      provinceId = AddressCatalog.fallbackProvinceId;
     }
     notifyListeners();
   }
@@ -100,8 +101,8 @@ class SaleOrderDraftProvider extends ChangeNotifier {
     customerName = '';
     customerPhone = '';
     houseNumber = '';
-    wardId = 'A';
-    provinceId = 'X';
+    wardId = AddressCatalog.fallbackWardId;
+    provinceId = AddressCatalog.fallbackProvinceId;
     notifyListeners();
   }
 
@@ -116,8 +117,9 @@ class SaleOrderDraftProvider extends ChangeNotifier {
     prepaidAmount = o.prepaidAmount;
     final snap = o.deliveryAddressSnapshot;
     houseNumber = (snap['houseNumber'] as String?) ?? '';
-    wardId = (snap['wardId'] as String?) ?? 'A';
-    provinceId = (snap['provinceId'] as String?) ?? 'X';
+    wardId = (snap['wardId'] as String?) ?? AddressCatalog.fallbackWardId;
+    provinceId =
+        (snap['provinceId'] as String?) ?? AddressCatalog.fallbackProvinceId;
     lines
       ..clear()
       ..addAll(
@@ -165,8 +167,8 @@ class SaleOrderDraftProvider extends ChangeNotifier {
     customerName = '';
     customerPhone = '';
     houseNumber = '';
-    wardId = 'A';
-    provinceId = 'X';
+    wardId = AddressCatalog.fallbackWardId;
+    provinceId = AddressCatalog.fallbackProvinceId;
     lines.clear();
     paymentTerms = 'pay_on_delivery';
     scheduledPaymentDate = null;

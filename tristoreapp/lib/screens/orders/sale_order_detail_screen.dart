@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
 
 import 'package:tstore/core/config/api_config.dart';
 import 'package:tstore/core/constants/app_colors.dart';
@@ -13,6 +14,7 @@ import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/core/utils/dio_error_message.dart';
+import 'package:tstore/core/utils/order_address_display.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
@@ -195,6 +197,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     _fetch();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      context.read<AddressCatalogProvider>().ensureLoaded();
       if (_isElevatedRole(context.read<AuthProvider>().user?.role)) {
         _loadUsers();
       }
@@ -1295,9 +1298,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     final base = rawBase < 0 ? 0 : rawBase;
     final cust = o.customer;
     final phoneDisplay = cust?.phone?.trim();
-    final house = _snap(o, 'houseNumber');
-    final ward = _snap(o, 'wardId');
-    final prov = _snap(o, 'provinceId');
+    final addressCatalog = context.watch<AddressCatalogProvider>();
+    final deliveryAddressLine = resolveOrderDeliveryAddress(o, addressCatalog);
     final remainder = _fmtIsoDate(o.scheduledPaymentDate);
     final productsTotal =
         o.lines.fold<int>(0, (sum, line) => sum + (line.quantity * line.unitPrice));
@@ -1567,18 +1569,15 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
               const SizedBox(height: 4),
               Builder(
                 builder: (context) {
-                  final addrPlain = [
-                    house,
-                    if (ward.isNotEmpty) ward,
-                    if (prov.isNotEmpty) prov,
-                  ].where((e) => e.trim().isNotEmpty).join(', ');
+                  final addrPlain =
+                      deliveryAddressLine == '—' ? '' : deliveryAddressLine;
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
                         child: Text(
-                          '${l10n.saleOrderHouseHint}: $house'
-                          '${ward.isNotEmpty || prov.isNotEmpty ? ' ($ward/$prov)' : ''}',
+                          '${l10n.saleOrderHouseHint}: '
+                          '${addrPlain.isNotEmpty ? addrPlain : '—'}',
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium

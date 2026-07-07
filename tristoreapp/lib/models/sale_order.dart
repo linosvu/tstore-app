@@ -74,19 +74,28 @@ class SaleOrderCustomerBrief {
     required this.name,
     this.phone,
     this.isVip = false,
+    this.addresses = const [],
   });
 
   final String id;
   final String name;
   final String? phone;
   final bool isVip;
+  final List<CustomerAddress> addresses;
 
   factory SaleOrderCustomerBrief.fromJson(Map<String, dynamic> json) {
+    final addr = json['addresses'];
+    final list = addr is List
+        ? addr
+            .map((e) => CustomerAddress.fromJson(e as Map<String, dynamic>))
+            .toList()
+        : <CustomerAddress>[];
     return SaleOrderCustomerBrief(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       phone: json['phone'] as String?,
       isVip: json['isVip'] as bool? ?? false,
+      addresses: list,
     );
   }
 }

@@ -11,6 +11,7 @@ import 'core/services/api_client.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/themes/app_theme.dart';
+import 'providers/address_catalog_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/delivery_provider.dart';
 import 'providers/notification_provider.dart';
@@ -94,6 +95,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: widget.auth),
+        ChangeNotifierProvider(
+          create: (ctx) =>
+              AddressCatalogProvider(api: ctx.read<AuthProvider>().api)
+                ..load(),
+        ),
         ChangeNotifierProvider(
           create: (ctx) => DeliveryProvider(api: ctx.read<AuthProvider>().api),
         ),

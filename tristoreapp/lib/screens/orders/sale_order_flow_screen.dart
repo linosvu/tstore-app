@@ -14,6 +14,7 @@ import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/models/address_book_entry.dart';
 import 'package:tstore/models/product.dart';
 import 'package:tstore/models/sale_order.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/preparation_provider.dart';
 import 'package:tstore/providers/sale_order_draft_provider.dart';
@@ -24,9 +25,6 @@ import 'package:tstore/design_system/design_system.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 import 'package:intl/intl.dart';
-
-const _wardIds = ['A', 'B', 'C'];
-const _provinceIds = ['X', 'Y', 'Z'];
 
 /// Cùng nhịp với [CreateProductSheet]: lề ngang form, khoảng cách field.
 const _orderFormHPadding = 20.0;
@@ -132,6 +130,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAddressBook();
       _loadPrepAssignUsers();
+      context.read<AddressCatalogProvider>().load();
     });
 
     final id = widget.initialOrderId;
@@ -518,7 +517,11 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
     if (index < 0 || index >= _customerAddresses.length) return;
     final l10n = AppLocalizations.of(context);
     final a = _customerAddresses[index];
-    final summary = '${a.houseNumber} · ${a.wardId}/${a.provinceId}';
+    final summary = context.read<AddressCatalogProvider>().formatAddressLine(
+          houseNumber: a.houseNumber,
+          wardId: a.wardId,
+          provinceId: a.provinceId,
+        );
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1161,6 +1164,9 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
   ) {
     final scheme = Theme.of(context).colorScheme;
     final sectionLabel = _orderFormSectionLabelStyle(context);
+    final catalog = context.watch<AddressCatalogProvider>();
+    final provinceIds = catalog.provinceIds();
+    final wardIds = catalog.wardIdsForProvince(p.provinceId);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -1283,7 +1289,13 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                 value: i,
                 groupValue: _selectedAddressIdx,
                 contactLine: contactLine,
-                addressLine: '${a.houseNumber}, ${a.wardId} / ${a.provinceId}',
+                addressLine: context
+                    .read<AddressCatalogProvider>()
+                    .formatAddressLine(
+                      houseNumber: a.houseNumber,
+                      wardId: a.wardId,
+                      provinceId: a.provinceId,
+                    ),
                 isDefault: i == 0,
                 editLabel: l10n.delete,
                 onSelect: () {
@@ -1342,10 +1354,10 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
               children: [
                 Expanded(
                   child: TsDropdownField<String>(
-                    value: p.wardId,
+                    value: wardIds.contains(p.wardId) ? p.wardId : (wardIds.isNotEmpty ? wardIds.first : p.wardId),
                     labelText: l10n.saleOrderWard,
-                    items: _wardIds,
-                    itemLabel: (w) => w,
+                    items: wardIds,
+                    itemLabel: (w) => catalog.wardName(p.provinceId, w),
                     onChanged: (v) {
                       if (v != null) {
                         p.wardId = v;
@@ -1357,13 +1369,19 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                 const SizedBox(width: _orderFormFieldGap),
                 Expanded(
                   child: TsDropdownField<String>(
-                    value: p.provinceId,
+                    value: provinceIds.contains(p.provinceId)
+                        ? p.provinceId
+                        : (provinceIds.isNotEmpty ? provinceIds.first : p.provinceId),
                     labelText: l10n.saleOrderProvince,
-                    items: _provinceIds,
-                    itemLabel: (x) => x,
+                    items: provinceIds,
+                    itemLabel: (x) => catalog.provinceName(x),
                     onChanged: (v) {
                       if (v != null) {
                         p.provinceId = v;
+                        final nextWards = catalog.wardIdsForProvince(v);
+                        if (!nextWards.contains(p.wardId) && nextWards.isNotEmpty) {
+                          p.wardId = nextWards.first;
+                        }
                         setState(() {});
                       }
                     },
@@ -1927,7 +1945,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${l10n.saleOrderHouseHint}: ${p.houseNumber} (${p.wardId}/${p.provinceId})',
+            '${l10n.saleOrderHouseHint}: ${context.read<AddressCatalogProvider>().formatAddressLine(houseNumber: p.houseNumber, wardId: p.wardId, provinceId: p.provinceId)}',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -2230,6 +2248,15 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = widget.l10n;
+    final catalog = context.watch<AddressCatalogProvider>();
+    final provinceIds = catalog.provinceIds();
+    final wardIds = catalog.wardIdsForProvince(_provinceId);
+    final wardValue = wardIds.contains(_wardId)
+        ? _wardId
+        : (wardIds.isNotEmpty ? wardIds.first : _wardId);
+    final provinceValue = provinceIds.contains(_provinceId)
+        ? _provinceId
+        : (provinceIds.isNotEmpty ? provinceIds.first : _provinceId);
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -2258,10 +2285,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
             children: [
               Expanded(
                 child: TsDropdownField<String>(
-                  value: _wardId,
+                  value: wardValue,
                   labelText: l10n.saleOrderWard,
-                  items: _wardIds,
-                  itemLabel: (w) => w,
+                  items: wardIds,
+                  itemLabel: (w) => catalog.wardName(_provinceId, w),
                   onChanged: (v) {
                     if (v != null) setState(() => _wardId = v);
                   },
@@ -2270,12 +2297,19 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: TsDropdownField<String>(
-                  value: _provinceId,
+                  value: provinceValue,
                   labelText: l10n.saleOrderProvince,
-                  items: _provinceIds,
-                  itemLabel: (x) => x,
+                  items: provinceIds,
+                  itemLabel: (x) => catalog.provinceName(x),
                   onChanged: (v) {
-                    if (v != null) setState(() => _provinceId = v);
+                    if (v == null) return;
+                    setState(() {
+                      _provinceId = v;
+                      final nextWards = catalog.wardIdsForProvince(v);
+                      if (!nextWards.contains(_wardId) && nextWards.isNotEmpty) {
+                        _wardId = nextWards.first;
+                      }
+                    });
                   },
                 ),
               ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/models/delivery.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
 import 'package:tstore/screens/delivery/delivery_ui.dart';
 import 'package:tstore/screens/preparation/preparation_ui.dart';
 import 'package:tstore/widgets/ui/app_surface_card.dart';
@@ -36,7 +38,8 @@ class DeliveryCompactCard extends StatelessWidget {
     final name = cust?.name ?? '—';
     final phone = cust?.phone?.trim();
     final phoneLine = (phone != null && phone.isNotEmpty) ? phone : '—';
-    final addr = deliveryAddressLine(d);
+    final addr =
+        deliveryAddressLine(d, context.watch<AddressCatalogProvider>());
     final due = so?.amountDue ?? 0;
 
     return AppSurfaceCard(

@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/models/delivery.dart';
+import 'package:tstore/models/sale_order.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
+import 'package:tstore/utils/order_address_display.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
 String deliveryStatusLabel(String s, AppLocalizations l10n) {
@@ -191,12 +194,14 @@ Color deliveryStatusColor(String status, ThemeData theme) {
   }
 }
 
-String deliveryAddressLine(DeliveryPublic d) {
-  final snap = d.saleOrder?.deliveryAddressSnapshot ?? const {};
+String deliveryAddressLine(DeliveryPublic d, [AddressCatalogProvider? catalog]) {
+  final order = d.saleOrder;
+  if (catalog != null && order != null) {
+    return resolveOrderDeliveryAddress(order, catalog);
+  }
+  final snap = order?.deliveryAddressSnapshot ?? const {};
   final h = snap['houseNumber']?.toString().trim() ?? '';
-  final w = snap['wardId']?.toString().trim() ?? '';
-  final p = snap['provinceId']?.toString().trim() ?? '';
-  return [h, w, p].where((e) => e.isNotEmpty).join(', ');
+  return h.isEmpty ? '—' : h;
 }
 
 String deliveryFormatMoney(int v) {

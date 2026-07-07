@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
 
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
@@ -1139,7 +1140,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     DeliveryPublic d,
   ) {
     final cust = d.saleOrder?.customer;
-    final addrLine = deliveryAddressLine(d);
+    final addrLine =
+        deliveryAddressLine(d, context.watch<AddressCatalogProvider>());
     final terminal = _terminal(d.status);
     return ListView(
       padding: const EdgeInsets.fromLTRB(

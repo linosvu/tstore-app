@@ -1,5 +1,7 @@
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/models/preparation_order.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
+import 'package:tstore/utils/order_address_display.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
 const List<String> kPreparationMineStatusFilterOrder = [
@@ -84,10 +86,15 @@ StatusBadgeTone preparationStatusTone(String status) {
   }
 }
 
-String preparationAddressLine(PreparationOrderPublic p) {
-  final snap = p.saleOrder?.deliveryAddressSnapshot ?? const {};
+String preparationAddressLine(
+  PreparationOrderPublic p, [
+  AddressCatalogProvider? catalog,
+]) {
+  final order = p.saleOrder;
+  if (catalog != null && order != null) {
+    return resolveOrderDeliveryAddress(order, catalog);
+  }
+  final snap = order?.deliveryAddressSnapshot ?? const {};
   final h = snap['houseNumber']?.toString().trim() ?? '';
-  final w = snap['wardId']?.toString().trim() ?? '';
-  final pr = snap['provinceId']?.toString().trim() ?? '';
-  return [h, w, pr].where((e) => e.isNotEmpty).join(', ');
+  return h.isEmpty ? '—' : h;
 }
