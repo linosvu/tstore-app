@@ -66,23 +66,27 @@ class AddressCatalogProvider extends ChangeNotifier {
     final wardResolved = wardName(provinceId, wardId);
     final provResolved = provinceName(provinceId);
 
-    // Fallback X/A: số nhà đã chứa địa chỉ đầy đủ từ KiotViet.
-    if (provinceId == AddressCatalog.fallbackProvinceId &&
-        wardId == AddressCatalog.fallbackWardId) {
+    if (AddressCatalog.isEmptyProvinceWard(provinceId, wardId)) {
       return houseUsable ? house : '—';
     }
 
     final parts = <String>[];
     if (houseUsable) parts.add(house);
 
-    final wardOk = wardResolved != wardId && wardResolved.isNotEmpty;
+    final wardOk =
+        wardId.trim().isNotEmpty &&
+        wardResolved != wardId &&
+        wardResolved.isNotEmpty;
     if (wardOk &&
         (!houseUsable || !_addressContainsPlace(house, wardResolved))) {
       parts.add(wardResolved);
     }
 
     final joinedForProv = parts.join(', ');
-    final provOk = provResolved != provinceId && provResolved.isNotEmpty;
+    final provOk =
+        provinceId.trim().isNotEmpty &&
+        provResolved != provinceId &&
+        provResolved.isNotEmpty;
     if (provOk &&
         (!houseUsable ||
             !_addressContainsPlace(

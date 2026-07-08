@@ -7,9 +7,12 @@ bool houseNumberUsable(String raw) {
   return t.isNotEmpty && t != '—' && t != '-';
 }
 
+bool isEmptyProvinceWard(String provinceId, String wardId) =>
+    AddressCatalog.isEmptyProvinceWard(provinceId, wardId);
+
+/// @deprecated Dùng [isEmptyProvinceWard].
 bool isFallbackAddressPair(String provinceId, String wardId) =>
-    provinceId == AddressCatalog.fallbackProvinceId &&
-    wardId == AddressCatalog.fallbackWardId;
+    isEmptyProvinceWard(provinceId, wardId);
 
 /// Địa chỉ từ snapshot đơn (không fallback sang khách hàng).
 String formatSnapshotAddress(
@@ -20,7 +23,7 @@ String formatSnapshotAddress(
   final wardId = snap['wardId']?.toString().trim() ?? '';
   final provinceId = snap['provinceId']?.toString().trim() ?? '';
 
-  if (!houseNumberUsable(house) && isFallbackAddressPair(provinceId, wardId)) {
+  if (!houseNumberUsable(house) && isEmptyProvinceWard(provinceId, wardId)) {
     return '—';
   }
 

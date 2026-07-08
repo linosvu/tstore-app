@@ -234,7 +234,8 @@ class _RecordSaleOrderPaymentScreenState
         'amount': amt,
         'method': _method,
         if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
-        if (_method == 'bank_transfer' && _transferProofUrl != null)
+        if ((_method == 'bank_transfer' || _method == 'cash') &&
+            _transferProofUrl != null)
           'transferProofUrl': _transferProofUrl,
       };
     }
@@ -742,13 +743,10 @@ class _RecordSaleOrderPaymentScreenState
         enabled: !_busy,
         onChanged: (v) {
           if (v == null) return;
-          setState(() {
-            _method = v;
-            if (v != 'bank_transfer') _clearTransferProof();
-          });
+          setState(() => _method = v);
         },
       ),
-      if (_method == 'bank_transfer') ...[
+      if (_method == 'bank_transfer' || _method == 'cash') ...[
         const SizedBox(height: 16),
         _buildTransferProofSection(context, l10n),
       ],

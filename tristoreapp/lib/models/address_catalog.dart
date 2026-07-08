@@ -73,6 +73,18 @@ class AddressCatalog {
     );
   }
 
+  static const emptyProvinceId = '';
+  static const emptyWardId = '';
+
+  /** @deprecated Legacy sentinel — migration 027. */
   static const fallbackProvinceId = '11111111-1111-4111-8111-111111111001';
+  /** @deprecated Legacy sentinel — migration 027. */
   static const fallbackWardId = '22222222-2222-4222-8222-222222222201';
+
+  static bool isEmptyProvinceWard(String provinceId, String wardId) {
+    final p = provinceId.trim();
+    final w = wardId.trim();
+    if (p.isEmpty && w.isEmpty) return true;
+    return p == fallbackProvinceId && w == fallbackWardId;
+  }
 }
