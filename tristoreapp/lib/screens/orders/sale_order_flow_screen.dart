@@ -11,7 +11,6 @@ import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/theme/app_ui_extension.dart';
 import 'package:tstore/core/utils/amount_input.dart';
-import 'package:tstore/models/address_book_entry.dart';
 import 'package:tstore/models/product.dart';
 import 'package:tstore/models/sale_order.dart';
 import 'package:tstore/providers/address_catalog_provider.dart';
@@ -108,7 +107,6 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
   bool _isNewCustomer = false;
   List<CustomerAddress> _customerAddresses = [];
   int _selectedAddressIdx = 0;
-  List<AddressBookEntry> _addressBookEntries = [];
   Timer? _phoneDebounce;
   static const _thousandsSep = ThousandsGroupSeparatorKey.dot;
 
@@ -128,7 +126,6 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
     _page = PageController(initialPage: start);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadAddressBook();
       _loadPrepAssignUsers();
       context.read<AddressCatalogProvider>().load();
     });
@@ -282,37 +279,6 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
     }
     if (_houseCtrl.text != a.houseNumber) {
       _houseCtrl.text = a.houseNumber;
-    }
-  }
-
-  void _applyConfiguredAddress(
-    SaleOrderDraftProvider p,
-    AddressBookEntry e,
-  ) {
-    p.houseNumber = e.houseNumber;
-    p.wardId = e.wardId;
-    p.provinceId = e.provinceId;
-    _houseCtrl.text = e.houseNumber;
-    p.bump();
-    setState(() {});
-  }
-
-  Future<void> _loadAddressBook() async {
-    try {
-      final api = context.read<AuthProvider>().api;
-      final r = await api.get<Map<String, dynamic>>('/admin/address-book');
-      final raw = r.data?['entries'] as List<dynamic>?;
-      if (!mounted) return;
-      final list = raw == null
-          ? <AddressBookEntry>[]
-          : raw
-              .whereType<Map<String, dynamic>>()
-              .map(AddressBookEntry.fromJson)
-              .where((e) => e.id.isNotEmpty && e.houseNumber.isNotEmpty)
-              .toList();
-      setState(() => _addressBookEntries = list);
-    } catch (_) {
-      if (mounted) setState(() => _addressBookEntries = []);
     }
   }
 
@@ -720,6 +686,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
   }
 
   Future<void> _next() async {
+    FocusScope.of(context).unfocus();
     final l10n = AppLocalizations.of(context);
     final p = context.read<SaleOrderDraftProvider>();
     if (_step == 0) {
@@ -759,6 +726,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
   }
 
   void _prev() {
+    FocusScope.of(context).unfocus();
     if (_step > 0) {
       final target = _step - 1;
       setState(() => _step = target);
@@ -1312,33 +1280,6 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
               onTap: () => _showAddAddressSheet(),
             ),
           ] else ...[
-            if (_addressBookEntries.isNotEmpty) ...[
-              const SizedBox(height: _orderFormFieldGap),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  l10n.saleOrderConfiguredAddresses,
-                  style: sectionLabel,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _addressBookEntries.map((e) {
-                  return ActionChip(
-                    label: Text(
-                      e.label.isNotEmpty
-                          ? '${e.label}: ${e.houseNumber}'
-                          : e.houseNumber,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onPressed: () => _applyConfiguredAddress(p, e),
-                  );
-                }).toList(),
-              ),
-            ],
             const SizedBox(height: _orderFormFieldGap),
             TextField(
               controller: _houseCtrl,
