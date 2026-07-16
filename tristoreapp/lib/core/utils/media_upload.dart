@@ -86,10 +86,12 @@ Future<int?> videoDurationSeconds(String path) async {
 
 Future<MediaUploadResult?> uploadImageFromPath(
   String path,
-  ApiClient api,
-) async {
+  ApiClient api, {
+  void Function(double progress)? onProgress,
+}) async {
   if (path.isEmpty) return null;
 
+  onProgress?.call(0);
   final Uint8List? bytes = await FlutterImageCompress.compressWithFile(
     path,
     minWidth: 1200,
@@ -108,7 +110,16 @@ Future<MediaUploadResult?> uploadImageFromPath(
   });
 
   try {
-    final res = await api.post<Map<String, dynamic>>('/admin/upload', data: form);
+    final res = await api.post<Map<String, dynamic>>(
+      '/admin/upload',
+      data: form,
+      onSendProgress: (sent, total) {
+        if (total > 0) {
+          onProgress?.call((sent / total).clamp(0.0, 1.0));
+        }
+      },
+    );
+    onProgress?.call(1);
     final data = res.data;
     if (data == null) return null;
     final url = data['url'] as String?;
@@ -125,12 +136,14 @@ Future<MediaUploadResult?> uploadImageFromPath(
 
 Future<MediaUploadResult?> uploadVideoFromPath(
   String path,
-  ApiClient api,
-) async {
+  ApiClient api, {
+  void Function(double progress)? onProgress,
+}) async {
   if (path.isEmpty) return null;
   final file = File(path);
   if (!await file.exists()) return null;
 
+  onProgress?.call(0);
   final bytes = await file.readAsBytes();
   if (bytes.isEmpty) return null;
 
@@ -146,7 +159,16 @@ Future<MediaUploadResult?> uploadVideoFromPath(
   });
 
   try {
-    final res = await api.post<Map<String, dynamic>>('/admin/upload', data: form);
+    final res = await api.post<Map<String, dynamic>>(
+      '/admin/upload',
+      data: form,
+      onSendProgress: (sent, total) {
+        if (total > 0) {
+          onProgress?.call((sent / total).clamp(0.0, 1.0));
+        }
+      },
+    );
+    onProgress?.call(1);
     final data = res.data;
     if (data == null) return null;
     final url = data['url'] as String?;

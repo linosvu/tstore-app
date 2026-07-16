@@ -784,62 +784,86 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
 
   Future<void> _pickAndUploadMedia(String type) async {
     final l10n = AppLocalizations.of(context);
-    final pick = await showMediaPickerSheet(context, config: _uploadConfig);
-    if (pick == null || !mounted) return;
-
-    final ok = await validateMediaPick(
-      context: context,
-      pick: pick,
-      config: _uploadConfig,
-      tooLargeMessage: l10n.mediaVideoTooLarge,
-      tooLongMessage: l10n.mediaVideoTooLong,
-    );
-    if (!ok || !mounted) return;
-
-    final pending = enqueuePendingMedia(pick: pick, scopeKey: type);
-    setState(() => _pendingCheckin.add(pending));
+    final picks = await showMediaPickerSheet(context, config: _uploadConfig);
+    if (picks == null || picks.isEmpty || !mounted) return;
 
     final api = context.read<AuthProvider>().api;
-    try {
-      final result = pick.isVideo
-          ? await uploadVideoFromPath(pick.path, api)
-          : await uploadImageFromPath(pick.path, api);
+    final p = context.read<DeliveryProvider>();
+    var anyFail = false;
+
+    for (final pick in picks) {
       if (!mounted) return;
-      if (result == null) {
+      final ok = await validateMediaPick(
+        context: context,
+        pick: pick,
+        config: _uploadConfig,
+        tooLargeMessage: pick.isVideo
+            ? l10n.mediaVideoTooLarge
+            : l10n.mediaUploadFailed,
+        tooLongMessage: l10n.mediaVideoTooLong,
+      );
+      if (!ok || !mounted) {
+        anyFail = true;
+        continue;
+      }
+
+      final pending = enqueuePendingMedia(pick: pick, scopeKey: type);
+      setState(() => _pendingCheckin.add(pending));
+
+      try {
+        final result = await uploadPickedMedia(
+          pick: pick,
+          api: api,
+          onProgress: (v) {
+            if (!mounted) return;
+            setState(() => pending.progress = v);
+          },
+        );
+        if (!mounted) return;
+        if (result == null) {
+          anyFail = true;
+          continue;
+        }
+        await p.addCheckinImage(
+          widget.deliveryId,
+          url: result.url,
+          type: type,
+          mediaType: result.mediaType,
+        );
+        if (!mounted) return;
+        final full = await p.fetchOne(widget.deliveryId);
+        if (!mounted) return;
+        if (full != null) setState(() => _d = full);
+      } on DioException catch (e) {
+        anyFail = true;
+        if (!mounted) return;
         AppMessenger.showSnackBar(
           context,
-          SnackBar(content: Text(l10n.mediaUploadFailed)),
+          SnackBar(
+            content: Text(
+              e.response?.data?.toString() ?? e.message ?? l10n.error,
+            ),
+          ),
         );
-        return;
+      } catch (_) {
+        anyFail = true;
+      } finally {
+        if (mounted) {
+          setState(
+            () => _pendingCheckin.removeWhere((e) => e.id == pending.id),
+          );
+        }
       }
-      final p = context.read<DeliveryProvider>();
-      await p.addCheckinImage(
-        widget.deliveryId,
-        url: result.url,
-        type: type,
-        mediaType: result.mediaType,
-      );
-      if (!mounted) return;
-      final full = await p.fetchOne(widget.deliveryId);
-      if (!mounted) return;
-      if (full != null) setState(() => _d = full);
-      AppMessenger.showSnackBar(context, SnackBar(content: Text(l10n.success)));
-    } on DioException catch (e) {
-      if (!mounted) return;
-      AppMessenger.showSnackBar(
-        context,
-        SnackBar(content: Text(e.response?.data?.toString() ?? e.message ?? l10n.error)),
-      );
-    } catch (_) {
-      if (!mounted) return;
+    }
+
+    if (!mounted) return;
+    if (anyFail) {
       AppMessenger.showSnackBar(
         context,
         SnackBar(content: Text(l10n.mediaUploadFailed)),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _pendingCheckin.removeWhere((e) => e.id == pending.id));
-      }
+    } else {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(l10n.success)));
     }
   }
 
@@ -1518,6 +1542,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                         return LocalMediaPreviewTile(
                           localPath: p.localPath,
                           isVideo: p.isVideo,
+                          progress: p.progress,
                           width: double.infinity,
                           height: double.infinity,
                         );

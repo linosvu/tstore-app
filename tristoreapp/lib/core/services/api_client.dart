@@ -57,8 +57,14 @@ class ApiClient {
     String path, {
     dynamic data,
     Options? options,
+    void Function(int sent, int total)? onSendProgress,
   }) {
-    return _dio.post<T>(path, data: data, options: options);
+    return _dio.post<T>(
+      path,
+      data: data,
+      options: options,
+      onSendProgress: onSendProgress,
+    );
   }
 
   Future<Response<T>> patch<T>(

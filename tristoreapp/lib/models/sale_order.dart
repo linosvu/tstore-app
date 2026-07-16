@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class CustomerAddress {
   const CustomerAddress({
     required this.houseNumber,
@@ -158,13 +160,14 @@ class SaleOrderPaymentPublic {
     this.bankAccount,
     this.description,
     this.transferProofUrl,
+    List<String>? transferProofUrlsCached,
     this.isScheduleReminder = false,
     this.recordStatus,
     this.requestedBy,
     this.confirmedBy,
     this.confirmedAt,
     this.scheduledPaymentDate,
-  });
+  }) : _transferProofUrlsCached = transferProofUrlsCached;
 
   final String id;
   final String? kiotVietPaymentId;
@@ -179,6 +182,14 @@ class SaleOrderPaymentPublic {
   final String? transferProofUrl;
   final bool isScheduleReminder;
 
+  /// Danh sách ảnh bill — parse từ API `transferProofUrls` hoặc `transferProofUrl`.
+  List<String> get proofImageUrls {
+    if (_transferProofUrlsCached != null) return _transferProofUrlsCached;
+    return parseTransferProofUrls(transferProofUrl);
+  }
+
+  final List<String>? _transferProofUrlsCached;
+
   /// `pending` | `confirmed` | null (đồng bộ KiotViet / cũ).
   final String? recordStatus;
   final SaleOrderCreatorBrief? requestedBy;
@@ -189,6 +200,14 @@ class SaleOrderPaymentPublic {
   factory SaleOrderPaymentPublic.fromJson(Map<String, dynamic> json) {
     final reqRaw = json['requestedBy'];
     final confRaw = json['confirmedBy'];
+    final urlsRaw = json['transferProofUrls'];
+    List<String>? urls;
+    if (urlsRaw is List) {
+      urls = [
+        for (final e in urlsRaw)
+          if (e is String && e.trim().isNotEmpty) e.trim(),
+      ];
+    }
     return SaleOrderPaymentPublic(
       id: json['id'] as String,
       kiotVietPaymentId: json['kiotVietPaymentId'] as String?,
@@ -201,6 +220,7 @@ class SaleOrderPaymentPublic {
       bankAccount: json['bankAccount'] as String?,
       description: json['description'] as String?,
       transferProofUrl: json['transferProofUrl'] as String?,
+      transferProofUrlsCached: urls,
       isScheduleReminder: json['isScheduleReminder'] as bool? ?? false,
       recordStatus: json['recordStatus'] as String?,
       requestedBy: reqRaw is Map<String, dynamic>
@@ -213,6 +233,24 @@ class SaleOrderPaymentPublic {
       scheduledPaymentDate: json['scheduledPaymentDate'] as String?,
     );
   }
+}
+
+List<String> parseTransferProofUrls(String? raw) {
+  final t = raw?.trim() ?? '';
+  if (t.isEmpty) return const [];
+  if (t.startsWith('[')) {
+    try {
+      final decoded = jsonDecode(t);
+      if (decoded is! List) return const [];
+      return [
+        for (final e in decoded)
+          if (e is String && e.trim().isNotEmpty) e.trim(),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+  return [t];
 }
 
 class SaleOrderPublic {

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +13,7 @@ import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/core/utils/product_image_compress.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
+import 'package:tstore/core/widgets/pending_media_tile.dart';
 import 'package:tstore/models/auth_user.dart';
 import 'package:tstore/models/sale_order.dart';
 import 'package:tstore/providers/auth_provider.dart';
@@ -70,8 +71,8 @@ class _RecordSaleOrderPaymentScreenState
   String _method = 'cash';
   bool _scheduleEnabled = false;
   DateTime? _scheduledDate;
-  String? _transferProofUrl;
-  String? _transferProofLocalPath;
+  final List<_TransferProofItem> _proofs = [];
+  bool _uploadingProof = false;
 
   @override
   void dispose() {
@@ -235,8 +236,8 @@ class _RecordSaleOrderPaymentScreenState
         'method': _method,
         if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
         if ((_method == 'bank_transfer' || _method == 'cash') &&
-            _transferProofUrl != null)
-          'transferProofUrl': _transferProofUrl,
+            _encodedTransferProofPayload != null)
+          'transferProofUrl': _encodedTransferProofPayload,
       };
     }
 
@@ -280,9 +281,18 @@ class _RecordSaleOrderPaymentScreenState
     }
   }
 
+  String? get _encodedTransferProofPayload {
+    final urls = [
+      for (final p in _proofs)
+        if ((p.url ?? '').trim().isNotEmpty) p.url!.trim(),
+    ];
+    if (urls.isEmpty) return null;
+    if (urls.length == 1) return urls.first;
+    return jsonEncode(urls);
+  }
+
   void _clearTransferProof() {
-    _transferProofUrl = null;
-    _transferProofLocalPath = null;
+    _proofs.clear();
   }
 
   Future<void> _pickTransferProof(
@@ -290,43 +300,72 @@ class _RecordSaleOrderPaymentScreenState
     AppLocalizations l10n,
   ) async {
     final picker = ImagePicker();
-    final x = await picker.pickImage(source: source);
-    if (x == null || !mounted) return;
-    setState(() {
-      _busy = true;
-      _transferProofLocalPath = x.path;
-      _transferProofUrl = null;
-    });
-    final url = await uploadProductImageFromPath(
-      x.path,
-      context.read<AuthProvider>().api,
-    );
-    if (!mounted) return;
-    if (url == null) {
+    final List<XFile> files;
+    if (source == ImageSource.gallery) {
+      files = await picker.pickMultiImage(imageQuality: 92);
+    } else {
+      final x = await picker.pickImage(source: source, imageQuality: 92);
+      files = x == null ? const [] : [x];
+    }
+    if (files.isEmpty || !mounted) return;
+
+    setState(() => _uploadingProof = true);
+    final api = context.read<AuthProvider>().api;
+    var anyFail = false;
+
+    for (final x in files) {
+      if (!mounted) return;
+      final item = _TransferProofItem(
+        id: '${DateTime.now().microsecondsSinceEpoch}_${x.path.hashCode}',
+        localPath: x.path,
+      );
+      setState(() => _proofs.add(item));
+      final url = await uploadProductImageFromPath(
+        x.path,
+        api,
+        onProgress: (v) {
+          if (!mounted) return;
+          setState(() => item.progress = v);
+        },
+      );
+      if (!mounted) return;
+      if (url == null || url.trim().isEmpty) {
+        anyFail = true;
+        setState(() {
+          item.failed = true;
+          _proofs.removeWhere((e) => e.id == item.id);
+        });
+        continue;
+      }
       setState(() {
-        _busy = false;
-        _clearTransferProof();
+        item.url = url;
+        item.progress = 1;
       });
+    }
+
+    if (!mounted) return;
+    setState(() => _uploadingProof = false);
+    if (anyFail) {
       AppMessenger.showSnackBar(
         context,
         SnackBar(
           content: Text(l10n.saleOrderRecordPaymentTransferProofUploadFailed),
         ),
       );
-      return;
     }
-    setState(() {
-      _busy = false;
-      _transferProofUrl = url;
-    });
   }
 
-  void _openTransferProofViewer(String url) {
+  void _removeProof(_TransferProofItem item) {
+    setState(() => _proofs.removeWhere((e) => e.id == item.id));
+  }
+
+  void _openTransferProofViewer(List<String> urls, {int initialIndex = 0}) {
+    if (urls.isEmpty) return;
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => MediaViewerPage(
-          items: [MediaViewerItem(url: url)],
-          initialIndex: 0,
+          items: [for (final u in urls) MediaViewerItem(url: u)],
+          initialIndex: initialIndex.clamp(0, urls.length - 1),
         ),
       ),
     );
@@ -421,12 +460,12 @@ class _RecordSaleOrderPaymentScreenState
                   ),
             ),
           ],
-          if ((pending.transferProofUrl ?? '').trim().isNotEmpty) ...[
+          if (pending.proofImageUrls.isNotEmpty) ...[
             const SizedBox(height: 10),
-            _buildTransferProofThumbnail(
+            _buildTransferProofThumbnails(
               context,
               l10n,
-              pending.transferProofUrl!.trim(),
+              pending.proofImageUrls,
             ),
           ],
           if (manage) ...[
@@ -698,7 +737,9 @@ class _RecordSaleOrderPaymentScreenState
         SizedBox(
           width: double.infinity,
           child: FilledButton(
-            onPressed: _busy ? null : () => _submitProposal(l10n),
+            onPressed: (_busy || _uploadingProof)
+                ? null
+                : () => _submitProposal(l10n),
             child: Text(l10n.saleOrderRecordPaymentScheduleSubmit),
           ),
         ),
@@ -763,7 +804,9 @@ class _RecordSaleOrderPaymentScreenState
       SizedBox(
         width: double.infinity,
         child: FilledButton(
-          onPressed: _busy ? null : () => _submitProposal(l10n),
+          onPressed: (_busy || _uploadingProof)
+              ? null
+              : () => _submitProposal(l10n),
           child: Text(l10n.saleOrderRecordPaymentSubmit),
         ),
       ),
@@ -782,10 +825,10 @@ class _RecordSaleOrderPaymentScreenState
       '${d.month.toString().padLeft(2, '0')}/'
       '${d.year}';
 
-  Widget _buildTransferProofThumbnail(
+  Widget _buildTransferProofThumbnails(
     BuildContext context,
     AppLocalizations l10n,
-    String url,
+    List<String> urls,
   ) {
     final scheme = Theme.of(context).colorScheme;
     return Align(
@@ -800,25 +843,33 @@ class _RecordSaleOrderPaymentScreenState
                 ),
           ),
           const SizedBox(height: 8),
-          Material(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(10),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => _openTransferProofViewer(url),
-              child: SizedBox(
-                width: 120,
-                height: 120,
-                child: ProductImageUrl(
-                  url: url,
-                  baseUrl: ApiConfig.baseUrl,
-                  fit: BoxFit.cover,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < urls.length; i++)
+                Material(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () =>
+                        _openTransferProofViewer(urls, initialIndex: i),
+                    child: SizedBox(
+                      width: 88,
+                      height: 88,
+                      child: ProductImageUrl(
+                        url: urls[i],
+                        baseUrl: ApiConfig.baseUrl,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+            ],
           ),
           TextButton(
-            onPressed: () => _openTransferProofViewer(url),
+            onPressed: () => _openTransferProofViewer(urls),
             child: Text(l10n.saleOrderRecordPaymentTransferProofView),
           ),
         ],
@@ -831,9 +882,12 @@ class _RecordSaleOrderPaymentScreenState
     AppLocalizations l10n,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final hasProof =
-        (_transferProofUrl ?? '').isNotEmpty ||
-        (_transferProofLocalPath ?? '').isNotEmpty;
+    final hasProof = _proofs.isNotEmpty;
+    final readyUrls = [
+      for (final p in _proofs)
+        if ((p.url ?? '').trim().isNotEmpty) p.url!.trim(),
+    ];
+    final pickBusy = _busy || _uploadingProof;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -854,7 +908,7 @@ class _RecordSaleOrderPaymentScreenState
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _busy
+                onPressed: pickBusy
                     ? null
                     : () => _pickTransferProof(ImageSource.gallery, l10n),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
@@ -868,7 +922,7 @@ class _RecordSaleOrderPaymentScreenState
             const SizedBox(width: AppSpacing.space2),
             Expanded(
               child: FilledButton.tonalIcon(
-                onPressed: _busy
+                onPressed: pickBusy
                     ? null
                     : () => _pickTransferProof(ImageSource.camera, l10n),
                 icon: const Icon(Icons.photo_camera_outlined, size: 20),
@@ -883,53 +937,81 @@ class _RecordSaleOrderPaymentScreenState
         ),
         if (hasProof) ...[
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Material(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: _transferProofUrl != null
-                      ? () => _openTransferProofViewer(_transferProofUrl!)
-                      : null,
-                  child: SizedBox(
-                    width: 96,
-                    height: 96,
-                    child: _transferProofUrl != null
-                        ? ProductImageUrl(
-                            url: _transferProofUrl!,
-                            baseUrl: ApiConfig.baseUrl,
-                            fit: BoxFit.cover,
-                          )
-                        : (_transferProofLocalPath != null &&
-                                File(_transferProofLocalPath!).existsSync())
-                            ? Image.file(
-                                File(_transferProofLocalPath!),
-                                fit: BoxFit.cover,
-                              )
-                            : const Center(
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
-                  ),
+              for (final item in _proofs)
+                Stack(
+                  children: [
+                    if (item.url != null)
+                      Material(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            final idx = readyUrls.indexOf(item.url!);
+                            _openTransferProofViewer(
+                              readyUrls,
+                              initialIndex: idx < 0 ? 0 : idx,
+                            );
+                          },
+                          child: SizedBox(
+                            width: 96,
+                            height: 96,
+                            child: ProductImageUrl(
+                              url: item.url!,
+                              baseUrl: ApiConfig.baseUrl,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      LocalMediaPreviewTile(
+                        localPath: item.localPath,
+                        isVideo: false,
+                        progress: item.progress,
+                        width: 96,
+                        height: 96,
+                        loading: item.url == null && !item.failed,
+                        error: item.failed,
+                      ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Material(
+                        color: Colors.black54,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: pickBusy ? null : () => _removeProof(item),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: AppSpacing.space2),
-              TextButton(
-                onPressed: _busy
+            ],
+          ),
+          if (readyUrls.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: pickBusy
                     ? null
                     : () => setState(_clearTransferProof),
                 child: Text(l10n.saleOrderRecordPaymentTransferProofRemove),
               ),
-            ],
-          ),
+            ),
         ],
       ],
     );
@@ -994,4 +1076,17 @@ class _RecordSaleOrderPaymentScreenState
         ),
     );
   }
+}
+
+class _TransferProofItem {
+  _TransferProofItem({
+    required this.id,
+    required this.localPath,
+  });
+
+  final String id;
+  final String localPath;
+  String? url;
+  double? progress;
+  bool failed = false;
 }

@@ -113,12 +113,10 @@ class _DeliveryListTabState extends State<DeliveryListTab> {
         final filtered = items
             .where((d) => _matchesStatusFilter(d.status, _statusFilter))
             .toList();
-        final todayItems = filtered
-            .where((e) => _todayStatuses.contains(e.status))
-            .toList();
-        final nextItems = filtered
-            .where((e) => !_todayStatuses.contains(e.status))
-            .toList();
+        final todayItems =
+            filtered.where((e) => _todayStatuses.contains(e.status)).toList();
+        final nextItems =
+            filtered.where((e) => !_todayStatuses.contains(e.status)).toList();
 
         return RefreshIndicator(
           onRefresh: () => _reload(p),
@@ -183,7 +181,8 @@ class _DeliveryListTabState extends State<DeliveryListTab> {
                   hasScrollBody: false,
                   child: Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
+                      padding:
+                          const EdgeInsets.all(AppSpacing.screenHorizontal),
                       child: Text(
                         l10n.deliveryFilterEmpty,
                         textAlign: TextAlign.center,
@@ -204,7 +203,8 @@ class _DeliveryListTabState extends State<DeliveryListTab> {
                   ),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate.fixed([
-                      _groupDivider(context, l10n.groupTodayCount(todayItems.length)),
+                      _groupDivider(
+                          context, l10n.groupTodayCount(todayItems.length)),
                       ...todayItems.map(
                         (d) => DeliveryCompactCard(
                           d: d,
@@ -252,7 +252,8 @@ class _DeliveryListTabState extends State<DeliveryListTab> {
   Widget _groupDivider(BuildContext context, String label) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
+      padding:
+          const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
       child: Row(
         children: [
           Expanded(child: Divider(color: scheme.outlineVariant)),

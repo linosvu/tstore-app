@@ -404,51 +404,65 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
     final item = _item;
     if (item == null || _isLocked(item.status)) return;
     final l10n = AppLocalizations.of(context);
-    final pick = await showMediaPickerSheet(context, config: _uploadConfig);
-    if (pick == null || !mounted) return;
-
-    final ok = await validateMediaPick(
-      context: context,
-      pick: pick,
-      config: _uploadConfig,
-      tooLargeMessage: l10n.mediaVideoTooLarge,
-      tooLongMessage: l10n.mediaVideoTooLong,
-    );
-    if (!ok || !mounted) return;
-
-    final pending = enqueuePendingMedia(pick: pick);
-    setState(() => _pendingMedia.add(pending));
+    final picks = await showMediaPickerSheet(context, config: _uploadConfig);
+    if (picks == null || picks.isEmpty || !mounted) return;
 
     final p = context.read<PreparationProvider>();
-    try {
-      final result = pick.isVideo
-          ? await uploadVideoFromPath(pick.path, p.api)
-          : await uploadImageFromPath(pick.path, p.api);
+    var anyFail = false;
+
+    for (final pick in picks) {
       if (!mounted) return;
-      if (result == null || result.url.trim().isEmpty) {
-        AppMessenger.showSnackBar(
-          context,
-          SnackBar(content: Text(l10n.mediaUploadFailed)),
-        );
-        return;
-      }
-      final updated = await p.addImage(
-        item.id,
-        url: result.url,
-        mediaType: result.mediaType,
+      final ok = await validateMediaPick(
+        context: context,
+        pick: pick,
+        config: _uploadConfig,
+        tooLargeMessage: pick.isVideo
+            ? l10n.mediaVideoTooLarge
+            : l10n.mediaUploadFailed,
+        tooLongMessage: l10n.mediaVideoTooLong,
       );
-      if (updated != null && mounted) setState(() => _item = updated);
-    } catch (_) {
-      if (mounted) {
-        AppMessenger.showSnackBar(
-          context,
-          SnackBar(content: Text(l10n.mediaUploadFailed)),
+      if (!ok || !mounted) {
+        anyFail = true;
+        continue;
+      }
+
+      final pending = enqueuePendingMedia(pick: pick);
+      setState(() => _pendingMedia.add(pending));
+
+      try {
+        final result = await uploadPickedMedia(
+          pick: pick,
+          api: p.api,
+          onProgress: (v) {
+            if (!mounted) return;
+            setState(() => pending.progress = v);
+          },
         );
+        if (!mounted) return;
+        if (result == null || result.url.trim().isEmpty) {
+          anyFail = true;
+          continue;
+        }
+        final updated = await p.addImage(
+          item.id,
+          url: result.url,
+          mediaType: result.mediaType,
+        );
+        if (updated != null && mounted) setState(() => _item = updated);
+      } catch (_) {
+        anyFail = true;
+      } finally {
+        if (mounted) {
+          setState(() => _pendingMedia.removeWhere((e) => e.id == pending.id));
+        }
       }
-    } finally {
-      if (mounted) {
-        setState(() => _pendingMedia.removeWhere((e) => e.id == pending.id));
-      }
+    }
+
+    if (anyFail && mounted) {
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.mediaUploadFailed)),
+      );
     }
   }
 
@@ -724,6 +738,7 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
                         child: LocalMediaPreviewTile(
                           localPath: pending.localPath,
                           isVideo: pending.isVideo,
+                          progress: pending.progress,
                           width: 72,
                           height: 72,
                         ),

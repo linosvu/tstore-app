@@ -33,7 +33,9 @@ class DeliveryBoardTab extends StatelessWidget {
     } on DioException catch (e) {
       AppMessenger.showSnackBar(
         context,
-        SnackBar(content: Text(e.response?.data?.toString() ?? e.message ?? l10n.error)),
+        SnackBar(
+            content:
+                Text(e.response?.data?.toString() ?? e.message ?? l10n.error)),
       );
     } catch (e) {
       AppMessenger.showSnackBar(context, SnackBar(content: Text('$e')));
@@ -121,7 +123,8 @@ class DeliveryBoardTab extends StatelessWidget {
   Widget _groupDivider(BuildContext context, String label) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
+      padding:
+          const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
       child: Row(
         children: [
           Expanded(child: Divider(color: scheme.outlineVariant)),

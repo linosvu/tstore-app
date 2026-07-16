@@ -1152,11 +1152,12 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   String _money(int v) => '${formatIntegerWithSeparator(v, _thousandsSep)} đ';
 
-  void _openTransferProofViewer(AppLocalizations l10n, String url) {
+  void _openTransferProofViewer(AppLocalizations l10n, List<String> urls) {
+    if (urls.isEmpty) return;
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => MediaViewerPage(
-          items: [MediaViewerItem(url: url)],
+          items: [for (final u in urls) MediaViewerItem(url: u)],
           initialIndex: 0,
         ),
       ),
@@ -1744,7 +1745,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                   final statusLabel = (p.statusLabel ?? '').trim();
                   final code = (p.code ?? '').trim();
                   final desc = (p.description ?? '').trim();
-                  final proofUrl = (p.transferProofUrl ?? '').trim();
+                  final proofUrls = p.proofImageUrls;
                   final schedRaw = (p.scheduledPaymentDate ?? '').trim();
                   final scheduleStrike =
                       p.isScheduleReminder && o.amountDue <= 0;
@@ -1865,13 +1866,13 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                     ),
                           ),
                         ],
-                        if (proofUrl.isNotEmpty) ...[
+                        if (proofUrls.isNotEmpty) ...[
                           const SizedBox(height: 6),
                           Align(
                             alignment: Alignment.centerLeft,
                             child: TextButton.icon(
                               onPressed: () =>
-                                  _openTransferProofViewer(l10n, proofUrl),
+                                  _openTransferProofViewer(l10n, proofUrls),
                               icon: const Icon(Icons.image_outlined, size: 18),
                               label: Text(
                                 l10n.saleOrderRecordPaymentTransferProofView,

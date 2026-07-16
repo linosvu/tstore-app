@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -483,72 +481,76 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final l10n = AppLocalizations.of(context);
     final task = _task;
     if (task == null) return;
-    final pick = await showMediaPickerSheet(context, config: _uploadConfig);
-    if (pick == null || !mounted) return;
+    final picks = await showMediaPickerSheet(context, config: _uploadConfig);
+    if (picks == null || picks.isEmpty || !mounted) return;
 
-    final ok = await validateMediaPick(
-      context: context,
-      pick: pick,
-      config: _uploadConfig,
-      tooLargeMessage: l10n.mediaVideoTooLarge,
-      tooLongMessage: l10n.mediaVideoTooLong,
-    );
-    if (!ok || !mounted) return;
+    final p = context.read<TasksProvider>();
+    var anyFail = false;
 
-    if (!pick.isVideo && _uploadConfig != null) {
-      final file = File(pick.path);
-      if (await file.exists()) {
-        final size = await file.length();
-        if (size > _uploadConfig!.maxImageBytes) {
-          AppMessenger.showSnackBar(
-            context,
-            SnackBar(content: Text(l10n.mediaUploadFailed)),
-          );
-          return;
+    for (final pick in picks) {
+      if (!mounted) return;
+      final ok = await validateMediaPick(
+        context: context,
+        pick: pick,
+        config: _uploadConfig,
+        tooLargeMessage: pick.isVideo
+            ? l10n.mediaVideoTooLarge
+            : l10n.mediaUploadFailed,
+        tooLongMessage: l10n.mediaVideoTooLong,
+      );
+      if (!ok || !mounted) {
+        anyFail = true;
+        continue;
+      }
+
+      final pending = enqueuePendingMedia(pick: pick);
+      setState(() => _pendingMedia.add(pending));
+
+      try {
+        final result = await uploadPickedMedia(
+          pick: pick,
+          api: p.api,
+          onProgress: (v) {
+            if (!mounted) return;
+            setState(() => pending.progress = v);
+          },
+        );
+        if (!mounted) return;
+        if (result == null || result.url.trim().isEmpty) {
+          anyFail = true;
+          continue;
+        }
+        final updated = await p.addAttachment(
+          task.id,
+          url: result.url,
+          mediaType: result.mediaType,
+        );
+        if (updated != null && mounted) setState(() => _task = updated);
+      } on DioException catch (e) {
+        anyFail = true;
+        if (!mounted) return;
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(
+            content: Text(
+              e.response?.data?.toString() ?? e.message ?? l10n.error,
+            ),
+          ),
+        );
+      } catch (_) {
+        anyFail = true;
+      } finally {
+        if (mounted) {
+          setState(() => _pendingMedia.removeWhere((e) => e.id == pending.id));
         }
       }
     }
 
-    final pending = enqueuePendingMedia(pick: pick);
-    setState(() => _pendingMedia.add(pending));
-
-    final p = context.read<TasksProvider>();
-    try {
-      final result = pick.isVideo
-          ? await uploadVideoFromPath(pick.path, p.api)
-          : await uploadImageFromPath(pick.path, p.api);
-      if (!mounted) return;
-      if (result == null || result.url.trim().isEmpty) {
-        AppMessenger.showSnackBar(
-          context,
-          SnackBar(content: Text(l10n.mediaUploadFailed)),
-        );
-        return;
-      }
-      final updated = await p.addAttachment(
-        task.id,
-        url: result.url,
-        mediaType: result.mediaType,
-      );
-      if (updated != null && mounted) setState(() => _task = updated);
-    } on DioException catch (e) {
-      if (!mounted) return;
-      AppMessenger.showSnackBar(
-        context,
-        SnackBar(
-          content: Text(e.response?.data?.toString() ?? e.message ?? l10n.error),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
+    if (anyFail && mounted) {
       AppMessenger.showSnackBar(
         context,
         SnackBar(content: Text(l10n.mediaUploadFailed)),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _pendingMedia.removeWhere((e) => e.id == pending.id));
-      }
     }
   }
 
@@ -700,6 +702,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             LocalMediaPreviewTile(
                               localPath: pending.localPath,
                               isVideo: pending.isVideo,
+                              progress: pending.progress,
                               width: 88,
                               height: 88,
                             ),

@@ -12,10 +12,12 @@ import '../services/api_client.dart';
 /// cuối cùng bằng sharp (WebP 80%).
 Future<String?> uploadProductImageFromPath(
   String path,
-  ApiClient api,
-) async {
+  ApiClient api, {
+  void Function(double progress)? onProgress,
+}) async {
   if (path.isEmpty) return null;
 
+  onProgress?.call(0);
   // Pre-shrink 1 lần — mục tiêu raw bytes ≤ 1MB để giảm thời gian upload.
   final Uint8List? bytes = await FlutterImageCompress.compressWithFile(
     path,
@@ -38,7 +40,13 @@ Future<String?> uploadProductImageFromPath(
     final res = await api.post<Map<String, dynamic>>(
       '/admin/upload',
       data: form,
+      onSendProgress: (sent, total) {
+        if (total > 0) {
+          onProgress?.call((sent / total).clamp(0.0, 1.0));
+        }
+      },
     );
+    onProgress?.call(1);
     return res.data?['url'] as String?;
   } on DioException {
     return null;

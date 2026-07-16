@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
 
 import '../localization/app_localizations.dart';
 import '../utils/media_upload.dart';
@@ -23,7 +24,21 @@ class MediaPickResult {
   final bool isVideo;
 }
 
-Future<MediaPickResult?> showMediaPickerSheet(
+bool _looksLikeVideoPath(String path) {
+  final ext = p.extension(path).toLowerCase();
+  return const {
+    '.mp4',
+    '.mov',
+    '.m4v',
+    '.avi',
+    '.mkv',
+    '.webm',
+    '.3gp',
+  }.contains(ext);
+}
+
+/// Chọn media: camera = 1 file; thư viện ảnh/video = nhiều file.
+Future<List<MediaPickResult>?> showMediaPickerSheet(
   BuildContext context, {
   UploadConfig? config,
 }) async {
@@ -70,11 +85,13 @@ Future<MediaPickResult?> showMediaPickerSheet(
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
                 title: Text(l10n.productsImageFromGallery),
+                subtitle: const Text('Có thể chọn nhiều ảnh'),
                 onTap: () => Navigator.pop(ctx, MediaPickKind.galleryPhoto),
               ),
               ListTile(
                 leading: const Icon(Icons.video_library_outlined),
                 title: Text(l10n.mediaPickVideoFromGallery),
+                subtitle: const Text('Có thể chọn nhiều video'),
                 onTap: () => Navigator.pop(ctx, MediaPickKind.galleryVideo),
               ),
             ],
@@ -99,28 +116,30 @@ Future<MediaPickResult?> showMediaPickerSheet(
           imageQuality: 92,
         );
         if (x == null) return null;
-        return MediaPickResult(path: x.path, isVideo: false);
+        return [MediaPickResult(path: x.path, isVideo: false)];
       case MediaPickKind.galleryPhoto:
-        final x = await picker.pickImage(
-          source: ImageSource.gallery,
-          imageQuality: 92,
-        );
-        if (x == null) return null;
-        return MediaPickResult(path: x.path, isVideo: false);
+        final xs = await picker.pickMultiImage(imageQuality: 92);
+        if (xs.isEmpty) return null;
+        return [
+          for (final x in xs) MediaPickResult(path: x.path, isVideo: false),
+        ];
       case MediaPickKind.cameraVideo:
         final x = await picker.pickVideo(
           source: ImageSource.camera,
           maxDuration: maxVideoDuration,
         );
         if (x == null) return null;
-        return MediaPickResult(path: x.path, isVideo: true);
+        return [MediaPickResult(path: x.path, isVideo: true)];
       case MediaPickKind.galleryVideo:
-        final x = await picker.pickVideo(
-          source: ImageSource.gallery,
-          maxDuration: maxVideoDuration,
-        );
-        if (x == null) return null;
-        return MediaPickResult(path: x.path, isVideo: true);
+        final xs = await picker.pickMultiVideo(maxDuration: maxVideoDuration);
+        if (xs.isEmpty) return null;
+        return [
+          for (final x in xs)
+            MediaPickResult(
+              path: x.path,
+              isVideo: _looksLikeVideoPath(x.path),
+            ),
+        ];
     }
   } on PlatformException catch (e) {
     if (context.mounted) {

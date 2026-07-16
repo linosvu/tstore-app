@@ -49,8 +49,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   bool _filtersExpanded = false;
   int _scopeSegment = 0;
 
-  static const _primaryStatusFilters = <String?>[null, 'confirmed', 'completed'];
-  static const _extraStatusFilters = ['draft', 'delivery', 'refund', 'cancelled'];
+  static const _primaryStatusFilters = <String?>[
+    null,
+    'confirmed',
+    'completed'
+  ];
+  static const _extraStatusFilters = [
+    'draft',
+    'delivery',
+    'refund',
+    'cancelled'
+  ];
   String? _dateFrom;
   String? _dateTo;
   static const _scopeValues = ['all', 'mine'];
@@ -734,7 +743,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
 
     bool isTodayGroup(SaleOrderPublic o) {
       final ds = o.linkedDeliveryStatus?.trim();
-      if (ds != null && ds.isNotEmpty) return _todayDeliveryStatuses.contains(ds);
+      if (ds != null && ds.isNotEmpty)
+        return _todayDeliveryStatuses.contains(ds);
       if (o.status == 'confirmed' || o.status == 'delivery') return true;
       return false;
     }
@@ -783,8 +793,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   ? _shortDate(o.kiotVietPurchaseDate!)
                   : _shortDate(o.createdAt),
               onTap: () => _openOrder(o),
-              showAssignButton:
-                  _scopeSegment == 0 && o.isOnManagementBoard,
+              showAssignButton: _scopeSegment == 0 && o.isOnManagementBoard,
               assignLabel: l10n.ordersAssignToMe,
               onAssign: () => _assignOrderFromBoard(o),
             ),
@@ -797,7 +806,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   Widget _groupDivider(String label) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
+      padding:
+          const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
       child: Row(
         children: [
           Expanded(child: Divider(color: scheme.outlineVariant)),
@@ -870,8 +880,7 @@ class _OrderRowCard extends StatelessWidget {
     final managedByName = (order.managedBy?.name ?? '').trim();
     final createdByName = (order.createdBy?.name ?? '').trim();
     final saleChannelLabel = order.saleChannelShortLabel;
-    final showCreatorRow =
-        createdByName.isNotEmpty || saleChannelLabel != null;
+    final showCreatorRow = createdByName.isNotEmpty || saleChannelLabel != null;
     final notesText = (order.notes ?? '').trim();
     return Material(
       color: scheme.surface,
@@ -888,152 +897,106 @@ class _OrderRowCard extends StatelessWidget {
             boxShadow: ui.softShadow,
           ),
           child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.cardInnerLg,
-            vertical: AppSpacing.space3,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Phần trên: thông tin đơn (trái) + số tiền (phải)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Dòng 1: Mã đơn + nút copy ngay kề
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              '#${order.displayCode}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                            const SizedBox(width: 2),
-                            Tooltip(
-                              message: l10n.copyText,
-                              child: Semantics(
-                                button: true,
-                                label: l10n.copyText,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () async {
-                                    await Clipboard.setData(
-                                      ClipboardData(text: order.id),
-                                    );
-                                    if (!context.mounted) return;
-                                    AppMessenger.showSnackBar(
-                                      context,
-                                      SnackBar(
-                                        content: Text(l10n.ordersOrderIdCopied),
-                                        behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(seconds: 2),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.cardInnerLg,
+              vertical: AppSpacing.space3,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Phần trên: thông tin đơn (trái) + số tiền (phải)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Dòng 1: Mã đơn + nút copy ngay kề
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                '#${order.displayCode}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                              const SizedBox(width: 2),
+                              Tooltip(
+                                message: l10n.copyText,
+                                child: Semantics(
+                                  button: true,
+                                  label: l10n.copyText,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () async {
+                                      await Clipboard.setData(
+                                        ClipboardData(text: order.id),
+                                      );
+                                      if (!context.mounted) return;
+                                      AppMessenger.showSnackBar(
+                                        context,
+                                        SnackBar(
+                                          content:
+                                              Text(l10n.ordersOrderIdCopied),
+                                          behavior: SnackBarBehavior.floating,
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 4,
                                       ),
-                                    );
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 4,
-                                    ),
-                                    child: Icon(
-                                      Icons.copy_outlined,
-                                      size: 15,
-                                      color: scheme.onSurfaceVariant,
+                                      child: Icon(
+                                        Icons.copy_outlined,
+                                        size: 15,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.space1),
-                        Text(
-                          '${l10n.ordersOrderShort} · $subtitle',
-                          style: AppTextStyles.dataSecondary(context)
-                              .copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            if (order.customer?.isVip == true) ...[
-                              const Icon(
-                                Icons.star_rounded,
-                                size: 14,
-                                color: Color(0xFFFFA000),
-                              ),
-                              const SizedBox(width: 4),
                             ],
-                            Expanded(
-                              child: Text(
-                                order.customer == null
-                                    ? '—'
-                                    : (order.customer!.phone?.trim().isNotEmpty ??
-                                            false)
-                                        ? '${order.customer!.name} · ${order.customer!.phone!.trim()}'
-                                        : order.customer!.name,
-                                style:
-                                    AppTextStyles.dataSecondary(context)
-                                        .copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          ),
+                          const SizedBox(height: AppSpacing.space1),
+                          Text(
+                            '${l10n.ordersOrderShort} · $subtitle',
+                            style:
+                                AppTextStyles.dataSecondary(context).copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
-                          ],
-                        ),
-                        if (showCreatorRow) ...[
+                          ),
                           const SizedBox(height: 2),
                           Row(
                             children: [
-                              Icon(
-                                Icons.edit_outlined,
-                                size: 13,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 4),
+                              if (order.customer?.isVip == true) ...[
+                                const Icon(
+                                  Icons.star_rounded,
+                                  size: 14,
+                                  color: Color(0xFFFFA000),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
                               Expanded(
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      if (createdByName.isNotEmpty)
-                                        TextSpan(
-                                          text: createdByName,
-                                          style: AppTextStyles.dataSecondary(
-                                            context,
-                                          ).copyWith(fontSize: 11),
-                                        ),
-                                      if (createdByName.isNotEmpty &&
-                                          saleChannelLabel != null)
-                                        TextSpan(
-                                          text: ' · ',
-                                          style: AppTextStyles.dataSecondary(
-                                            context,
-                                          ).copyWith(fontSize: 11),
-                                        ),
-                                      if (saleChannelLabel != null)
-                                        TextSpan(
-                                          text: saleChannelLabel,
-                                          style: AppTextStyles.dataSecondary(
-                                            context,
-                                          ).copyWith(
-                                            fontSize: 11,
-                                            color: AppColors.secondary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                    ],
+                                child: Text(
+                                  order.customer == null
+                                      ? '—'
+                                      : (order.customer!.phone
+                                                  ?.trim()
+                                                  .isNotEmpty ??
+                                              false)
+                                          ? '${order.customer!.name} · ${order.customer!.phone!.trim()}'
+                                          : order.customer!.name,
+                                  style: AppTextStyles.dataSecondary(context)
+                                      .copyWith(
+                                    color: scheme.onSurfaceVariant,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -1041,139 +1004,187 @@ class _OrderRowCard extends StatelessWidget {
                               ),
                             ],
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.space2),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (amountDueText != null) ...[
-                        StatusBadge(
-                          label: '${l10n.ordersAmountDue}: $amountDueText',
-                          tone: StatusBadgeTone.warning,
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            amountText,
-                            style: AppTextStyles.amount(context).copyWith(
-                              color: scheme.onSurface,
+                          if (showCreatorRow) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.edit_outlined,
+                                  size: 13,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        if (createdByName.isNotEmpty)
+                                          TextSpan(
+                                            text: createdByName,
+                                            style: AppTextStyles.dataSecondary(
+                                              context,
+                                            ).copyWith(fontSize: 11),
+                                          ),
+                                        if (createdByName.isNotEmpty &&
+                                            saleChannelLabel != null)
+                                          TextSpan(
+                                            text: ' · ',
+                                            style: AppTextStyles.dataSecondary(
+                                              context,
+                                            ).copyWith(fontSize: 11),
+                                          ),
+                                        if (saleChannelLabel != null)
+                                          TextSpan(
+                                            text: saleChannelLabel,
+                                            style: AppTextStyles.dataSecondary(
+                                              context,
+                                            ).copyWith(
+                                              fontSize: 11,
+                                              color: AppColors.secondary,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: scheme.onSurfaceVariant,
-                          ),
+                          ],
                         ],
                       ),
-                      if (expectedDelivery != null) ...[
-                        const SizedBox(height: 4),
+                    ),
+                    const SizedBox(width: AppSpacing.space2),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (amountDueText != null) ...[
+                          StatusBadge(
+                            label: '${l10n.ordersAmountDue}: $amountDueText',
+                            tone: StatusBadgeTone.warning,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.schedule_rounded,
-                              size: 14,
-                              color: AppColors.success,
-                            ),
-                            const SizedBox(width: 4),
                             Text(
-                              'DK: $expectedDelivery',
-                              style: AppTextStyles.dataSecondary(context)
-                                  .copyWith(
-                                color: AppColors.success,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
+                              amountText,
+                              style: AppTextStyles.amount(context).copyWith(
+                                color: scheme.onSurface,
                               ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: scheme.onSurfaceVariant,
                             ),
                           ],
                         ),
+                        if (expectedDelivery != null) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: 14,
+                                color: AppColors.success,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'DK: $expectedDelivery',
+                                style: AppTextStyles.dataSecondary(context)
+                                    .copyWith(
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
+                  ],
+                ),
+                if (notesText.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.space2),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppColors.warning.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          size: 16,
+                          color: AppColors.warning,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            notesText,
+                            style:
+                                AppTextStyles.dataSecondary(context).copyWith(
+                              color: scheme.onSurface,
+                              fontSize: 13,
+                              height: 1.3,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              ),
-              if (notesText.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.space2),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.warning.withValues(alpha: 0.45),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 16,
-                        color: AppColors.warning,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          notesText,
-                          style: AppTextStyles.dataSecondary(context)
-                              .copyWith(
-                            color: scheme.onSurface,
-                            fontSize: 13,
-                            height: 1.3,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.space1),
-              _OrderProgressBar(
-                orderStatus: order.status,
-                preparationStatus: order.linkedPreparationStatus,
-                deliveryStatus: order.linkedDeliveryStatus,
-                amountDue: order.amountDue,
-                managedByName:
-                    managedByName.isNotEmpty ? managedByName : null,
-                preparationAssignedName: order.linkedPreparationAssignedName,
-                deliveryAssignedName: order.linkedDeliveryAssignedName,
-                l10n: l10n,
-              ),
-              if (showAssignButton && onAssign != null) ...[
                 const SizedBox(height: AppSpacing.space1),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 12,
-                      ),
-                      minimumSize: const Size(0, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: onAssign,
-                    child: Text(assignLabel ?? l10n.ordersAssignToMe),
-                  ),
+                _OrderProgressBar(
+                  orderStatus: order.status,
+                  preparationStatus: order.linkedPreparationStatus,
+                  deliveryStatus: order.linkedDeliveryStatus,
+                  amountDue: order.amountDue,
+                  managedByName:
+                      managedByName.isNotEmpty ? managedByName : null,
+                  preparationAssignedName: order.linkedPreparationAssignedName,
+                  deliveryAssignedName: order.linkedDeliveryAssignedName,
+                  l10n: l10n,
                 ),
+                if (showAssignButton && onAssign != null) ...[
+                  const SizedBox(height: AppSpacing.space1),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 12,
+                        ),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: onAssign,
+                      child: Text(assignLabel ?? l10n.ordersAssignToMe),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -1336,9 +1347,10 @@ class _OrderProgressBar extends StatelessWidget {
                                           .textTheme
                                           .labelSmall
                                           ?.copyWith(
-                                            color: state == _FlowStepState.pending
-                                                ? color
-                                                : Colors.white,
+                                            color:
+                                                state == _FlowStepState.pending
+                                                    ? color
+                                                    : Colors.white,
                                             fontWeight: FontWeight.w700,
                                           ),
                                     ),

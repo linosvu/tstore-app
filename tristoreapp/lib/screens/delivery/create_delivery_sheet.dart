@@ -237,11 +237,24 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              l10n.deliveryCreateTitle,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
+            Row(
+              children: [
+                IconButton(
+                  tooltip: l10n.saleOrderBack,
+                  onPressed: _submitting
+                      ? null
+                      : () => Navigator.of(context).pop(false),
+                  icon: const Icon(Icons.arrow_back),
+                ),
+                Expanded(
+                  child: Text(
+                    l10n.deliveryCreateTitle,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.space3),
             AssignTargetDropdown(
@@ -361,15 +374,30 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
               ),
             ),
             const SizedBox(height: AppSpacing.space4),
-            FilledButton(
-              onPressed: _submitting ? null : _submit,
-              child: _submitting
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(l10n.deliverySubmit),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    child: Text(l10n.saleOrderBack),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.space2),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _submitting ? null : _submit,
+                    child: _submitting
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(l10n.deliverySubmit),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
