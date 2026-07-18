@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:tstore/screens/repair/repair_support_hub_screen.dart';
+import 'package:tstore/screens/service_request/service_support_hub_screen.dart';
 
-/// Full-screen Sửa chữa & Hỗ trợ (mở từ Dashboard).
+/// Full-screen Hỗ trợ & Sửa chữa (mở từ Dashboard).
 class RepairOrdersScreen extends StatelessWidget {
   const RepairOrdersScreen({
     super.key,
@@ -21,12 +21,11 @@ class RepairOrdersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepairSupportHubScreen(
+    final isRepair = initialTab == 1;
+    return ServiceSupportHubScreen(
       initialTab: initialTab,
-      repairStatusFilter: repairStatusFilter,
-      repairOverdue: repairOverdue,
-      supportStatusFilter: supportStatusFilter,
-      supportUnassigned: supportUnassigned,
+      statusFilter: isRepair ? repairStatusFilter : supportStatusFilter,
+      overdueOnly: repairOverdue || supportUnassigned,
     );
   }
 }

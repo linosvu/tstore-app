@@ -253,6 +253,30 @@ List<String> parseTransferProofUrls(String? raw) {
   return [t];
 }
 
+/// Ảnh sản phẩm đính kèm theo đơn (cùng shape API với ảnh chuẩn bị).
+class SaleOrderProductImage {
+  const SaleOrderProductImage({
+    required this.url,
+    this.note,
+    this.createdAt,
+    this.mediaType,
+  });
+
+  final String url;
+  final String? note;
+  final String? createdAt;
+  final String? mediaType;
+
+  factory SaleOrderProductImage.fromJson(Map<String, dynamic> json) {
+    return SaleOrderProductImage(
+      url: json['url'] as String? ?? '',
+      note: json['note'] as String?,
+      createdAt: json['createdAt'] as String?,
+      mediaType: json['mediaType'] as String?,
+    );
+  }
+}
+
 class SaleOrderPublic {
   const SaleOrderPublic({
     required this.id,
@@ -290,6 +314,7 @@ class SaleOrderPublic {
     required this.updatedAt,
     required this.lines,
     this.payments = const [],
+    this.productImages = const [],
   });
 
   final String id;
@@ -339,6 +364,9 @@ class SaleOrderPublic {
 
   /// Chi tiết các lần thanh toán từ KiotViet.
   final List<SaleOrderPaymentPublic> payments;
+
+  /// Ảnh sản phẩm đính kèm theo đơn (không phải ảnh catalog).
+  final List<SaleOrderProductImage> productImages;
 
   /// Đơn từ KiotViet (theo nguồn hoặc có mã / ngày mua KiotViet).
   bool get isKiotVietOrder =>
@@ -490,6 +518,21 @@ class SaleOrderPublic {
               .toList();
         }
         return <SaleOrderPaymentPublic>[];
+      })(),
+      productImages: (() {
+        final raw = json['productImages'];
+        if (raw is List) {
+          return raw
+              .whereType<Map>()
+              .map(
+                (e) => SaleOrderProductImage.fromJson(
+                  Map<String, dynamic>.from(e),
+                ),
+              )
+              .where((e) => e.url.trim().isNotEmpty)
+              .toList();
+        }
+        return <SaleOrderProductImage>[];
       })(),
     );
   }

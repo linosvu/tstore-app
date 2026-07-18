@@ -17,7 +17,12 @@ import 'package:tstore/core/utils/dio_error_message.dart';
 import 'package:tstore/utils/order_address_display.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
+import 'package:tstore/core/utils/media_upload.dart';
+import 'package:tstore/core/utils/media_upload_flow.dart';
+import 'package:tstore/core/widgets/media_picker_sheet.dart';
+import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
+import 'package:tstore/core/widgets/pending_media_tile.dart';
 import 'package:tstore/models/delivery.dart';
 import 'package:tstore/models/preparation_order.dart';
 import 'package:tstore/models/sale_order.dart';
@@ -189,6 +194,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   String? _saleChannel;
   List<(String id, String name)> _users = [];
   bool _loadingUsers = false;
+  UploadConfig? _uploadConfig;
+  final List<PendingMediaUpload> _pendingProductImages = [];
 
   @override
   void initState() {
@@ -198,10 +205,18 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<AddressCatalogProvider>().ensureLoaded();
+      unawaited(_loadUploadConfig());
       if (_isElevatedRole(context.read<AuthProvider>().user?.role)) {
         _loadUsers();
       }
     });
+  }
+
+  Future<void> _loadUploadConfig() async {
+    if (!mounted) return;
+    final api = context.read<AuthProvider>().api;
+    final cfg = await fetchUploadConfig(api);
+    if (mounted) setState(() => _uploadConfig = cfg);
   }
 
   @override
@@ -230,6 +245,11 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   bool _canEditOrderNotes(SaleOrderPublic o) =>
       o.status != 'cancelled' && o.status != 'refund';
+
+  bool _canEditProductImages(SaleOrderPublic o) =>
+      o.status != 'cancelled' &&
+      o.status != 'refund' &&
+      o.status != 'completed';
 
   bool _canOpenEdit(SaleOrderPublic o) => _canEdit(o) || _canEditKiotViet(o);
 
@@ -339,6 +359,271 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   void _markListNeedsRefresh() {
     _listNeedsRefresh = true;
+  }
+
+  Future<void> _openProductImageViewer(
+    List<SaleOrderProductImage> images, {
+    int initialIndex = 0,
+  }) {
+    if (images.isEmpty) return Future.value();
+    final safeIndex = initialIndex.clamp(0, images.length - 1);
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerPage(
+          items: [
+            for (final e in images)
+              MediaViewerItem(url: e.url, mediaType: e.mediaType ?? 'image'),
+          ],
+          initialIndex: safeIndex,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addProductImages() async {
+    final o = _order;
+    if (o == null || !_canEditProductImages(o) || _actionBusy) return;
+    final l10n = AppLocalizations.of(context);
+    final picks = await showMediaPickerSheet(
+      context,
+      config: _uploadConfig,
+      allowVideo: false,
+    );
+    if (picks == null || picks.isEmpty || !mounted) return;
+
+    final api = context.read<AuthProvider>().api;
+    var anyFail = false;
+
+    for (final pick in picks) {
+      if (!mounted) return;
+      if (pick.isVideo) continue;
+      final ok = await validateMediaPick(
+        context: context,
+        pick: pick,
+        config: _uploadConfig,
+        tooLargeMessage: l10n.mediaUploadFailed,
+        tooLongMessage: l10n.mediaVideoTooLong,
+      );
+      if (!ok || !mounted) {
+        anyFail = true;
+        continue;
+      }
+
+      final pending = enqueuePendingMedia(pick: pick);
+      setState(() => _pendingProductImages.add(pending));
+
+      try {
+        final result = await uploadPickedMedia(
+          pick: pick,
+          api: api,
+          onProgress: (v) {
+            if (!mounted) return;
+            setState(() => pending.progress = v);
+          },
+        );
+        if (!mounted) return;
+        if (result == null || result.url.trim().isEmpty) {
+          anyFail = true;
+          continue;
+        }
+        final res = await api.post<Map<String, dynamic>>(
+          '/admin/sale-orders/${widget.orderId}/product-images',
+          data: {'url': result.url},
+        );
+        if (!mounted) return;
+        final data = res.data;
+        if (data != null) {
+          setState(() {
+            _order = SaleOrderPublic.fromJson(data);
+          });
+          _markListNeedsRefresh();
+        } else {
+          anyFail = true;
+        }
+      } catch (_) {
+        anyFail = true;
+      } finally {
+        if (mounted) {
+          setState(
+            () => _pendingProductImages.removeWhere((e) => e.id == pending.id),
+          );
+        }
+      }
+    }
+
+    if (anyFail && mounted) {
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.mediaUploadFailed)),
+      );
+    }
+  }
+
+  Future<void> _confirmRemoveProductImage(SaleOrderProductImage img) async {
+    final o = _order;
+    if (o == null || !_canEditProductImages(o)) return;
+    final l10n = AppLocalizations.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.deliveryRemoveImage),
+        content: Text(l10n.productsRemoveImageTooltip),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.delete<Map<String, dynamic>>(
+        '/admin/sale-orders/${widget.orderId}/product-images',
+        data: {'url': img.url},
+      );
+      if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        setState(() {
+          _order = SaleOrderPublic.fromJson(data);
+          _actionBusy = false;
+        });
+        _markListNeedsRefresh();
+      } else {
+        setState(() => _actionBusy = false);
+        await _fetch();
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _actionBusy = false);
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(dioErrorMessage(e))),
+      );
+    }
+  }
+
+  Widget _buildProductImagesSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    SaleOrderPublic o,
+  ) {
+    final canEdit = _canEditProductImages(o);
+    final images = o.productImages;
+    final scheme = Theme.of(context).colorScheme;
+
+    return SectionCard(
+      title: l10n.saleOrderProductImagesTitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_uploadConfig != null && canEdit)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                l10n.mediaImageLimitHint(_uploadConfig!.maxImageBytes),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          if (images.isEmpty &&
+              _pendingProductImages.isEmpty &&
+              !canEdit)
+            Text(
+              l10n.saleOrderProductImagesEmpty,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            )
+          else ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ..._pendingProductImages.map(
+                  (pending) => SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: LocalMediaPreviewTile(
+                      localPath: pending.localPath,
+                      isVideo: false,
+                      progress: pending.progress,
+                      width: 72,
+                      height: 72,
+                    ),
+                  ),
+                ),
+                ...images.asMap().entries.map(
+                  (entry) => SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        MediaTile(
+                          url: entry.value.url,
+                          mediaType: entry.value.mediaType ?? 'image',
+                          onTap: () => _openProductImageViewer(
+                            images,
+                            initialIndex: entry.key,
+                          ),
+                        ),
+                        if (canEdit && !_actionBusy)
+                          Positioned(
+                            right: 2,
+                            top: 2,
+                            child: Material(
+                              color: Colors.black.withValues(alpha: 0.7),
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                onTap: () =>
+                                    _confirmRemoveProductImage(entry.value),
+                                customBorder: const CircleBorder(),
+                                child: Tooltip(
+                                  message: l10n.deliveryRemoveImage,
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.close_rounded,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (canEdit) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _actionBusy || _pendingProductImages.isNotEmpty
+                      ? null
+                      : _addProductImages,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: Text(l10n.saleOrderProductImagesAdd),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 
   SaleOrderPublic? _popResultForList() =>
@@ -2061,6 +2346,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                   children: lineWidgets,
                 ),
         ),
+        const SizedBox(height: AppSpacing.space3),
+        _buildProductImagesSection(context, l10n, o),
         const SizedBox(height: AppSpacing.space3),
         SectionCard(
           title: l10n.saleOrderDetailAuditTitle,

@@ -41,6 +41,7 @@ bool _looksLikeVideoPath(String path) {
 Future<List<MediaPickResult>?> showMediaPickerSheet(
   BuildContext context, {
   UploadConfig? config,
+  bool allowVideo = true,
 }) async {
   final l10n = AppLocalizations.of(context);
   final kind = await showModalBottomSheet<MediaPickKind>(
@@ -61,11 +62,13 @@ Future<List<MediaPickResult>?> showMediaPickerSheet(
               if (config != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  l10n.mediaLimitsHint(
-                    config.maxImageBytes,
-                    config.maxVideoBytes,
-                    config.maxVideoDurationSeconds,
-                  ),
+                  allowVideo
+                      ? l10n.mediaLimitsHint(
+                          config.maxImageBytes,
+                          config.maxVideoBytes,
+                          config.maxVideoDurationSeconds,
+                        )
+                      : l10n.mediaImageLimitHint(config.maxImageBytes),
                   style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                         color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                       ),
@@ -77,23 +80,25 @@ Future<List<MediaPickResult>?> showMediaPickerSheet(
                 title: Text(l10n.productsImageFromCamera),
                 onTap: () => Navigator.pop(ctx, MediaPickKind.cameraPhoto),
               ),
-              ListTile(
-                leading: const Icon(Icons.videocam_outlined),
-                title: Text(l10n.mediaRecordVideo),
-                onTap: () => Navigator.pop(ctx, MediaPickKind.cameraVideo),
-              ),
+              if (allowVideo)
+                ListTile(
+                  leading: const Icon(Icons.videocam_outlined),
+                  title: Text(l10n.mediaRecordVideo),
+                  onTap: () => Navigator.pop(ctx, MediaPickKind.cameraVideo),
+                ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
                 title: Text(l10n.productsImageFromGallery),
                 subtitle: const Text('Có thể chọn nhiều ảnh'),
                 onTap: () => Navigator.pop(ctx, MediaPickKind.galleryPhoto),
               ),
-              ListTile(
-                leading: const Icon(Icons.video_library_outlined),
-                title: Text(l10n.mediaPickVideoFromGallery),
-                subtitle: const Text('Có thể chọn nhiều video'),
-                onTap: () => Navigator.pop(ctx, MediaPickKind.galleryVideo),
-              ),
+              if (allowVideo)
+                ListTile(
+                  leading: const Icon(Icons.video_library_outlined),
+                  title: Text(l10n.mediaPickVideoFromGallery),
+                  subtitle: const Text('Có thể chọn nhiều video'),
+                  onTap: () => Navigator.pop(ctx, MediaPickKind.galleryVideo),
+                ),
             ],
           ),
         ),

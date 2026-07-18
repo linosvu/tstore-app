@@ -12,8 +12,8 @@ import 'package:tstore/models/dashboard_today.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/screens/main_shell.dart';
 import 'package:tstore/models/task.dart';
-import 'package:tstore/models/repair_order.dart';
-import 'package:tstore/providers/repair_orders_provider.dart';
+import 'package:tstore/models/service_request.dart';
+import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/providers/tasks_provider.dart';
 import 'package:tstore/screens/orders/repair_orders_screen.dart';
 import 'package:tstore/screens/tasks/task_create_screen.dart';
@@ -88,7 +88,7 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
         _summary = DashboardTodayResponse.fromJson(data);
         _loading = false;
       });
-      final stats = await context.read<RepairOrdersProvider>().fetchStats();
+      final stats = await context.read<ServiceRequestsProvider>().fetchStats();
       if (mounted && stats != null) {
         setState(() => _repairSupport = stats);
       }
@@ -696,7 +696,7 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                         icon: Icons.build_circle_outlined,
                         iconColor: AppColors.error,
                         trailing: Text(
-                          _num(rs?.repairs.overduePromised),
+                          _num(rs?.repairs.overdue),
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
@@ -709,23 +709,21 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                         icon: Icons.mark_chat_unread_outlined,
                         iconColor: AppColors.warning,
                         trailing: Text(
-                          _num(rs?.support.waitingCustomer),
+                          _num(rs?.support.overdue),
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
-                        onTap: () => _openRepairHub(
-                          tab: 0,
-                          supportStatus: 'waiting_customer',
-                        ),
+                        onTap: () =>
+                            _openRepairHub(tab: 0, supportUnassigned: true),
                       ),
                       MenuGroupItem(
                         title: l10n.dashboardReminderRepairWaitingParts,
                         icon: Icons.settings_outlined,
                         iconColor: AppColors.secondary,
                         trailing: Text(
-                          _num(rs?.repairs.waitingParts),
+                          _num(rs?.repairs.awaitingApproval),
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
@@ -733,7 +731,7 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                         ),
                         onTap: () => _openRepairHub(
                           tab: 1,
-                          repairStatus: 'waiting_parts',
+                          repairStatus: 'processing',
                         ),
                       ),
                     ],

@@ -112,11 +112,9 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
   }
 
   Future<void> _enrichLinkedSaleOrder(PreparationOrderPublic item) async {
-    var linked = item.saleOrder;
-    if (saleOrderDisplayNeedsEnrich(linked)) {
-      final p = context.read<PreparationProvider>();
-      linked = await p.fetchLinkedSaleOrder(item.saleOrderId) ?? linked;
-    }
+    final p = context.read<PreparationProvider>();
+    final linked =
+        await p.fetchLinkedSaleOrder(item.saleOrderId) ?? item.saleOrder;
     if (mounted) setState(() => _linkedSaleOrder = linked);
   }
 
@@ -541,6 +539,25 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
     );
   }
 
+  Future<void> _openProductImagesViewer(
+    List<SaleOrderProductImage> images,
+    int index,
+  ) async {
+    if (images.isEmpty) return;
+    final safeIndex = index.clamp(0, images.length - 1);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerPage(
+          items: [
+            for (final e in images)
+              MediaViewerItem(url: e.url, mediaType: e.mediaType ?? 'image'),
+          ],
+          initialIndex: safeIndex,
+        ),
+      ),
+    );
+  }
+
   String? _effectiveExpectedLabel(PreparationOrderPublic item) {
     final fromDel = item.linkedDeliveryScheduledAt?.trim();
     final fromOrder = item.saleOrder?.expectedDeliveryAt?.trim();
@@ -707,6 +724,40 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
                   .toList(),
             ),
           ),
+          if ((_saleOrderForDisplay(item)?.productImages ?? const [])
+              .isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.space3),
+            SectionCard(
+              title: l10n.saleOrderProductImagesTitle,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ...(_saleOrderForDisplay(item)!.productImages)
+                      .asMap()
+                      .entries
+                      .map(
+                    (entry) {
+                      final images =
+                          _saleOrderForDisplay(item)!.productImages;
+                      return SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: MediaTile(
+                          url: entry.value.url,
+                          mediaType: entry.value.mediaType ?? 'image',
+                          onTap: () => _openProductImagesViewer(
+                            images,
+                            entry.key,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.space3),
           SectionCard(
             title: l10n.prepPhotos,

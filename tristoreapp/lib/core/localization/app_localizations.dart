@@ -179,6 +179,9 @@ class AppLocalizations {
   String get productsDetailQuantityUpdatedAt => 'Ngày cập nhật số lượng';
   String get productsDetailDatePlaceholder => '—';
   String get productsImagesLabel => 'Ảnh sản phẩm';
+  String get saleOrderProductImagesTitle => 'Ảnh sản phẩm';
+  String get saleOrderProductImagesAdd => 'Thêm ảnh sản phẩm';
+  String get saleOrderProductImagesEmpty => 'Chưa có ảnh sản phẩm';
   String get productsImagesEmpty => 'Chưa có ảnh nào.';
   String get productsImagesMax => 'Tối đa 10 ảnh.';
   String get productsAddImage => 'Thêm ảnh';
@@ -195,6 +198,10 @@ class AppLocalizations {
     final imgMb = (maxImageBytes / (1024 * 1024)).round();
     final vidMb = (maxVideoBytes / (1024 * 1024)).round();
     return 'Ảnh tối đa ${imgMb}MB · Video tối đa ${vidMb}MB · Thời lượng video tối đa ${maxVideoSec}s';
+  }
+  String mediaImageLimitHint(int maxImageBytes) {
+    final imgMb = (maxImageBytes / (1024 * 1024)).round();
+    return 'Ảnh tối đa ${imgMb}MB';
   }
   String get mediaViewerClose => 'Đóng';
   String get mediaViewerDownload => 'Tải về';
@@ -758,9 +765,9 @@ class AppLocalizations {
   String get repairListEmpty => 'Chưa có đơn sửa chữa.';
   String get repairLoadFailed => 'Không tải được danh sách sửa chữa.';
   String get repairCreated => 'Đã tạo đơn sửa chữa.';
-  String get repairSupportHubTitle => 'Sửa chữa & Hỗ trợ';
+  String get repairSupportHubTitle => 'Hỗ trợ & Sửa chữa';
   String get repairSearchHint => 'Tìm đơn sửa, khách, thiết bị…';
-  String get supportTicketsNav => 'Ticket hỗ trợ';
+  String get supportTicketsNav => 'Hỗ trợ';
   String get supportSearchHint => 'Tìm ticket, khách, tiêu đề…';
   String get supportTicketCreate => 'Tạo ticket';
   String get supportListEmpty => 'Chưa có ticket hỗ trợ.';
@@ -772,11 +779,41 @@ class AppLocalizations {
   String get supportViewRepairOrder => 'Xem đơn sửa chữa';
   String get dashboardStatRepairsOpen => 'Sửa chữa đang mở';
   String get dashboardStatRepairsToday => 'Nhận sửa hôm nay';
-  String get dashboardStatSupportOpen => 'Ticket đang mở';
-  String get dashboardStatSupportToday => 'Ticket mới hôm nay';
-  String get dashboardReminderRepairOverdue => 'Sửa chữa quá hạn trả';
-  String get dashboardReminderSupportWaiting => 'Ticket chờ phản hồi khách';
-  String get dashboardReminderRepairWaitingParts => 'Sửa chữa chờ linh kiện';
+  String get dashboardStatSupportOpen => 'Hỗ trợ đang mở';
+  String get dashboardStatSupportToday => 'Hỗ trợ mới hôm nay';
+  String get dashboardReminderRepairOverdue => 'Sửa chữa quá hạn';
+  String get dashboardReminderSupportWaiting => 'Hỗ trợ quá hạn';
+  String get dashboardReminderRepairWaitingParts => 'SC chờ duyệt';
+
+  // Service request module (Hỗ trợ & Sửa chữa)
+  String get serviceSupportHubTitle => 'Hỗ trợ & Sửa chữa';
+  String get serviceTabSupport => 'Hỗ trợ';
+  String get serviceTabRepair => 'Sửa chữa';
+  String get serviceSearchHint => 'Tìm YC, khách, SĐT, sản phẩm…';
+  String get serviceListEmpty => 'Chưa có phiếu yêu cầu.';
+  String get serviceRequestCreate => 'Tạo yêu cầu';
+  String get serviceRequestCreated => 'Đã tạo phiếu yêu cầu.';
+  String get serviceRequestDetail => 'Chi tiết yêu cầu';
+  String get serviceChannel => 'Kênh tiếp nhận';
+  String get serviceCustomerSection => 'Khách hàng';
+  String get servicePhone2 => 'SĐT phụ';
+  String get serviceAddress => 'Địa chỉ';
+  String get serviceProductSection => 'Sản phẩm & lỗi';
+  String get serviceProductName => 'Tên sản phẩm';
+  String get serviceSerial => 'Serial';
+  String get serviceIssue => 'Mô tả lỗi';
+  String get serviceManager => 'Quản lý';
+  String get serviceDirection => 'Hướng xử lý';
+  String get serviceFeeAppointment => 'Phí & lịch hẹn';
+  String get serviceAppointmentDate => 'Ngày hẹn';
+  String get serviceAppointmentSlot => 'Khung giờ';
+  String get serviceStaff => 'Nhân viên xử lý';
+  String get serviceEscalate => 'Leo thang / tạo phiếu con';
+  String get serviceCompleteRequest => 'Hoàn tất yêu cầu';
+  String get serviceCancelRequest => 'Huỷ yêu cầu';
+  String get serviceOnlineTicket => 'Phiếu hỗ trợ online';
+  String get serviceOnsiteTicket => 'Phiếu hỗ trợ tại nhà';
+  String get serviceRepairTicket => 'Phiếu sửa chữa';
 
   // Tasks
   String get tasksDashboardSection => 'Nhiệm vụ của tôi';

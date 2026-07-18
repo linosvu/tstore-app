@@ -16,8 +16,7 @@ import 'providers/auth_provider.dart';
 import 'providers/delivery_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/preparation_provider.dart';
-import 'providers/repair_orders_provider.dart';
-import 'providers/support_tickets_provider.dart';
+import 'providers/service_requests_provider.dart';
 import 'providers/tasks_provider.dart';
 import 'screens/splash_screen.dart';
 
@@ -109,11 +108,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProvider(
           create: (ctx) =>
-              RepairOrdersProvider(api: ctx.read<AuthProvider>().api),
-        ),
-        ChangeNotifierProvider(
-          create: (ctx) =>
-              SupportTicketsProvider(api: ctx.read<AuthProvider>().api),
+              ServiceRequestsProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
           create: (ctx) => TasksProvider(api: ctx.read<AuthProvider>().api),
