@@ -250,19 +250,29 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                           }),
                   child: const Text('Xoá'),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: _busy ? null : _save,
+                  onPressed: _busy || (_strokes.isEmpty && _current.isEmpty)
+                      ? null
+                      : _save,
                   child: _busy
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Lưu chữ ký'),
+                      : const Text('Xác nhận'),
                 ),
               ],
             ),
+            if (_strokes.isNotEmpty || _current.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Bấm Xác nhận để lưu chữ ký trước khi bàn giao.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
           ],
         ],
       ),
