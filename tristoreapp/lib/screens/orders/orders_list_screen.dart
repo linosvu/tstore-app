@@ -63,10 +63,6 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   String? _dateFrom;
   String? _dateTo;
   static const _scopeValues = ['all', 'mine'];
-  static const _todayDeliveryStatuses = {
-    'pending',
-    'delivering',
-  };
 
   bool _isStaffOrAbove(BuildContext context) {
     final u = context.read<AuthProvider>().user;
@@ -741,23 +737,6 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       );
     }
 
-    bool isTodayGroup(SaleOrderPublic o) {
-      final ds = o.linkedDeliveryStatus?.trim();
-      if (ds != null && ds.isNotEmpty)
-        return _todayDeliveryStatuses.contains(ds);
-      if (o.status == 'confirmed' || o.status == 'delivery') return true;
-      return false;
-    }
-
-    final todayItems = _items.where(isTodayGroup).toList();
-    final nextItems = _items.where((o) => !isTodayGroup(o)).toList();
-    final grouped = <_OrderListEntry>[
-      _OrderHeaderEntry(l10n.groupTodayCount(todayItems.length)),
-      ...todayItems.map((o) => _OrderItemEntry(o)),
-      if (nextItems.isNotEmpty) _OrderHeaderEntry(l10n.groupNext),
-      ...nextItems.map((o) => _OrderItemEntry(o)),
-    ];
-
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
       child: ListView.builder(
@@ -769,19 +748,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           AppSpacing.screenHorizontal,
           AppSpacing.space4,
         ),
-        itemCount: grouped.length + (_loadingMore ? 1 : 0),
+        itemCount: _items.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, i) {
-          if (i == grouped.length) {
+          if (i == _items.length) {
             return const Padding(
               padding: EdgeInsets.all(AppSpacing.space4),
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          final e = grouped[i];
-          if (e is _OrderHeaderEntry) {
-            return _groupDivider(e.label);
-          }
-          final o = (e as _OrderItemEntry).order;
+          final o = _items[i];
           return Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.space2),
             child: _OrderRowCard(
@@ -803,50 +778,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     );
   }
 
-  Widget _groupDivider(String label) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding:
-          const EdgeInsets.fromLTRB(0, AppSpacing.space2, 0, AppSpacing.space2),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: scheme.outlineVariant)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2),
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ),
-          Expanded(child: Divider(color: scheme.outlineVariant)),
-        ],
-      ),
-    );
-  }
-
   String _formatMoney(int v) {
     return '${v.toString().replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (m) => '${m[1]}.',
         )} đ';
   }
-}
-
-sealed class _OrderListEntry {
-  const _OrderListEntry();
-}
-
-class _OrderHeaderEntry extends _OrderListEntry {
-  const _OrderHeaderEntry(this.label);
-  final String label;
-}
-
-class _OrderItemEntry extends _OrderListEntry {
-  const _OrderItemEntry(this.order);
-  final SaleOrderPublic order;
 }
 
 class _OrderRowCard extends StatelessWidget {
