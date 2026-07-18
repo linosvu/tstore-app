@@ -11,6 +11,7 @@ import 'package:tstore/widgets/ui/status_badge.dart';
 import 'escalate_ticket_screen.dart';
 import 'service_ui.dart';
 import 'widgets/countdown_banner.dart';
+import 'widgets/evidence_section.dart';
 import 'widgets/locked_request_info_card.dart';
 import 'widgets/ticket_log_list.dart';
 
@@ -43,8 +44,10 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool showSpinner = false}) async {
+    if (showSpinner || _ticket == null) {
+      setState(() => _loading = true);
+    }
     try {
       final t = await context
           .read<ServiceRequestsProvider>()
@@ -57,8 +60,27 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+        );
+      }
     }
+  }
+
+  bool get _hasContactEvidence =>
+      _ticket?.evidences.any((e) => e.stage == 'contact') ?? false;
+
+  String? _completeBlockReason({required bool requireGuide}) {
+    if (!_hasContactEvidence) {
+      return 'Cần thêm bằng chứng liên hệ (ảnh/video/ghi âm).';
+    }
+    if (requireGuide && _guideCtrl.text.trim().isEmpty) {
+      return 'Nhập nội dung đã hướng dẫn.';
+    }
+    return null;
   }
 
   Future<void> _action(String action, {Map<String, dynamic>? body}) async {
@@ -74,14 +96,42 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
           context,
           const SnackBar(content: Text('Đã cập nhật.')),
         );
+        await _load();
       }
     } catch (e) {
       if (mounted) {
-        AppMessenger.showSnackBar(context, SnackBar(content: Text('$e')));
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _complete() async {
+    final block = _completeBlockReason(requireGuide: true);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('complete-online', body: {
+      'guideContent': _guideCtrl.text.trim(),
+      if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
+    });
+  }
+
+  Future<void> _fail() async {
+    final block = _completeBlockReason(requireGuide: true);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('fail-online', body: {
+      'guideContent': _guideCtrl.text.trim(),
+      if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
+    });
   }
 
   Future<void> _escalate() async {
@@ -104,12 +154,16 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
     final l10n = AppLocalizations.of(context);
     final t = _ticket;
     final open = t?.status == 'processing';
+    final completeBlock = open ? _completeBlockReason(requireGuide: true) : null;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(t?.displayCode ?? l10n.serviceOnlineTicket),
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: () => _load(showSpinner: true),
+            icon: const Icon(Icons.refresh),
+          ),
         ],
       ),
       body: _loading || t == null
@@ -133,7 +187,17 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                   isOverdue: t.isOverdue,
                 ),
                 const SizedBox(height: 12),
-                if (t.request != null) LockedRequestInfoCard(request: t.request!),
+                if (t.request != null)
+                  LockedRequestInfoCard(request: t.request!),
+                const SizedBox(height: 12),
+                EvidenceSection(
+                  ticketId: t.id,
+                  stage: 'contact',
+                  evidences: t.evidences,
+                  onChanged: _load,
+                  readOnly: !open,
+                  title: 'Bằng chứng liên hệ *',
+                ),
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'Hướng dẫn / xử lý',
@@ -142,16 +206,18 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                       TextField(
                         controller: _guideCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Nội dung hướng dẫn',
+                          labelText: 'Nội dung hướng dẫn *',
                         ),
                         minLines: 3,
                         maxLines: 6,
                         enabled: open,
+                        onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _noteCtrl,
-                        decoration: InputDecoration(labelText: l10n.repairNotes),
+                        decoration:
+                            InputDecoration(labelText: l10n.repairNotes),
                         maxLines: 2,
                         enabled: open,
                       ),
@@ -159,27 +225,24 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                   ),
                 ),
                 if (open) ...[
+                  if (completeBlock != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      completeBlock,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   FilledButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('complete-online', body: {
-                              'guideContent': _guideCtrl.text.trim(),
-                              if (_noteCtrl.text.trim().isNotEmpty)
-                                'note': _noteCtrl.text.trim(),
-                            }),
+                    onPressed: _busy || completeBlock != null ? null : _complete,
                     child: const Text('Xử lý xong'),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('fail-online', body: {
-                              if (_guideCtrl.text.trim().isNotEmpty)
-                                'guideContent': _guideCtrl.text.trim(),
-                              if (_noteCtrl.text.trim().isNotEmpty)
-                                'note': _noteCtrl.text.trim(),
-                            }),
+                    onPressed: _busy || completeBlock != null ? null : _fail,
                     child: const Text('Thất bại — leo thang'),
                   ),
                   const SizedBox(height: 8),
@@ -192,7 +255,10 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                               title: 'Lý do hủy (không liên lạc được)',
                             );
                             if (r != null) {
-                              await _action('cancel-online', body: {'reason': r});
+                              await _action(
+                                'cancel-online',
+                                body: {'reason': r},
+                              );
                             }
                           },
                     child: const Text('Hủy phiếu'),

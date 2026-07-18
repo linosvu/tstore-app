@@ -1,18 +1,21 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:tstore/core/utils/product_image_compress.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
+import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 
-/// Chữ ký đơn giản: vẽ → PNG tạm → upload.
+/// Chữ ký: vẽ → PNG tạm → upload.
+/// Giữ nét khi parent rebuild (AutomaticKeepAlive + soft reload phía màn cha).
 class SignaturePadSection extends StatefulWidget {
   const SignaturePadSection({
     super.key,
@@ -37,11 +40,15 @@ class SignaturePadSection extends StatefulWidget {
   State<SignaturePadSection> createState() => _SignaturePadSectionState();
 }
 
-class _SignaturePadSectionState extends State<SignaturePadSection> {
+class _SignaturePadSectionState extends State<SignaturePadSection>
+    with AutomaticKeepAliveClientMixin {
   final _strokes = <List<Offset>>[];
   List<Offset> _current = [];
   final _repaintKey = GlobalKey();
   bool _busy = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   List<TicketSignaturePublic> get _existing => widget.signatures
       .where((s) => s.stage == widget.stage && s.signer == widget.signer)
@@ -56,11 +63,19 @@ class _SignaturePadSectionState extends State<SignaturePadSection> {
       );
       return;
     }
+    // Chốt nét đang vẽ trước khi capture.
+    if (_current.isNotEmpty) {
+      _strokes.add(List<Offset>.from(_current));
+      _current = [];
+    }
     setState(() => _busy = true);
     try {
       final boundary = _repaintKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
       if (boundary == null) throw Exception('Không render được chữ ký');
+      // Đợi frame vẽ xong trước khi toImage.
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
       final image = await boundary.toImage(pixelRatio: 2);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) throw Exception('Xuất PNG thất bại');
@@ -83,20 +98,21 @@ class _SignaturePadSectionState extends State<SignaturePadSection> {
           'imageUrl': url,
         },
       );
-      _strokes.clear();
-      _current = [];
+      if (!mounted) return;
+      setState(() {
+        _strokes.clear();
+        _current = [];
+      });
       widget.onChanged();
-      if (mounted) {
-        AppMessenger.showSnackBar(
-          context,
-          const SnackBar(content: Text('Đã lưu chữ ký.')),
-        );
-      }
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Đã lưu chữ ký.')),
+      );
     } catch (e) {
       if (mounted) {
         AppMessenger.showSnackBar(
           context,
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
         );
       }
     } finally {
@@ -106,6 +122,7 @@ class _SignaturePadSectionState extends State<SignaturePadSection> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final title = widget.title ??
         'Chữ ký ${widget.signer == 'customer' ? 'khách' : 'nhân viên'}';
     final existing = _existing;
@@ -114,11 +131,50 @@ class _SignaturePadSectionState extends State<SignaturePadSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (existing.isNotEmpty)
+          if (existing.isNotEmpty) ...[
             Text(
-              'Đã có ${existing.length} chữ ký.',
+              'Đã lưu ${existing.length} chữ ký.',
               style: const TextStyle(color: Colors.green),
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: existing.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, i) {
+                  final url = resolveMediaUrl(existing[i].imageUrl);
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 120,
+                      color: Colors.white,
+                      foregroundDecoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Icon(Icons.draw_outlined, size: 28),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (!widget.readOnly)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Ký thêm bên dưới nếu cần bổ sung.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
+          ],
           if (!widget.readOnly) ...[
             const SizedBox(height: 8),
             Container(
@@ -128,22 +184,45 @@ class _SignaturePadSectionState extends State<SignaturePadSection> {
                 borderRadius: BorderRadius.circular(8),
                 color: Colors.white,
               ),
-              child: GestureDetector(
-                onPanStart: (d) {
-                  setState(() {
-                    _current = [d.localPosition];
-                  });
-                },
-                onPanUpdate: (d) {
-                  setState(() {
-                    _current = [..._current, d.localPosition];
-                  });
-                },
-                onPanEnd: (_) {
-                  setState(() {
-                    if (_current.isNotEmpty) _strokes.add(_current);
-                    _current = [];
-                  });
+              clipBehavior: Clip.hardEdge,
+              // Eager pan: chiếm gesture để ListView cha không scroll khi đang ký.
+              child: RawGestureDetector(
+                gestures: <Type, GestureRecognizerFactory>{
+                  _EagerPanGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                          _EagerPanGestureRecognizer>(
+                    () => _EagerPanGestureRecognizer(),
+                    (instance) {
+                      instance
+                        ..onStart = (d) {
+                          if (_busy) return;
+                          setState(() => _current = [d.localPosition]);
+                        }
+                        ..onUpdate = (d) {
+                          if (_busy || _current.isEmpty) return;
+                          setState(() {
+                            _current = [..._current, d.localPosition];
+                          });
+                        }
+                        ..onEnd = (_) {
+                          if (_busy) return;
+                          setState(() {
+                            if (_current.isNotEmpty) {
+                              _strokes.add(List<Offset>.from(_current));
+                            }
+                            _current = [];
+                          });
+                        }
+                        ..onCancel = () {
+                          setState(() {
+                            if (_current.isNotEmpty) {
+                              _strokes.add(List<Offset>.from(_current));
+                            }
+                            _current = [];
+                          });
+                        };
+                    },
+                  ),
                 },
                 child: RepaintBoundary(
                   key: _repaintKey,
@@ -191,6 +270,14 @@ class _SignaturePadSectionState extends State<SignaturePadSection> {
   }
 }
 
+class _EagerPanGestureRecognizer extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}
+
 class _SignaturePainter extends CustomPainter {
   _SignaturePainter({required this.strokes});
 
@@ -202,12 +289,12 @@ class _SignaturePainter extends CustomPainter {
       ..color = Colors.black
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
     for (final stroke in strokes) {
-      if (stroke.length < 2) {
-        if (stroke.length == 1) {
-          canvas.drawCircle(stroke.first, 1.5, paint);
-        }
+      if (stroke.isEmpty) continue;
+      if (stroke.length == 1) {
+        canvas.drawCircle(stroke.first, 1.5, paint);
         continue;
       }
       final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
@@ -219,5 +306,14 @@ class _SignaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) {
+    if (oldDelegate.strokes.length != strokes.length) return true;
+    for (var i = 0; i < strokes.length; i++) {
+      if (!identical(oldDelegate.strokes[i], strokes[i]) &&
+          oldDelegate.strokes[i].length != strokes[i].length) {
+        return true;
+      }
+    }
+    return !identical(oldDelegate.strokes, strokes);
+  }
 }

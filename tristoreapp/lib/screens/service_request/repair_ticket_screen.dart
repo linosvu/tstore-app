@@ -109,8 +109,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool showSpinner = false}) async {
+    if (showSpinner || _ticket == null) {
+      setState(() => _loading = true);
+    }
     try {
       final t = await context
           .read<ServiceRequestsProvider>()
@@ -154,11 +156,48 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       }
     } catch (e) {
       if (mounted) {
-        AppMessenger.showSnackBar(context, SnackBar(content: Text('$e')));
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String? _handoffBlockReason(ServiceTicketPublic t) {
+    final hasEvidence = t.evidences.any((e) => e.stage == 'receive');
+    final hasStaff = t.signatures.any(
+      (s) => s.stage == 'receive' && s.signer == 'staff',
+    );
+    final hasCustomer = t.signatures.any(
+      (s) => s.stage == 'receive' && s.signer == 'customer',
+    );
+    if (!hasEvidence) return 'Cần thêm bằng chứng tiếp nhận (ảnh/video).';
+    if (!hasStaff) return 'Cần chữ ký nhân viên.';
+    if (!hasCustomer) return 'Cần chữ ký khách.';
+    if (_techUserId == null) return 'Chọn nhân viên kỹ thuật.';
+    if (_initialCtrl.text.trim().isEmpty) {
+      return 'Nhập nhận định ban đầu.';
+    }
+    return null;
+  }
+
+  Future<void> _handoff(ServiceTicketPublic t) async {
+    final block = _handoffBlockReason(t);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('handoff-tech', body: {
+      'techUserId': _techUserId,
+      'contactDeadlineAt': _contactDeadline.toUtc().toIso8601String(),
+      'receiveType': _receiveType,
+      'initialAssessment': _initialCtrl.text.trim(),
+      if (_extraCtrl.text.trim().isNotEmpty)
+        'extraNote': _extraCtrl.text.trim(),
+    });
   }
 
   bool get _isManager {
@@ -293,23 +332,27 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         stage: 'receive',
         evidences: t.evidences,
         onChanged: _load,
-        title: 'Bằng chứng tiếp nhận',
+        title: 'Bằng chứng tiếp nhận *',
       ),
       const SizedBox(height: 12),
       SignaturePadSection(
+        key: ValueKey('sig-${t.id}-receive-staff'),
         ticketId: t.id,
         stage: 'receive',
         signer: 'staff',
         signatures: t.signatures,
         onChanged: _load,
+        title: 'Chữ ký nhân viên *',
       ),
       const SizedBox(height: 8),
       SignaturePadSection(
+        key: ValueKey('sig-${t.id}-receive-customer'),
         ticketId: t.id,
         stage: 'receive',
         signer: 'customer',
         signatures: t.signatures,
         onChanged: _load,
+        title: 'Chữ ký khách *',
       ),
       const SizedBox(height: 12),
       SectionCard(
@@ -364,28 +407,31 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             TextField(
               controller: _initialCtrl,
               decoration: const InputDecoration(
-                labelText: 'Đánh giá ban đầu',
+                labelText: 'Đánh giá ban đầu *',
               ),
               maxLines: 2,
+              onChanged: (_) => setState(() {}),
             ),
             TextField(
               controller: _extraCtrl,
               decoration: const InputDecoration(labelText: 'Ghi chú thêm'),
             ),
             const SizedBox(height: 12),
+            if (_handoffBlockReason(t) != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _handoffBlockReason(t)!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
             FilledButton(
-              onPressed: _busy || _techUserId == null
+              onPressed: _busy || _handoffBlockReason(t) != null
                   ? null
-                  : () => _action('handoff-tech', body: {
-                        'techUserId': _techUserId,
-                        'contactDeadlineAt':
-                            _contactDeadline.toUtc().toIso8601String(),
-                        'receiveType': _receiveType,
-                        if (_initialCtrl.text.trim().isNotEmpty)
-                          'initialAssessment': _initialCtrl.text.trim(),
-                        if (_extraCtrl.text.trim().isNotEmpty)
-                          'extraNote': _extraCtrl.text.trim(),
-                      }),
+                  : () => _handoff(t),
               child: const Text('Bàn giao kỹ thuật'),
             ),
           ],
@@ -600,10 +646,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return [
       EvidenceSection(
         ticketId: t.id,
-        stage: 'repair',
+        stage: 'repair_result',
         evidences: t.evidences,
         onChanged: _load,
-        title: 'Bằng chứng sửa chữa',
+        title: 'Bằng chứng kết quả sửa *',
       ),
       const SizedBox(height: 12),
       SectionCard(
@@ -677,11 +723,23 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       ),
       const SizedBox(height: 8),
       SignaturePadSection(
+        key: ValueKey('sig-${t.id}-delivery-staff'),
+        ticketId: t.id,
+        stage: 'delivery',
+        signer: 'staff',
+        signatures: t.signatures,
+        onChanged: _load,
+        title: 'Chữ ký nhân viên *',
+      ),
+      const SizedBox(height: 8),
+      SignaturePadSection(
+        key: ValueKey('sig-${t.id}-delivery-customer'),
         ticketId: t.id,
         stage: 'delivery',
         signer: 'customer',
         signatures: t.signatures,
         onChanged: _load,
+        title: 'Chữ ký khách *',
       ),
       const SizedBox(height: 12),
       SectionCard(

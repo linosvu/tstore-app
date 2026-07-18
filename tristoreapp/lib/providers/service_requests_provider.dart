@@ -262,4 +262,17 @@ class ServiceRequestsProvider extends ChangeNotifier {
     if (data == null) return null;
     return RepairSupportStats.fromJson(data);
   }
+
+  static String dioMessage(Object e) {
+    if (e is DioException) {
+      final d = e.response?.data;
+      if (d is Map && d['message'] != null) {
+        final m = d['message'];
+        if (m is List) return m.map((x) => '$x').join('\n');
+        return '$m';
+      }
+      return e.message ?? e.toString();
+    }
+    return e.toString();
+  }
 }

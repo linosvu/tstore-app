@@ -195,7 +195,11 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
       if (mounted) {
         AppMessenger.showSnackBar(
           context,
-          SnackBar(content: Text('Không tạo được: $e')),
+          SnackBar(
+            content: Text(
+              'Không tạo được: ${ServiceRequestsProvider.dioMessage(e)}',
+            ),
+          ),
         );
       }
     } finally {

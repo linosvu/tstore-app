@@ -81,8 +81,10 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
     }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool showSpinner = false}) async {
+    if (showSpinner || _ticket == null) {
+      setState(() => _loading = true);
+    }
     try {
       final t = await context
           .read<ServiceRequestsProvider>()
@@ -118,17 +120,80 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
           context,
           const SnackBar(content: Text('Đã cập nhật.')),
         );
+        await _load();
       }
     } catch (e) {
       if (mounted) {
-        AppMessenger.showSnackBar(context, SnackBar(content: Text('$e')));
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  String? _closeBlockReason({required bool needWorkEvidence}) {
+    final t = _ticket;
+    if (t == null) return 'Đang tải phiếu…';
+    final hasCondition = t.evidences.any((e) => e.stage == 'condition');
+    final hasWork = t.evidences.any((e) => e.stage == 'work');
+    final hasStaff = t.signatures.any(
+      (s) => s.stage == 'onsite_result' && s.signer == 'staff',
+    );
+    final hasCustomer = t.signatures.any(
+      (s) => s.stage == 'onsite_result' && s.signer == 'customer',
+    );
+    if (!hasCondition) return 'Cần bằng chứng tình trạng sản phẩm.';
+    if (needWorkEvidence && !hasWork) {
+      return 'Cần bằng chứng công việc đã làm.';
+    }
+    if (!hasStaff) return 'Cần chữ ký nhân viên.';
+    if (!hasCustomer) return 'Cần chữ ký khách.';
+    if (_conditionCtrl.text.trim().isEmpty) {
+      return 'Nhập tình trạng sản phẩm.';
+    }
+    if (needWorkEvidence && _workCtrl.text.trim().isEmpty) {
+      return 'Nhập công việc đã làm.';
+    }
+    return null;
+  }
+
+  Future<void> _completeOnsite() async {
+    final block = _closeBlockReason(needWorkEvidence: true);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('complete-onsite', body: {
+      'productCondition': _conditionCtrl.text.trim(),
+      'workDone': _workCtrl.text.trim(),
+      if (_resultCtrl.text.trim().isNotEmpty)
+        'resultNote': _resultCtrl.text.trim(),
+    });
+  }
+
+  Future<void> _failOnsite() async {
+    final block = _closeBlockReason(needWorkEvidence: true);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('fail-onsite', body: {
+      'productCondition': _conditionCtrl.text.trim(),
+      'workDone': _workCtrl.text.trim(),
+      if (_resultCtrl.text.trim().isNotEmpty)
+        'resultNote': _resultCtrl.text.trim(),
+    });
+  }
+
   Future<void> _takeDevice() async {
+    final block = _closeBlockReason(needWorkEvidence: false);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -159,7 +224,10 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
       }
     } catch (e) {
       if (mounted) {
-        AppMessenger.showSnackBar(context, SnackBar(content: Text('$e')));
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -201,19 +269,42 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                 const SizedBox(height: 12),
                 EvidenceSection(
                   ticketId: t.id,
-                  stage: 'onsite',
+                  stage: 'condition',
                   evidences: t.evidences,
                   onChanged: _load,
                   readOnly: !open,
+                  title: 'Bằng chứng tình trạng SP *',
+                ),
+                const SizedBox(height: 12),
+                EvidenceSection(
+                  ticketId: t.id,
+                  stage: 'work',
+                  evidences: t.evidences,
+                  onChanged: _load,
+                  readOnly: !open,
+                  title: 'Bằng chứng công việc *',
                 ),
                 const SizedBox(height: 12),
                 SignaturePadSection(
+                  key: ValueKey('sig-${t.id}-onsite_result-staff'),
                   ticketId: t.id,
-                  stage: 'onsite',
+                  stage: 'onsite_result',
+                  signer: 'staff',
+                  signatures: t.signatures,
+                  onChanged: _load,
+                  readOnly: !open,
+                  title: 'Chữ ký nhân viên *',
+                ),
+                const SizedBox(height: 8),
+                SignaturePadSection(
+                  key: ValueKey('sig-${t.id}-onsite_result-customer'),
+                  ticketId: t.id,
+                  stage: 'onsite_result',
                   signer: 'customer',
                   signatures: t.signatures,
                   onChanged: _load,
                   readOnly: !open,
+                  title: 'Chữ ký khách *',
                 ),
                 const SizedBox(height: 12),
                 SectionCard(
@@ -223,19 +314,21 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                       TextField(
                         controller: _conditionCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Tình trạng sản phẩm',
+                          labelText: 'Tình trạng sản phẩm *',
                         ),
                         enabled: open,
                         maxLines: 2,
+                        onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _workCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Công việc đã làm',
+                          labelText: 'Công việc đã làm *',
                         ),
                         enabled: open,
                         maxLines: 2,
+                        onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -268,34 +361,49 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                       onChanged: (v) => setState(() => _repairStaffId = v),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('complete-onsite', body: {
-                              'productCondition': _conditionCtrl.text.trim(),
-                              'workDone': _workCtrl.text.trim(),
-                              if (_resultCtrl.text.trim().isNotEmpty)
-                                'resultNote': _resultCtrl.text.trim(),
-                            }),
-                    child: const Text('Hoàn thành tại nhà'),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('fail-onsite', body: {
-                              'productCondition': _conditionCtrl.text.trim(),
-                              'workDone': _workCtrl.text.trim(),
-                              if (_resultCtrl.text.trim().isNotEmpty)
-                                'resultNote': _resultCtrl.text.trim(),
-                            }),
-                    child: const Text('Không xử lý được'),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.tonal(
-                    onPressed: _busy ? null : _takeDevice,
-                    child: const Text('Nhận máy mang về (tạo SC)'),
+                  Builder(
+                    builder: (context) {
+                      final closeBlock =
+                          _closeBlockReason(needWorkEvidence: true);
+                      final takeBlock =
+                          _closeBlockReason(needWorkEvidence: false);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (closeBlock != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              closeBlock,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: _busy || closeBlock != null
+                                ? null
+                                : _completeOnsite,
+                            child: const Text('Hoàn thành tại nhà'),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                            onPressed: _busy || closeBlock != null
+                                ? null
+                                : _failOnsite,
+                            child: const Text('Không xử lý được'),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton.tonal(
+                            onPressed: _busy || takeBlock != null
+                                ? null
+                                : _takeDevice,
+                            child: const Text('Nhận máy mang về (tạo SC)'),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
                 const SizedBox(height: 12),
