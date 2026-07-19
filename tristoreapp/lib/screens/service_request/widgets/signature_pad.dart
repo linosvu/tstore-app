@@ -239,40 +239,38 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                            _strokes.clear();
-                            _current = [];
-                          }),
-                  child: const Text('Xoá'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _busy || (_strokes.isEmpty && _current.isEmpty)
-                      ? null
-                      : _save,
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Xác nhận'),
-                ),
-              ],
-            ),
-            if (_strokes.isNotEmpty || _current.isNotEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text(
-                  'Bấm Xác nhận để lưu chữ ký trước khi bàn giao.',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+            // FilledButton theme dùng minWidth = infinity → không đặt trong Row
+            // (sẽ overflow + bị SectionCard clip, nút Xác nhận biến mất).
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                          _strokes.clear();
+                          _current = [];
+                        }),
+                child: const Text('Xoá'),
               ),
+            ),
+            const SizedBox(height: 4),
+            FilledButton(
+              onPressed: _busy ? null : _save,
+              child: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Xác nhận'),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Bấm Xác nhận để lưu chữ ký trước khi bàn giao.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
           ],
         ],
       ),
