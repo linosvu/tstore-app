@@ -179,14 +179,16 @@ class SaleOrderDraftProvider extends ChangeNotifier {
   }
 
   Map<String, dynamic> _draftBody() {
+    // Legacy sentinel / rỗng → gửi chuỗi rỗng (backend tryResolve).
+    final emptyAddr = AddressCatalog.isEmptyProvinceWard(provinceId, wardId);
     return {
       if (orderId != null) 'id': orderId,
       if (customerId != null && customerId!.trim().isNotEmpty)
         'customerId': customerId,
       'deliveryAddressSnapshot': {
         'houseNumber': houseNumber.trim(),
-        'wardId': wardId,
-        'provinceId': provinceId,
+        'wardId': emptyAddr ? AddressCatalog.emptyWardId : wardId,
+        'provinceId': emptyAddr ? AddressCatalog.emptyProvinceId : provinceId,
       },
       'paymentTerms': paymentTerms,
       if (paymentTerms == 'partial_prepayment' && scheduledPaymentDate != null)

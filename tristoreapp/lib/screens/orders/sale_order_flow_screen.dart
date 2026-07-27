@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tstore/core/constants/app_colors.dart';
+import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/theme/app_ui_extension.dart';
@@ -990,6 +991,8 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
           ),
         ],
       ),
+      // Theme đặt minimumSize width = infinity (full-bleed form). Trong Row
+      // cạnh nút khác phải ghi đè — nếu không layout vỡ và mất cả thanh nút.
       bottomNavigationBar: SafeArea(
         top: false,
         child: Material(
@@ -1008,18 +1011,18 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                 ),
                 child: Row(
                   children: [
-                    if (_step > 0)
-                      Flexible(
-                        flex: 0,
-                        child: OutlinedButton.icon(
-                          onPressed: draft.saving ? null : _prev,
-                          icon: const Icon(Icons.chevron_left_rounded,
-                              size: 20),
-                          label: Text(l10n.saleOrderBack),
+                    if (_step > 0) ...[
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, AppSpacing.controlMinHeight),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
+                        onPressed: draft.saving ? null : _prev,
+                        icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                        label: Text(l10n.saleOrderBack),
                       ),
-                    if (_step > 0)
                       const SizedBox(width: _orderFormFieldGap),
+                    ],
                     if (_step < 3)
                       Expanded(
                         child: FilledButton.icon(
@@ -1039,14 +1042,15 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                         ),
                       ),
                     if (_step == 3 && _isKiotVietEdit(draft)) ...[
-                      Flexible(
-                        flex: 0,
-                        child: OutlinedButton(
-                          onPressed: draft.saving
-                              ? null
-                              : () => Navigator.of(context).pop(),
-                          child: Text(l10n.cancel),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, AppSpacing.controlMinHeight),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
+                        onPressed: draft.saving
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        child: Text(l10n.cancel),
                       ),
                       const SizedBox(width: _orderFormFieldGap),
                       Expanded(
