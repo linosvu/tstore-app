@@ -293,7 +293,20 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   }
 
   bool _canCreateDelivery(SaleOrderPublic o) =>
-      o.status == 'confirmed' || o.status == 'delivery';
+      (o.status == 'confirmed' || o.status == 'delivery') &&
+      !o.customerReceived;
+
+  bool _canToggleCustomerReceived(SaleOrderPublic o) {
+    if (o.status == 'cancelled' || o.status == 'refund') return false;
+    if (o.status != 'confirmed' &&
+        o.status != 'delivery' &&
+        o.status != 'completed') {
+      return false;
+    }
+    // Chỉ khi chưa có đơn giao (hoặc đang ở trạng thái đã nhận để bật lại).
+    if (_hasLinkedDelivery(o) && !o.customerReceived) return false;
+    return true;
+  }
 
   String? _effectivePrepId(SaleOrderPublic o) =>
       _linkedPreparation?.id ?? o.linkedPreparationId;
@@ -787,6 +800,14 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       _linkedPreparation != null && _linkedPreparation!.status == 'cancelled';
 
   Future<void> _openCreateDelivery(SaleOrderPublic o) async {
+    if (o.customerReceived) {
+      final l10n = AppLocalizations.of(context);
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(l10n.saleOrderCustomerReceivedHint)),
+      );
+      return;
+    }
     if (_deliveryBlockedByCancelledPrep) {
       final l10n = AppLocalizations.of(context);
       AppMessenger.showSnackBar(context, 
@@ -798,6 +819,66 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     if (ok == true && mounted) {
       await _fetch();
       _markListNeedsRefresh();
+    }
+  }
+
+  Future<void> _toggleCustomerReceived(SaleOrderPublic o) async {
+    if (_actionBusy || !_canToggleCustomerReceived(o)) return;
+    final l10n = AppLocalizations.of(context);
+    final enablingDelivery = o.customerReceived;
+
+    if (enablingDelivery) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.saleOrderEnableDeliveryConfirmTitle),
+          content: Text(l10n.saleOrderEnableDeliveryConfirmBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l10n.saleOrderEnableDeliveryAgain),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.patch<Map<String, dynamic>>(
+        '/admin/sale-orders/${widget.orderId}/customer-received',
+        data: {'customerReceived': !o.customerReceived},
+      );
+      if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        setState(() => _order = SaleOrderPublic.fromJson(data));
+        _markListNeedsRefresh();
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(
+            content: Text(
+              enablingDelivery
+                  ? l10n.saleOrderDeliveryEnabledAgain
+                  : l10n.saleOrderCustomerReceivedMarked,
+            ),
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(dioErrorMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
     }
   }
 
@@ -2592,7 +2673,10 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
             ),
           ),
         ],
-        if (_canCreateDelivery(o) || _hasLinkedDelivery(o)) ...[
+        if (_canCreateDelivery(o) ||
+            _hasLinkedDelivery(o) ||
+            o.customerReceived ||
+            _canToggleCustomerReceived(o)) ...[
           const SizedBox(height: AppSpacing.space4),
           SafeArea(
             top: false,
@@ -2661,12 +2745,105 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                       ),
                     ],
                   )
-                : FilledButton.icon(
-                    onPressed: _actionBusy || _deliveryBlockedByCancelledPrep
-                        ? null
-                        : () => _openCreateDelivery(o),
-                    icon: const Icon(Icons.local_shipping_outlined, size: 20),
-                    label: Text(l10n.deliveryCreateFromOrder),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (o.customerReceived) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: scheme.outlineVariant.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.inventory_2_outlined,
+                                size: 20,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  l10n.saleOrderCustomerReceivedHint,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.space2),
+                      ],
+                      Row(
+                        children: [
+                          if (_canToggleCustomerReceived(o)) ...[
+                            Expanded(
+                              child: o.customerReceived
+                                  ? OutlinedButton.icon(
+                                      onPressed: _actionBusy
+                                          ? null
+                                          : () => _toggleCustomerReceived(o),
+                                      icon: const Icon(
+                                        Icons.local_shipping_outlined,
+                                        size: 20,
+                                      ),
+                                      label: Text(
+                                        l10n.saleOrderEnableDeliveryAgain,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    )
+                                  : OutlinedButton.icon(
+                                      onPressed: _actionBusy
+                                          ? null
+                                          : () => _toggleCustomerReceived(o),
+                                      icon: const Icon(
+                                        Icons.handshake_outlined,
+                                        size: 20,
+                                      ),
+                                      label: Text(
+                                        l10n.saleOrderCustomerReceived,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                            ),
+                            if (!o.customerReceived)
+                              const SizedBox(width: AppSpacing.space2),
+                          ],
+                          if (!o.customerReceived)
+                            Expanded(
+                              flex: _canToggleCustomerReceived(o) ? 1 : 1,
+                              child: FilledButton.icon(
+                                onPressed: _actionBusy ||
+                                        _deliveryBlockedByCancelledPrep
+                                    ? null
+                                    : () => _openCreateDelivery(o),
+                                icon: const Icon(
+                                  Icons.local_shipping_outlined,
+                                  size: 20,
+                                ),
+                                label: Text(
+                                  l10n.deliveryCreateFromOrder,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
           ),
         ],

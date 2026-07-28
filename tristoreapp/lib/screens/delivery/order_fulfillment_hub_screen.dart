@@ -603,7 +603,7 @@ class _FulfillmentCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (hasPrep || hasDel) ...[
+            if (hasPrep || hasDel || o.customerReceived) ...[
               const SizedBox(height: AppSpacing.space2),
               if (wide)
                 IntrinsicHeight(
@@ -614,18 +614,25 @@ class _FulfillmentCard extends StatelessWidget {
                         Expanded(
                           child: _buildPrepLeg(context),
                         ),
-                      if (hasPrep && hasDel) const SizedBox(width: 10),
-                      if (hasDel)
+                      if (hasPrep && (hasDel || o.customerReceived))
+                        const SizedBox(width: 10),
+                      if (hasDel || o.customerReceived)
                         Expanded(
-                          child: _buildDelLeg(context),
+                          child: o.customerReceived && !hasDel
+                              ? _buildReceivedLeg(context)
+                              : _buildDelLeg(context),
                         ),
                     ],
                   ),
                 )
               else ...[
                 if (hasPrep) _buildPrepLeg(context),
-                if (hasPrep && hasDel) const SizedBox(height: 10),
-                if (hasDel) _buildDelLeg(context),
+                if (hasPrep && (hasDel || o.customerReceived))
+                  const SizedBox(height: 10),
+                if (hasDel || o.customerReceived)
+                  o.customerReceived && !hasDel
+                      ? _buildReceivedLeg(context)
+                      : _buildDelLeg(context),
               ],
             ],
           ],
@@ -676,17 +683,23 @@ class _FulfillmentCard extends StatelessWidget {
     final del = item.delivery!;
     final isMine =
         isFulfillmentLegMine(del.assignedUserId, currentUserId);
+    final received = item.saleOrder.customerReceived;
+    final bg = received
+        ? const Color(0xFFF1F5F9)
+        : const Color(0xFFE8F0FE);
     final panel = _DelPanel(
       delivery: del,
       l10n: l10n,
       hideTitle: !collapseInactiveLegs || isMine ? false : true,
+      customerReceived: received,
       onOpen: onOpenDelivery,
     );
     if (!collapseInactiveLegs || isMine) {
-      return _legPanelShell(const Color(0xFFE8F0FE), panel);
+      return _legPanelShell(bg, panel);
     }
     return _CollapsibleFulfillmentLeg(
       title: l10n.deliveryTitle,
+      titleAsReceivedChip: received,
       subtitle: fulfillmentLegSubtitle(
         l10n,
         assignedUserId: del.assignedUserId,
@@ -696,9 +709,44 @@ class _FulfillmentCard extends StatelessWidget {
         label: deliveryStatusLabel(del.status, l10n),
         tone: deliveryStatusTone(del.status),
       ),
-      backgroundColor: const Color(0xFFE8F0FE),
+      backgroundColor: bg,
       initiallyExpanded: false,
       child: panel,
+    );
+  }
+
+  Widget _buildReceivedLeg(BuildContext context) {
+    return _legPanelShell(
+      const Color(0xFFF1F5F9),
+      Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                l10n.fulfillmentDeliveryReceivedChip,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF475569),
+                    ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.saleOrderCustomerReceivedHint,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -730,6 +778,7 @@ class _CollapsibleFulfillmentLeg extends StatefulWidget {
     required this.initiallyExpanded,
     required this.child,
     this.trailing,
+    this.titleAsReceivedChip = false,
   });
 
   final String title;
@@ -738,6 +787,7 @@ class _CollapsibleFulfillmentLeg extends StatefulWidget {
   final bool initiallyExpanded;
   final Widget child;
   final Widget? trailing;
+  final bool titleAsReceivedChip;
 
   @override
   State<_CollapsibleFulfillmentLeg> createState() =>
@@ -782,10 +832,30 @@ class _CollapsibleFulfillmentLegState extends State<_CollapsibleFulfillmentLeg> 
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.title,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                        if (widget.titleAsReceivedChip)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              widget.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF475569),
+                                fontSize: 13,
+                              ),
+                            ),
+                          )
+                        else
+                          Text(
+                            widget.title,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
                         const SizedBox(height: 2),
                         Text(
                           widget.subtitle,
@@ -893,12 +963,14 @@ class _DelPanel extends StatelessWidget {
     required this.delivery,
     required this.l10n,
     this.hideTitle = false,
+    this.customerReceived = false,
     required this.onOpen,
   });
 
   final DeliveryPublic delivery;
   final AppLocalizations l10n;
   final bool hideTitle;
+  final bool customerReceived;
   final void Function(String id) onOpen;
 
   String? get _assigneeName {
@@ -928,10 +1000,32 @@ class _DelPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      l10n.deliveryTitle,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
+                    child: customerReceived
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                l10n.fulfillmentDeliveryReceivedChip,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF475569),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Text(
+                            l10n.deliveryTitle,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
                   ),
                   const SizedBox(width: 8),
                   statusBadge,

@@ -304,6 +304,7 @@ class SaleOrderPublic {
     this.linkedDeliveryId,
     this.notes,
     this.expectedDeliveryAt,
+    this.customerReceived = false,
     this.createdBy,
     this.updatedByUserId,
     this.updatedBy,
@@ -352,6 +353,8 @@ class SaleOrderPublic {
   final String? notes;
   /// ISO 8601 — thời gian dự kiến giao hàng (đơn bán).
   final String? expectedDeliveryAt;
+  /// true = khách đã nhận hàng, không cần tạo đơn giao.
+  final bool customerReceived;
   final SaleOrderCreatorBrief? createdBy;
   final String? updatedByUserId;
   final SaleOrderCreatorBrief? updatedBy;
@@ -491,6 +494,7 @@ class SaleOrderPublic {
       linkedDeliveryId: json['linkedDeliveryId'] as String?,
       notes: json['notes'] as String?,
       expectedDeliveryAt: json['expectedDeliveryAt'] as String?,
+      customerReceived: json['customerReceived'] as bool? ?? false,
       createdBy: byRaw is Map<String, dynamic>
           ? SaleOrderCreatorBrief.fromJson(byRaw)
           : null,

@@ -81,7 +81,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   @override
   void initState() {
     super.initState();
-    _checkinTabController = TabController(length: _checkinTypes.length, vsync: this);
+    _checkinTabController =
+        TabController(length: _checkinTypes.length, vsync: this);
     _noteCtrl.addListener(_onNotesChanged);
     _load();
     _loadUploadConfig();
@@ -205,8 +206,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   bool _terminal(String s) =>
       s == 'completed' || s == 'failed' || s == 'cancelled';
 
-  bool _isElevatedRole(String? role) =>
-      role == 'admin' || role == 'manager';
+  bool _isElevatedRole(String? role) => role == 'admin' || role == 'manager';
 
   Future<void> _showManagerStatusSheet(DeliveryPublic d) async {
     final l10n = AppLocalizations.of(context);
@@ -243,7 +243,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
       await _promptReasonThenStatus(picked);
       return;
     }
-    await _patchStatus(picked, successMessage: l10n.deliveryChangeStatusSuccess);
+    await _patchStatus(picked,
+        successMessage: l10n.deliveryChangeStatusSuccess);
   }
 
   Widget _buildPinnedStatusActions(
@@ -324,7 +325,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
             if (d.status == 'delivering') ...[
               if (next != null) const SizedBox(height: 8),
               OutlinedButton(
-                onPressed: _busy ? null : () => _promptReasonThenStatus('failed'),
+                onPressed:
+                    _busy ? null : () => _promptReasonThenStatus('failed'),
                 child: Text(l10n.deliveryStatusFailed),
               ),
             ],
@@ -343,7 +345,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     setState(() => _busy = true);
     try {
       final p = context.read<DeliveryProvider>();
-      final d = await p.patchStatus(widget.deliveryId, status: next, reason: reason);
+      final d =
+          await p.patchStatus(widget.deliveryId, status: next, reason: reason);
       if (!mounted) return;
       if (d != null) {
         setState(() => _d = d);
@@ -381,8 +384,11 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.ok)),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.ok)),
         ],
       ),
     );
@@ -448,7 +454,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     final p = context.read<DeliveryProvider>();
     final l10n = AppLocalizations.of(context);
     try {
-      final updated = await p.patch(widget.deliveryId, {'assignedUserId': userId});
+      final updated =
+          await p.patch(widget.deliveryId, {'assignedUserId': userId});
       if (!mounted) return;
       if (updated != null) {
         setState(() {
@@ -544,7 +551,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
 
     final iso = scheduled?.toIso8601String();
     final currentIso = d.scheduledAt;
-    if (iso == currentIso || (iso == null && (currentIso == null || currentIso.isEmpty))) {
+    if (iso == currentIso ||
+        (iso == null && (currentIso == null || currentIso.isEmpty))) {
       return;
     }
 
@@ -703,13 +711,15 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                       spacing: 4,
                       children: [
                         TextButton(
-                          onPressed: _busy || _savingMeta ? null : _pickScheduledAt,
+                          onPressed:
+                              _busy || _savingMeta ? null : _pickScheduledAt,
                           child: Text(l10n.edit),
                         ),
                         TextButton(
-                          onPressed: _busy || _savingMeta || _scheduledAt == null
-                              ? null
-                              : () => unawaited(_saveScheduledAt(null)),
+                          onPressed:
+                              _busy || _savingMeta || _scheduledAt == null
+                                  ? null
+                                  : () => unawaited(_saveScheduledAt(null)),
                           child: Text(l10n.deliveryClearSchedule),
                         ),
                       ],
@@ -742,9 +752,10 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                         const SizedBox(height: 4),
                         Text(
                           _priorityLabel(d.priority, l10n),
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                       ],
                     ),
@@ -757,8 +768,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
             value: _shippingCarrier,
             labelText: l10n.deliveryShippingCarrier,
             items: [null, ..._carrierOptions],
-            itemLabel: (v) =>
-                v == null ? l10n.deliveryCarrierNotChosen : v,
+            itemLabel: (v) => v == null ? l10n.deliveryCarrierNotChosen : v,
             enabled: !_busy && !_savingMeta,
             onChanged: (v) => unawaited(_saveShippingCarrier(v)),
           )
@@ -797,9 +807,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
         context: context,
         pick: pick,
         config: _uploadConfig,
-        tooLargeMessage: pick.isVideo
-            ? l10n.mediaVideoTooLarge
-            : l10n.mediaUploadFailed,
+        tooLargeMessage:
+            pick.isVideo ? l10n.mediaVideoTooLarge : l10n.mediaUploadFailed,
         tooLongMessage: l10n.mediaVideoTooLong,
       );
       if (!ok || !mounted) {
@@ -921,7 +930,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     }
   }
 
-  Future<void> _openPrepImageViewer(List<LinkedPreparationImage> images, int i) {
+  Future<void> _openPrepImageViewer(
+      List<LinkedPreparationImage> images, int i) {
     if (images.isEmpty) return Future.value();
     final safeIndex = i.clamp(0, images.length - 1);
     return Navigator.of(context).push<void>(
@@ -1017,7 +1027,10 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                           alignment: Alignment.center,
                           child: Text(
                             '+$hiddenCount',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1031,8 +1044,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
             }
 
             final children = <Widget>[];
-            final visibleThumbs =
-                hasOverflow ? maxSlots - 1 : images.length;
+            final visibleThumbs = hasOverflow ? maxSlots - 1 : images.length;
             for (var i = 0; i < visibleThumbs; i++) {
               if (i > 0) children.add(const SizedBox(width: thumbGap));
               children.add(thumbAt(i));
@@ -1090,7 +1102,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   Future<void> _copyText(String text, String snackMessage) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    AppMessenger.showSnackBar(context, 
+    AppMessenger.showSnackBar(
+      context,
       SnackBar(content: Text(snackMessage)),
     );
   }
@@ -1112,9 +1125,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
               deliveryManagerCanChangeStatus(_d!.status))
             IconButton(
               tooltip: l10n.deliveryChangeStatus,
-              onPressed: _loading || _busy
-                  ? null
-                  : () => _showManagerStatusSheet(_d!),
+              onPressed:
+                  _loading || _busy ? null : () => _showManagerStatusSheet(_d!),
               icon: const Icon(Icons.swap_vert_rounded),
             ),
           IconButton(
@@ -1148,7 +1160,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                         ),
                         if (_busy)
                           const Positioned.fill(
-                            child: ModalBarrier(dismissible: false, color: Color(0x33000000)),
+                            child: ModalBarrier(
+                                dismissible: false, color: Color(0x33000000)),
                           ),
                         if (_busy)
                           const Center(child: CircularProgressIndicator()),
@@ -1187,7 +1200,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (d.deliveryCode != null && d.deliveryCode!.trim().isNotEmpty)
+                  if (d.deliveryCode != null &&
+                      d.deliveryCode!.trim().isNotEmpty)
                     Expanded(
                       child: Text(
                         '${l10n.deliveryDeliveryCode}: ${d.deliveryCode}',
@@ -1201,7 +1215,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                     )
                   else
                     const Spacer(),
-                  if (d.deliveryCode != null && d.deliveryCode!.trim().isNotEmpty)
+                  if (d.deliveryCode != null &&
+                      d.deliveryCode!.trim().isNotEmpty)
                     const SizedBox(width: 8),
                   DecoratedBox(
                     decoration: BoxDecoration(
@@ -1215,10 +1230,11 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                       ),
                       child: Text(
                         '${l10n.deliveryAmountDueLabel}: ${deliveryFormatMoney(d.saleOrder?.amountDue ?? 0)}',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface,
+                                ),
                       ),
                     ),
                   ),
@@ -1419,7 +1435,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
         if (!terminal) ...[
           const SizedBox(height: AppSpacing.space4),
           OutlinedButton(
-            onPressed: _busy ? null : () => _promptReasonThenStatus('cancelled'),
+            onPressed:
+                _busy ? null : () => _promptReasonThenStatus('cancelled'),
             style: OutlinedButton.styleFrom(
               foregroundColor: scheme.error,
               side: BorderSide(color: scheme.error.withValues(alpha: 0.65)),
@@ -1529,7 +1546,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                   )
                 : GridView.builder(
                     padding: EdgeInsets.zero,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
@@ -1556,8 +1574,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                           fit: StackFit.expand,
                           children: [
                             InkWell(
-                              onTap: () =>
-                                  _openCheckinImageViewer(imgs, i - pending.length),
+                              onTap: () => _openCheckinImageViewer(
+                                  imgs, i - pending.length),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [

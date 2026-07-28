@@ -194,15 +194,18 @@ class AppLocalizations {
   String get mediaUploadFailed => 'Không tải lên được file.';
   String get mediaVideoTooLong => 'Video vượt thời lượng cho phép.';
   String get mediaVideoTooLarge => 'Video vượt dung lượng cho phép.';
-  String mediaLimitsHint(int maxImageBytes, int maxVideoBytes, int maxVideoSec) {
+  String mediaLimitsHint(
+      int maxImageBytes, int maxVideoBytes, int maxVideoSec) {
     final imgMb = (maxImageBytes / (1024 * 1024)).round();
     final vidMb = (maxVideoBytes / (1024 * 1024)).round();
     return 'Ảnh tối đa ${imgMb}MB · Video tối đa ${vidMb}MB · Thời lượng video tối đa ${maxVideoSec}s';
   }
+
   String mediaImageLimitHint(int maxImageBytes) {
     final imgMb = (maxImageBytes / (1024 * 1024)).round();
     return 'Ảnh tối đa ${imgMb}MB';
   }
+
   String get mediaViewerClose => 'Đóng';
   String get mediaViewerDownload => 'Tải về';
   String get mediaViewerDownloading => 'Đang lưu…';
@@ -307,6 +310,16 @@ class AppLocalizations {
   String get deliveryAssignMe => 'Nhận đơn';
   String get deliveryCreateFromOrder => 'Tạo đơn giao hàng';
   String get deliveryViewOrder => 'Xem đơn giao hàng';
+  String get saleOrderCustomerReceived => 'Đã nhận';
+  String get saleOrderCustomerReceivedHint =>
+      'Khách đã nhận hàng — không tạo đơn giao.';
+  String get saleOrderEnableDeliveryAgain => 'Bật giao hàng';
+  String get saleOrderEnableDeliveryConfirmTitle => 'Bật lại giao hàng?';
+  String get saleOrderEnableDeliveryConfirmBody =>
+      'Đơn sẽ cho phép tạo đơn giao hàng trở lại. Tiếp tục?';
+  String get saleOrderCustomerReceivedMarked => 'Đã đánh dấu nhận hàng.';
+  String get saleOrderDeliveryEnabledAgain => 'Đã bật lại giao hàng.';
+  String get fulfillmentDeliveryReceivedChip => 'Giao hàng · Đã nhận';
   String get deliveryCreateTitle => 'Tạo đơn giao';
   String get deliveryPublicBoard => 'Đưa lên bảng chung';
   String get deliveryDirectAssign => 'Giao trực tiếp (chọn người)';
@@ -693,8 +706,7 @@ class AppLocalizations {
   String get saleOrderRecordPaymentPendingTitle =>
       'Ghi nhận chờ quản lý xác nhận';
   String get saleOrderRecordPaymentSuccess => 'Đã gửi ghi nhận.';
-  String get saleOrderRecordPaymentConfirmSuccess =>
-      'Đã xác nhận thanh toán.';
+  String get saleOrderRecordPaymentConfirmSuccess => 'Đã xác nhận thanh toán.';
   String get saleOrderRecordPaymentInvalidAmount =>
       'Nhập số tiền hợp lệ (đồng).';
   String get saleOrderRecordPaymentAmountTooHigh =>

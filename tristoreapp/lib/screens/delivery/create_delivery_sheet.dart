@@ -67,8 +67,8 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
     super.initState();
     _selected = {for (final l in o.lines) l.id: true};
     _qty = {for (final l in o.lines) l.id: l.quantity};
-    _scheduled =
-        _expectedDeliveryFromOrder(o) ?? DateTime.now().add(const Duration(days: 2));
+    _scheduled = _expectedDeliveryFromOrder(o) ??
+        DateTime.now().add(const Duration(days: 2));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUsers();
       _loadCarriers();
@@ -130,9 +130,8 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
         child: Wrap(
           spacing: 6,
           runSpacing: 6,
-          children: badges
-              .map((b) => StatusBadge(label: b.$1, tone: b.$2))
-              .toList(),
+          children:
+              badges.map((b) => StatusBadge(label: b.$1, tone: b.$2)).toList(),
         ),
       ),
     ];
@@ -177,7 +176,8 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
       }
     }
     if (selections.isEmpty) {
-      AppMessenger.showSnackBar(context, SnackBar(content: Text(l10n.deliverySelectLines)));
+      AppMessenger.showSnackBar(
+          context, SnackBar(content: Text(l10n.deliverySelectLines)));
       return;
     }
 
@@ -187,8 +187,10 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
       'lineSelections': selections,
       'isPublicBoard': assign.isPublicBoard,
       'priority': _priority,
-      if (_noteCtrl.text.trim().isNotEmpty) 'deliveryNote': _noteCtrl.text.trim(),
-      if (_scheduled != null) 'scheduledAt': _scheduled!.toUtc().toIso8601String(),
+      if (_noteCtrl.text.trim().isNotEmpty)
+        'deliveryNote': _noteCtrl.text.trim(),
+      if (_scheduled != null)
+        'scheduledAt': _scheduled!.toUtc().toIso8601String(),
       if (!assign.isPublicBoard && assign.assignedUserId != null)
         'assignedUserId': assign.assignedUserId,
       if (_shippingCarrier != null && _shippingCarrier!.trim().isNotEmpty)
@@ -201,14 +203,17 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
       await p.create(body);
       if (!mounted) return;
       await context.read<PreparationProvider>().refresh();
-      AppMessenger.showSnackBar(context, SnackBar(content: Text(l10n.deliveryCreateSuccess)));
+      AppMessenger.showSnackBar(
+          context, SnackBar(content: Text(l10n.deliveryCreateSuccess)));
       Navigator.of(context).pop(true);
     } on DioException catch (e) {
       AppMessenger.showSnackBar(
         context,
         SnackBar(
           content: Text(
-            e.response?.data?.toString() ?? e.message ?? l10n.deliveryCreateFailed,
+            e.response?.data?.toString() ??
+                e.message ??
+                l10n.deliveryCreateFailed,
           ),
         ),
       );
@@ -265,55 +270,56 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
               onChanged: (v) => setState(() => _assignTarget = v),
             ),
             const SizedBox(height: AppSpacing.space3),
-            Text(l10n.deliverySelectLines, style: Theme.of(context).textTheme.titleSmall),
+            Text(l10n.deliverySelectLines,
+                style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             for (final l in o.lines)
               AppSurfaceCard(
-                  margin: const EdgeInsets.only(bottom: AppSpacing.space2),
-                  padding: const EdgeInsets.all(AppSpacing.space2),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _selected[l.id] ?? false,
-                        onChanged: _submitting
-                            ? null
-                            : (v) => setState(() => _selected[l.id] = v ?? false),
-                        title: Text(l.productName ?? l.productId),
-                        subtitle: Text('Tối đa: ${l.quantity}'),
+                margin: const EdgeInsets.only(bottom: AppSpacing.space2),
+                padding: const EdgeInsets.all(AppSpacing.space2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _selected[l.id] ?? false,
+                      onChanged: _submitting
+                          ? null
+                          : (v) => setState(() => _selected[l.id] = v ?? false),
+                      title: Text(l.productName ?? l.productId),
+                      subtitle: Text('Tối đa: ${l.quantity}'),
+                    ),
+                    ..._lineBadgeSection(l),
+                    if (_selected[l.id] == true)
+                      Row(
+                        children: [
+                          const Text('Số lượng giao:'),
+                          IconButton(
+                            onPressed: _submitting || (_qty[l.id] ?? 1) <= 1
+                                ? null
+                                : () => setState(() {
+                                      _qty[l.id] = (_qty[l.id] ?? 1) - 1;
+                                    }),
+                            icon: const Icon(Icons.remove_circle_outline),
+                          ),
+                          Text(
+                            '${_qty[l.id] ?? l.quantity}',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          IconButton(
+                            onPressed: _submitting ||
+                                    (_qty[l.id] ?? l.quantity) >= l.quantity
+                                ? null
+                                : () => setState(() {
+                                      final cur = _qty[l.id] ?? l.quantity;
+                                      _qty[l.id] = cur + 1;
+                                    }),
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
+                        ],
                       ),
-                      ..._lineBadgeSection(l),
-                      if (_selected[l.id] == true)
-                        Row(
-                          children: [
-                            const Text('Số lượng giao:'),
-                            IconButton(
-                              onPressed: _submitting || (_qty[l.id] ?? 1) <= 1
-                                  ? null
-                                  : () => setState(() {
-                                        _qty[l.id] = (_qty[l.id] ?? 1) - 1;
-                                      }),
-                              icon: const Icon(Icons.remove_circle_outline),
-                            ),
-                            Text(
-                              '${_qty[l.id] ?? l.quantity}',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            IconButton(
-                              onPressed: _submitting ||
-                                      (_qty[l.id] ?? l.quantity) >= l.quantity
-                                  ? null
-                                  : () => setState(() {
-                                        final cur = _qty[l.id] ?? l.quantity;
-                                        _qty[l.id] = cur + 1;
-                                      }),
-                              icon: const Icon(Icons.add_circle_outline),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
+                  ],
+                ),
               ),
             const SizedBox(height: AppSpacing.space2),
             Row(
@@ -332,7 +338,8 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
                       child: Text(
                         _scheduled == null
                             ? '—'
-                            : DateFormat('dd/MM/yyyy HH:mm').format(_scheduled!),
+                            : DateFormat('dd/MM/yyyy HH:mm')
+                                .format(_scheduled!),
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                     ),
@@ -347,8 +354,7 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
                     items: const ['low', 'normal', 'high', 'urgent'],
                     itemLabel: (v) => deliveryPriorityLabel(v, l10n),
                     enabled: !_submitting,
-                    onChanged: (v) =>
-                        setState(() => _priority = v ?? 'normal'),
+                    onChanged: (v) => setState(() => _priority = v ?? 'normal'),
                   ),
                 ),
               ],
@@ -358,8 +364,7 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
               value: _shippingCarrier,
               labelText: l10n.deliveryShippingCarrier,
               items: [null, ..._carriers],
-              itemLabel: (v) =>
-                  v == null ? l10n.deliveryCarrierNotChosen : v,
+              itemLabel: (v) => v == null ? l10n.deliveryCarrierNotChosen : v,
               enabled: !_submitting,
               onChanged: (v) => setState(() => _shippingCarrier = v),
             ),
