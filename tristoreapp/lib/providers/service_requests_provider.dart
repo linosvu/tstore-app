@@ -17,6 +17,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? _error;
   String _tab = 'support';
   String? _statusFilter;
+  String? _supportStaffUserId;
   bool _overdueOnly = false;
   String _search = '';
 
@@ -32,6 +33,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? get error => _error;
   String get tab => _tab;
   String? get statusFilter => _statusFilter;
+  String? get supportStaffUserId => _supportStaffUserId;
   bool get overdueOnly => _overdueOnly;
   String get search => _search;
 
@@ -44,6 +46,11 @@ class ServiceRequestsProvider extends ChangeNotifier {
   void setStatusFilter(String? status) {
     _statusFilter = status;
     _overdueOnly = false;
+    notifyListeners();
+  }
+
+  void setSupportStaffUserId(String? userId) {
+    _supportStaffUserId = userId;
     notifyListeners();
   }
 
@@ -82,6 +89,9 @@ class ServiceRequestsProvider extends ChangeNotifier {
     };
     if (_statusFilter != null && _statusFilter!.isNotEmpty) {
       q['status'] = _statusFilter;
+    }
+    if (_supportStaffUserId != null && _supportStaffUserId!.isNotEmpty) {
+      q['supportStaffUserId'] = _supportStaffUserId;
     }
     final st = _search.trim();
     if (st.isNotEmpty) q['search'] = st;
@@ -124,9 +134,13 @@ class ServiceRequestsProvider extends ChangeNotifier {
     return ServiceRequestPublic.fromJson(data);
   }
 
-  Future<ServiceTicketPublic?> fetchTicket(String id) async {
+  Future<ServiceTicketPublic?> fetchTicket(
+    String id, {
+    bool includeDeleted = false,
+  }) async {
     final res = await _api.get<Map<String, dynamic>>(
       '/admin/service-tickets/$id',
+      queryParameters: includeDeleted ? {'includeDeleted': 'true'} : null,
     );
     final data = res.data;
     if (data == null) return null;
@@ -225,6 +239,36 @@ class ServiceRequestsProvider extends ChangeNotifier {
     final data = res.data;
     if (data == null) return null;
     return TicketSignaturePublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> removeSignature(
+    String ticketId,
+    String signatureId,
+  ) async {
+    final res = await _api.delete<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/signatures/$signatureId',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> softDeleteTicket(String ticketId) async {
+    final res = await _api.delete<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> restoreTicket(String ticketId) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/restore',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
   }
 
   Future<ServiceTicketPublic?> ticketAction(

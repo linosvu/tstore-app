@@ -71,7 +71,6 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   String? _assigneeId;
   String _priority = 'normal';
   String? _shippingCarrier;
-  DateTime? _scheduledAt;
 
   static const List<String> _checkinTypes = [
     'received',
@@ -121,16 +120,10 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     });
   }
 
-  DateTime? _parseScheduledAt(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    return DateTime.tryParse(iso);
-  }
-
   void _syncLocalFieldsFromDelivery(DeliveryPublic d) {
     _assigneeId = d.assignedUserId;
     _priority = d.priority;
     _shippingCarrier = d.shippingCarrier;
-    _scheduledAt = _parseScheduledAt(d.scheduledAt);
   }
 
   bool _canEditDelivery(DeliveryPublic d) => !_terminal(d.status);
@@ -545,70 +538,6 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     }
   }
 
-  Future<void> _saveScheduledAt(DateTime? scheduled) async {
-    final d = _d;
-    if (d == null || _savingMeta || !_canEditDelivery(d)) return;
-
-    final iso = scheduled?.toIso8601String();
-    final currentIso = d.scheduledAt;
-    if (iso == currentIso ||
-        (iso == null && (currentIso == null || currentIso.isEmpty))) {
-      return;
-    }
-
-    final prev = _scheduledAt;
-    setState(() => _scheduledAt = scheduled);
-    _savingMeta = true;
-    final p = context.read<DeliveryProvider>();
-    final l10n = AppLocalizations.of(context);
-    try {
-      final updated = await p.patch(widget.deliveryId, {'scheduledAt': iso});
-      if (!mounted) return;
-      if (updated != null) {
-        setState(() {
-          _d = updated;
-          _scheduledAt = _parseScheduledAt(updated.scheduledAt);
-        });
-      }
-    } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() => _scheduledAt = prev);
-      final data = e.response?.data;
-      String msg = e.message ?? l10n.error;
-      if (data is Map && data['message'] != null) {
-        msg = data['message'].toString();
-      }
-      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
-    } finally {
-      if (mounted) setState(() => _savingMeta = false);
-    }
-  }
-
-  Future<void> _pickScheduledAt() async {
-    final d = _d;
-    if (d == null || !_canEditDelivery(d) || _savingMeta) return;
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _scheduledAt ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_scheduledAt ?? DateTime.now()),
-    );
-    if (time == null || !mounted) return;
-    final next = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-    await _saveScheduledAt(next);
-  }
-
   Future<void> _saveShippingCarrier(String? carrier) async {
     final d = _d;
     if (d == null || _savingMeta || !_canEditDelivery(d)) return;
@@ -671,7 +600,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     ColorScheme scheme,
   ) {
     final canEdit = _canEditDelivery(d);
-    final scheduledIso = _scheduledAt?.toIso8601String();
+    final scheduledIso = d.expectedDeliveryAt?.trim();
+    final hasSchedule = scheduledIso != null && scheduledIso.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -695,7 +625,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                           fontWeight: FontWeight.w600,
                         ),
                   ),
-                  if (scheduledIso != null) ...[
+                  if (hasSchedule) ...[
                     const SizedBox(height: 6),
                     DeliveryCountdownTicker(
                       scheduledAtIso: scheduledIso,
@@ -706,25 +636,13 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
                           ),
                     ),
                   ],
-                  if (canEdit) ...[
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        TextButton(
-                          onPressed:
-                              _busy || _savingMeta ? null : _pickScheduledAt,
-                          child: Text(l10n.edit),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Chỉnh trên đơn hàng',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
-                        TextButton(
-                          onPressed:
-                              _busy || _savingMeta || _scheduledAt == null
-                                  ? null
-                                  : () => unawaited(_saveScheduledAt(null)),
-                          child: Text(l10n.deliveryClearSchedule),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ],
               ),
             ),

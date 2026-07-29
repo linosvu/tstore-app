@@ -47,6 +47,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   String? _statusFilter;
   String? _paymentFilter;
   bool _filtersExpanded = false;
+  bool _includeDeleted = false;
   int _scopeSegment = 0;
 
   static const _primaryStatusFilters = <String?>[
@@ -63,6 +64,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   String? _dateFrom;
   String? _dateTo;
   static const _scopeValues = ['all', 'mine'];
+
+  bool _isElevated(BuildContext context) {
+    final u = context.read<AuthProvider>().user;
+    return u != null && (u.role == 'admin' || u.role == 'manager');
+  }
 
   bool _isStaffOrAbove(BuildContext context) {
     final u = context.read<AuthProvider>().user;
@@ -160,6 +166,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     }
     if (_statusFilter != null) q['status'] = _statusFilter;
     if (_paymentFilter != null) q['paymentFilter'] = _paymentFilter;
+    if (_includeDeleted) q['includeDeleted'] = 'true';
     final searchTrim = _searchCtrl.text.trim();
     if (searchTrim.isNotEmpty) q['search'] = searchTrim;
     if (_dateFrom != null && _dateFrom!.isNotEmpty) q['from'] = _dateFrom;
@@ -621,6 +628,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         ...primaryChips.expand((w) => [w, gap]),
         ...extraChips.expand((w) => [w, gap]),
         _paymentChip('unpaid', l10n.ordersFilterPaymentUnpaid, scheme),
+        if (_isElevated(context)) ...[
+          gap,
+          FilterChip(
+            label: const Text('Đã xóa'),
+            selected: _includeDeleted,
+            onSelected: (v) {
+              setState(() => _includeDeleted = v);
+              _load(reset: true);
+            },
+          ),
+        ],
         gap,
         _filtersToggleChip(
           l10n.ordersFilterShowLess,

@@ -43,6 +43,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   int _feeAmount = 0;
   DateTime _appointmentDate = DateTime.now().add(const Duration(days: 1));
   String? _managerUserId;
+  String? _supportStaffUserId;
   String? _staffUserId;
   List<(String, String)> _users = [];
   final List<Map<String, String>> _attachments = [];
@@ -59,6 +60,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
       if (me != null) {
         setState(() {
           _managerUserId = me.id;
+          _supportStaffUserId = me.id;
           _staffUserId = me.id;
         });
       }
@@ -148,10 +150,23 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
       );
       return;
     }
+    if (_supportStaffUserId == null) {
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Chọn nhân viên hỗ trợ.')),
+      );
+      return;
+    }
     if (_staffUserId == null) {
       AppMessenger.showSnackBar(
         context,
-        const SnackBar(content: Text('Chọn nhân viên xử lý.')),
+        SnackBar(
+          content: Text(
+            _ticketType == 'repair'
+                ? 'Chọn nhân viên sửa chữa.'
+                : 'Chọn nhân viên xử lý.',
+          ),
+        ),
       );
       return;
     }
@@ -171,6 +186,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         'issueDescription': _issueCtrl.text.trim(),
         if (_attachments.isNotEmpty) 'attachments': _attachments,
         if (_managerUserId != null) 'managerUserId': _managerUserId,
+        'supportStaffUserId': _supportStaffUserId,
         'ticketType': _ticketType,
         'isFree': _isFree,
         'feeAmount': _isFree ? 0 : _feeAmount,
@@ -393,7 +409,22 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: l10n.serviceStaff,
+            title: l10n.serviceSupportStaff,
+            child: _loadingUsers
+                ? const LinearProgressIndicator()
+                : TsDropdownFieldNullable<String>(
+                    value: _supportStaffUserId,
+                    items: userIds,
+                    itemLabel: (id) =>
+                        id == null ? '—' : (nameOf[id] ?? id),
+                    onChanged: (v) => setState(() => _supportStaffUserId = v),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: _ticketType == 'repair'
+                ? l10n.serviceRepairStaff
+                : l10n.serviceStaff,
             child: _loadingUsers
                 ? const LinearProgressIndicator()
                 : TsDropdownFieldNullable<String>(

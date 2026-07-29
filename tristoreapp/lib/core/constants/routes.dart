@@ -6,6 +6,7 @@ import '../../screens/auth/login_screen.dart';
 import '../../screens/delivery/delivery_screen.dart';
 import '../../screens/main_shell.dart';
 import '../../screens/orders/orders_list_screen.dart';
+import '../../screens/orders/repair_orders_screen.dart';
 import '../../screens/products/products_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/dev/design_system_gallery_screen.dart';
@@ -22,6 +23,7 @@ class AppRoutes {
 
   static const String orders = '/orders';
   static const String delivery = '/delivery';
+  static const String repairs = '/repairs';
   static const String profile = '/profile';
   static const String notifications = '/notifications';
   static const String settings = '/settings';
@@ -39,6 +41,7 @@ class AppRoutes {
           ),
       orders: (context) => const OrdersListScreen(),
       delivery: (context) => const DeliveryScreen(),
+      repairs: (context) => const RepairOrdersScreen(),
       profile: (context) => const ProfileScreen(),
       notifications: (context) => const NotificationsScreen(),
       settings: (context) => const SettingsScreen(),

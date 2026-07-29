@@ -559,15 +559,12 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
   }
 
   String? _effectiveExpectedLabel(PreparationOrderPublic item) {
-    final fromDel = item.linkedDeliveryScheduledAt?.trim();
-    final fromOrder = item.saleOrder?.expectedDeliveryAt?.trim();
-    final iso = (fromDel != null && fromDel.isNotEmpty) ? fromDel : fromOrder;
-    return deliveryScheduledFormatted(iso);
+    return deliveryScheduledFormatted(item.saleOrder?.expectedDeliveryAt);
   }
 
   bool _hasOrderDeliveryContext(PreparationOrderPublic item) {
-    final hasIso = (item.linkedDeliveryScheduledAt?.trim().isNotEmpty ?? false) ||
-        (item.saleOrder?.expectedDeliveryAt?.trim().isNotEmpty ?? false);
+    final hasIso =
+        (item.saleOrder?.expectedDeliveryAt ?? '').trim().isNotEmpty;
     final hasOrderNotes = (item.saleOrder?.notes ?? '').trim().isNotEmpty;
     return hasIso || hasOrderNotes;
   }
@@ -658,10 +655,9 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if ((item.linkedDeliveryScheduledAt?.trim().isNotEmpty ??
-                          false) ||
-                      (item.saleOrder?.expectedDeliveryAt?.trim().isNotEmpty ??
-                          false)) ...[
+                  if ((item.saleOrder?.expectedDeliveryAt ?? '')
+                      .trim()
+                      .isNotEmpty) ...[
                     Text(
                       l10n.saleOrderExpectedDeliveryTitle,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -675,10 +671,9 @@ class _PreparationDetailScreenState extends State<PreparationDetailScreen> {
                     ),
                   ],
                   if ((item.saleOrder?.notes ?? '').trim().isNotEmpty) ...[
-                    if ((item.linkedDeliveryScheduledAt?.trim().isNotEmpty ??
-                            false) ||
-                        (item.saleOrder?.expectedDeliveryAt?.trim().isNotEmpty ??
-                            false))
+                    if ((item.saleOrder?.expectedDeliveryAt ?? '')
+                        .trim()
+                        .isNotEmpty)
                       const SizedBox(height: AppSpacing.space2),
                     Text(
                       l10n.prepOrderNotesFromSale,

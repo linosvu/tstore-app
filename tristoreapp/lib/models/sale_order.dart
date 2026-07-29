@@ -311,6 +311,7 @@ class SaleOrderPublic {
     this.managedByUserId,
     this.managedBy,
     this.confirmedAt,
+    this.deletedAt,
     required this.createdAt,
     required this.updatedAt,
     required this.lines,
@@ -361,6 +362,8 @@ class SaleOrderPublic {
   final String? managedByUserId;
   final SaleOrderCreatorBrief? managedBy;
   final String? confirmedAt;
+  /// Soft-delete timestamp (null = còn hiệu lực).
+  final String? deletedAt;
   final String createdAt;
   final String updatedAt;
   final List<SaleOrderLinePublic> lines;
@@ -454,6 +457,8 @@ class SaleOrderPublic {
       isKiotVietOrder &&
       (managedByUserId == null || managedByUserId!.isEmpty);
 
+  bool get isDeleted => deletedAt != null && deletedAt!.trim().isNotEmpty;
+
   factory SaleOrderPublic.fromJson(Map<String, dynamic> json) {
     final linesRaw = json['lines'];
     final lines = linesRaw is List
@@ -509,6 +514,7 @@ class SaleOrderPublic {
             )
           : null,
       confirmedAt: json['confirmedAt'] as String?,
+      deletedAt: json['deletedAt'] as String?,
       createdAt: json['createdAt'] as String,
       updatedAt: json['updatedAt'] as String,
       lines: lines,

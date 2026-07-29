@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:tstore/core/utils/product_image_compress.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/widgets/media_tile.dart';
+import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
@@ -53,6 +54,59 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
   List<TicketSignaturePublic> get _existing => widget.signatures
       .where((s) => s.stage == widget.stage && s.signer == widget.signer)
       .toList();
+
+  Future<void> _previewSignature(TicketSignaturePublic sig) async {
+    final item = MediaViewerItem(url: sig.imageUrl, mediaType: 'image');
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerPage(items: [item], initialIndex: 0),
+      ),
+    );
+  }
+
+  Future<void> _deleteSignature(TicketSignaturePublic sig) async {
+    if (_busy || widget.readOnly) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa chữ ký'),
+        content: const Text('Chữ ký đã lưu sẽ bị gỡ khỏi bước này. Tiếp tục?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<ServiceRequestsProvider>().removeSignature(
+            widget.ticketId,
+            sig.id,
+          );
+      if (!mounted) return;
+      widget.onChanged();
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Đã xóa chữ ký.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _save() async {
     if (_busy || widget.readOnly) return;
@@ -144,23 +198,51 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                 itemCount: existing.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (context, i) {
-                  final url = resolveMediaUrl(existing[i].imageUrl);
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: 120,
-                      color: Colors.white,
-                      foregroundDecoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Image.network(
-                        url,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Center(
-                          child: Icon(Icons.draw_outlined, size: 28),
+                  final sig = existing[i];
+                  final url = resolveMediaUrl(sig.imageUrl);
+                  return SizedBox(
+                    width: 120,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () => _previewSignature(sig),
+                              child: Container(
+                                foregroundDecoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade300),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Image.network(
+                                  url,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const Center(
+                                    child: Icon(Icons.draw_outlined, size: 28),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (!widget.readOnly)
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: IconButton(
+                              visualDensity: VisualDensity.compact,
+                              iconSize: 18,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.black54,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _busy ? null : () => _deleteSignature(sig),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },

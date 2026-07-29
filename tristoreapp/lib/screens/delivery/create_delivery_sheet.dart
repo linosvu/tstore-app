@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tstore/core/constants/app_spacing.dart';
@@ -45,7 +44,6 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
   late final Map<String, bool> _selected;
   late final Map<String, int> _qty;
   String _assignTarget = kAssignTargetBoard;
-  DateTime? _scheduled;
   String _priority = 'normal';
   bool _loadingUsers = false;
   bool _submitting = false;
@@ -55,20 +53,11 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
 
   SaleOrderPublic get o => widget.order;
 
-  /// Thời gian dự kiến giao hàng trên đơn bán (local).
-  DateTime? _expectedDeliveryFromOrder(SaleOrderPublic order) {
-    final raw = order.expectedDeliveryAt?.trim();
-    if (raw == null || raw.isEmpty) return null;
-    return DateTime.tryParse(raw)?.toLocal();
-  }
-
   @override
   void initState() {
     super.initState();
     _selected = {for (final l in o.lines) l.id: true};
     _qty = {for (final l in o.lines) l.id: l.quantity};
-    _scheduled = _expectedDeliveryFromOrder(o) ??
-        DateTime.now().add(const Duration(days: 2));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUsers();
       _loadCarriers();
@@ -137,28 +126,6 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
     ];
   }
 
-  Future<void> _pickSchedule() async {
-    final now = DateTime.now();
-    final first = now.subtract(const Duration(days: 1));
-    final raw = _scheduled ?? now;
-    final initial = raw.isBefore(first) ? first : raw;
-    final d = await showDatePicker(
-      context: context,
-      firstDate: first,
-      lastDate: now.add(const Duration(days: 365)),
-      initialDate: DateTime(initial.year, initial.month, initial.day),
-    );
-    if (d == null || !mounted) return;
-    final t = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_scheduled ?? now),
-    );
-    if (t == null || !mounted) return;
-    setState(() {
-      _scheduled = DateTime(d.year, d.month, d.day, t.hour, t.minute);
-    });
-  }
-
   Future<void> _submit() async {
     final l10n = AppLocalizations.of(context);
     final selections = <Map<String, dynamic>>[];
@@ -189,8 +156,6 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
       'priority': _priority,
       if (_noteCtrl.text.trim().isNotEmpty)
         'deliveryNote': _noteCtrl.text.trim(),
-      if (_scheduled != null)
-        'scheduledAt': _scheduled!.toUtc().toIso8601String(),
       if (!assign.isPublicBoard && assign.assignedUserId != null)
         'assignedUserId': assign.assignedUserId,
       if (_shippingCarrier != null && _shippingCarrier!.trim().isNotEmpty)
@@ -327,21 +292,15 @@ class _CreateDeliverySheetState extends State<CreateDeliverySheet> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: InkWell(
-                    onTap: _submitting ? null : _pickSchedule,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: l10n.deliveryScheduled,
-                        border: const OutlineInputBorder(),
-                      ),
-                      child: Text(
-                        _scheduled == null
-                            ? '—'
-                            : DateFormat('dd/MM/yyyy HH:mm')
-                                .format(_scheduled!),
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: l10n.deliveryScheduled,
+                      border: const OutlineInputBorder(),
+                      helperText: 'Chỉnh trên đơn hàng',
+                    ),
+                    child: Text(
+                      deliveryScheduledFormatted(o.expectedDeliveryAt) ?? '—',
+                      style: Theme.of(context).textTheme.bodyLarge,
                     ),
                   ),
                 ),

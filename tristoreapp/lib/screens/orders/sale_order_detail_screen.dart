@@ -67,7 +67,9 @@ bool _paymentCountsAsCollected(SaleOrderPaymentPublic p) =>
 String _localizedPaymentMethod(String raw, AppLocalizations l10n) {
   final s = raw.trim();
   if (s.isEmpty) return '—';
-  if (s == 'Hẹn thu') return l10n.saleOrderPaymentScheduleReminderLabel;
+  if (s == 'Hẹn thu' || s == 'Công nợ' || s == 'Đã hẹn thu' || s == 'Đã ghi công nợ') {
+    return l10n.saleOrderPaymentScheduleReminderLabel;
+  }
   switch (s) {
     case '1':
     case 'Cash':
@@ -254,14 +256,20 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
   bool _canOpenEdit(SaleOrderPublic o) => _canEdit(o) || _canEditKiotViet(o);
 
   bool _canCancel(SaleOrderPublic o) =>
-      o.status == 'draft' || o.status == 'confirmed';
+      !o.isDeleted && (o.status == 'draft' || o.status == 'confirmed');
+
+  bool _canSoftDelete(SaleOrderPublic o) =>
+      _isElevatedRole(context.read<AuthProvider>().user?.role) && !o.isDeleted;
+
+  bool _canRestore(SaleOrderPublic o) =>
+      _isElevatedRole(context.read<AuthProvider>().user?.role) && o.isDeleted;
 
   bool _canAssignOrderToMe(SaleOrderPublic o) =>
       o.isOnManagementBoard &&
       (o.status == 'confirmed' || o.status == 'delivery');
 
   bool _canShowFinishOrderButton(SaleOrderPublic o) =>
-      o.status == 'confirmed' || o.status == 'delivery';
+      !o.isDeleted && (o.status == 'confirmed' || o.status == 'delivery');
 
   String? _finishOrderBlockedMessage(SaleOrderPublic o, AppLocalizations l10n) {
     if (!_canShowFinishOrderButton(o)) return null;
@@ -936,8 +944,11 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       final auth = context.read<AuthProvider>();
       final deliveryProv = context.read<DeliveryProvider>();
       final prepProv = context.read<PreparationProvider>();
+      final role = auth.user?.role;
+      final includeDeleted = role == 'admin' || role == 'manager';
       final res = await auth.api.get<Map<String, dynamic>>(
         '/admin/sale-orders/${widget.orderId}',
+        queryParameters: includeDeleted ? {'includeDeleted': 'true'} : null,
       );
       if (!mounted) return;
       final data = res.data;
@@ -1251,6 +1262,100 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       AppMessenger.showSnackBar(context, 
         SnackBar(content: Text(msg)),
       );
+    }
+  }
+
+  Future<void> _softDeleteOrder(AppLocalizations l10n) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Xóa đơn hàng'),
+          content: const Text(
+            'Đơn sẽ bị ẩn khỏi danh sách (có thể khôi phục). '
+            'Đơn đang xác nhận/giao sẽ hoàn kho nếu là đơn nội bộ. Tiếp tục?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Xóa đơn'),
+            ),
+          ],
+        );
+      },
+    );
+    if (go != true || !mounted) return;
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.delete<Map<String, dynamic>>(
+        '/admin/sale-orders/${widget.orderId}',
+      );
+      if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        setState(() {
+          _order = SaleOrderPublic.fromJson(data);
+          _actionBusy = false;
+        });
+        _markListNeedsRefresh();
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã xóa đơn (soft delete).')),
+        );
+      } else {
+        setState(() => _actionBusy = false);
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _actionBusy = false);
+      final msg = e.response?.data is Map &&
+              (e.response!.data as Map)['message'] != null
+          ? (e.response!.data as Map)['message'].toString()
+          : (e.message ?? l10n.error);
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    }
+  }
+
+  Future<void> _restoreOrder(AppLocalizations l10n) async {
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.post<Map<String, dynamic>>(
+        '/admin/sale-orders/${widget.orderId}/restore',
+      );
+      if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        setState(() {
+          _order = SaleOrderPublic.fromJson(data);
+          _actionBusy = false;
+        });
+        _markListNeedsRefresh();
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã khôi phục đơn.')),
+        );
+      } else {
+        setState(() => _actionBusy = false);
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _actionBusy = false);
+      final msg = e.response?.data is Map &&
+              (e.response!.data as Map)['message'] != null
+          ? (e.response!.data as Map)['message'].toString()
+          : (e.message ?? l10n.error);
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
     }
   }
 
@@ -2847,35 +2952,71 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                   ),
           ),
         ],
-        if (_canCancel(o) || _canShowFinishOrderButton(o)) ...[
+        if (_canCancel(o) ||
+            _canShowFinishOrderButton(o) ||
+            _canSoftDelete(o) ||
+            _canRestore(o)) ...[
           const SizedBox(height: AppSpacing.space4),
           SafeArea(
             top: false,
             minimum: const EdgeInsets.only(bottom: AppSpacing.space2),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_canCancel(o)) ...[
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _actionBusy ? null : () => _cancelOrder(l10n),
-                      icon: const Icon(Icons.cancel_outlined, size: 20),
-                      label: Text(l10n.saleOrderDetailCancelOrder),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: scheme.error,
-                      ),
+                if (_canRestore(o))
+                  FilledButton.icon(
+                    onPressed:
+                        _actionBusy ? null : () => _restoreOrder(l10n),
+                    icon: const Icon(Icons.restore, size: 20),
+                    label: const Text('Khôi phục đơn'),
+                  ),
+                if (_canSoftDelete(o)) ...[
+                  if (_canRestore(o)) const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed:
+                        _actionBusy ? null : () => _softDeleteOrder(l10n),
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    label: const Text('Xóa đơn'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: scheme.error,
                     ),
                   ),
                 ],
-                if (_canShowFinishOrderButton(o)) ...[
-                  if (_canCancel(o)) const SizedBox(width: AppSpacing.space2),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _actionBusy
-                          ? null
-                          : () => _onFinishOrderPressed(o),
-                      icon: const Icon(Icons.check_circle_outline, size: 20),
-                      label: Text(l10n.saleOrderDetailCompleteOrder),
-                    ),
+                if (_canCancel(o) || _canShowFinishOrderButton(o)) ...[
+                  if (_canSoftDelete(o) || _canRestore(o))
+                    const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (_canCancel(o)) ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _actionBusy ? null : () => _cancelOrder(l10n),
+                            icon: const Icon(Icons.cancel_outlined, size: 20),
+                            label: Text(l10n.saleOrderDetailCancelOrder),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: scheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_canShowFinishOrderButton(o)) ...[
+                        if (_canCancel(o))
+                          const SizedBox(width: AppSpacing.space2),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _actionBusy
+                                ? null
+                                : () => _onFinishOrderPressed(o),
+                            icon: const Icon(
+                              Icons.check_circle_outline,
+                              size: 20,
+                            ),
+                            label: Text(l10n.saleOrderDetailCompleteOrder),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ],

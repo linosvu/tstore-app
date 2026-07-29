@@ -65,7 +65,6 @@ class PreparationOrderPublic {
     this.assignedUserId,
     this.assignedUser,
     this.notes,
-    this.linkedDeliveryScheduledAt,
     required this.images,
     required this.lines,
     this.saleOrder,
@@ -81,7 +80,6 @@ class PreparationOrderPublic {
   final String? assignedUserId;
   final SaleOrderCreatorBrief? assignedUser;
   final String? notes;
-  final String? linkedDeliveryScheduledAt;
   final List<PreparationImage> images;
   final List<PreparationOrderLinePublic> lines;
   final SaleOrderPublic? saleOrder;
@@ -104,7 +102,6 @@ class PreparationOrderPublic {
           ? SaleOrderCreatorBrief.fromJson(assigneeRaw)
           : null,
       notes: json['notes'] as String?,
-      linkedDeliveryScheduledAt: json['linkedDeliveryScheduledAt'] as String?,
       images: imgs is List
           ? imgs
               .map((e) => PreparationImage.fromJson(e as Map<String, dynamic>))

@@ -982,7 +982,8 @@ class _DelPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assignee = _assigneeName;
-    final scheduledLabel = deliveryScheduledFormatted(delivery.scheduledAt);
+    final scheduledLabel =
+        deliveryScheduledFormatted(delivery.expectedDeliveryAt);
     final statusBadge = StatusBadge(
       label: deliveryStatusLabel(delivery.status, l10n),
       tone: deliveryStatusTone(delivery.status),

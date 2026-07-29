@@ -169,14 +169,15 @@ class DeliveryCompactCard extends StatelessWidget {
                           color: scheme.onSurfaceVariant,
                         ),
                   ),
-                  if (d.scheduledAt != null && d.scheduledAt!.isNotEmpty) ...[
+                  if (d.expectedDeliveryAt != null &&
+                      d.expectedDeliveryAt!.trim().isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.space2),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
                           child: Text(
-                            '${l10n.deliveryScheduled}: ${deliveryScheduledFormatted(d.scheduledAt) ?? ''}',
+                            '${l10n.deliveryScheduled}: ${deliveryScheduledFormatted(d.expectedDeliveryAt) ?? ''}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall,
@@ -184,7 +185,7 @@ class DeliveryCompactCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         DeliveryCountdownTicker(
-                          scheduledAtIso: d.scheduledAt,
+                          scheduledAtIso: d.expectedDeliveryAt,
                           l10n: l10n,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: scheme.tertiary,

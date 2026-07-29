@@ -97,6 +97,8 @@ class ServiceRequestPublic {
     this.attachments = const [],
     this.managerUserId,
     this.managerName,
+    this.supportStaffUserId,
+    this.supportStaffName,
     required this.status,
     this.cancelReason,
     required this.createdByUserId,
@@ -120,6 +122,8 @@ class ServiceRequestPublic {
   final List<ServiceAttachment> attachments;
   final String? managerUserId;
   final String? managerName;
+  final String? supportStaffUserId;
+  final String? supportStaffName;
   final String status;
   final String? cancelReason;
   final String createdByUserId;
@@ -159,6 +163,8 @@ class ServiceRequestPublic {
           : const [],
       managerUserId: json['managerUserId'] as String?,
       managerName: json['managerName'] as String?,
+      supportStaffUserId: json['supportStaffUserId'] as String?,
+      supportStaffName: json['supportStaffName'] as String?,
       status: json['status'] as String? ?? 'new',
       cancelReason: json['cancelReason'] as String?,
       createdByUserId: json['createdByUserId'] as String? ?? '',
@@ -190,6 +196,8 @@ class ServiceRequestBrief {
     required this.issueDescription,
     this.attachments = const [],
     this.managerUserId,
+    this.supportStaffUserId,
+    this.supportStaffName,
     required this.status,
   });
 
@@ -205,6 +213,8 @@ class ServiceRequestBrief {
   final String issueDescription;
   final List<ServiceAttachment> attachments;
   final String? managerUserId;
+  final String? supportStaffUserId;
+  final String? supportStaffName;
   final String status;
 
   factory ServiceRequestBrief.fromJson(Map<String, dynamic> json) {
@@ -227,6 +237,8 @@ class ServiceRequestBrief {
             ]
           : const [],
       managerUserId: json['managerUserId'] as String?,
+      supportStaffUserId: json['supportStaffUserId'] as String?,
+      supportStaffName: json['supportStaffName'] as String?,
       status: json['status'] as String? ?? 'new',
     );
   }
@@ -236,6 +248,8 @@ class RepairDetailPublic {
   const RepairDetailPublic({
     required this.ticketId,
     this.receiveType,
+    this.receiveStaffUserId,
+    this.receiveStaffName,
     this.initialAssessment,
     this.extraNote,
     this.solution,
@@ -264,6 +278,8 @@ class RepairDetailPublic {
 
   final String ticketId;
   final String? receiveType;
+  final String? receiveStaffUserId;
+  final String? receiveStaffName;
   final String? initialAssessment;
   final String? extraNote;
   final String? solution;
@@ -293,6 +309,8 @@ class RepairDetailPublic {
     return RepairDetailPublic(
       ticketId: json['ticketId'] as String? ?? '',
       receiveType: json['receiveType'] as String?,
+      receiveStaffUserId: json['receiveStaffUserId'] as String?,
+      receiveStaffName: json['receiveStaffName'] as String?,
       initialAssessment: json['initialAssessment'] as String?,
       extraNote: json['extraNote'] as String?,
       solution: json['solution'] as String?,
@@ -446,6 +464,7 @@ class ServiceTicketPublic {
     this.statusChangedAt,
     this.createdAt,
     this.updatedAt,
+    this.deletedAt,
     this.request,
     this.repairDetail,
     this.evidences = const [],
@@ -477,11 +496,14 @@ class ServiceTicketPublic {
   final String? statusChangedAt;
   final String? createdAt;
   final String? updatedAt;
+  final String? deletedAt;
   final ServiceRequestBrief? request;
   final RepairDetailPublic? repairDetail;
   final List<TicketEvidencePublic> evidences;
   final List<TicketLogPublic> logs;
   final List<TicketSignaturePublic> signatures;
+
+  bool get isDeleted => deletedAt != null && deletedAt!.trim().isNotEmpty;
 
   String get displayCode =>
       code ?? (id.length >= 8 ? id.substring(0, 8).toUpperCase() : id);
@@ -517,6 +539,7 @@ class ServiceTicketPublic {
       statusChangedAt: json['statusChangedAt'] as String?,
       createdAt: json['createdAt'] as String?,
       updatedAt: json['updatedAt'] as String?,
+      deletedAt: json['deletedAt'] as String?,
       request: reqRaw is Map<String, dynamic>
           ? ServiceRequestBrief.fromJson(reqRaw)
           : null,

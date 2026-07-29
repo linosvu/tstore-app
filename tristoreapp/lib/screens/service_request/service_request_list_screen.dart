@@ -8,6 +8,7 @@ import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/empty_state.dart';
 import 'package:tstore/widgets/ui/error_banner.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
+import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 import 'create_service_request_screen.dart';
 import 'online_ticket_screen.dart';
@@ -38,6 +39,8 @@ class ServiceRequestListScreen extends StatefulWidget {
 class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
   final _searchCtrl = TextEditingController();
   late final ServiceRequestsProvider _prov;
+  List<(String, String)> _users = [];
+  bool _loadingUsers = false;
 
   @override
   void initState() {
@@ -51,6 +54,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
       _prov.setOverdueOnly(true);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUsers();
       _prov.load(reset: true);
     });
   }
@@ -60,6 +64,33 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     _searchCtrl.dispose();
     _prov.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() => _loadingUsers = true);
+    try {
+      final api = context.read<AuthProvider>().api;
+      final res = await api.get<Map<String, dynamic>>(
+        '/admin/users',
+        queryParameters: {'page': 1, 'limit': 100},
+      );
+      final items = res.data?['items'];
+      final list = <(String, String)>[];
+      if (items is List) {
+        for (final e in items) {
+          if (e is! Map<String, dynamic>) continue;
+          final id = e['id'] as String?;
+          final name = e['fullName'] as String? ?? '';
+          final active = e['isActive'] as bool? ?? true;
+          if (id != null && active) {
+            list.add((id, name.isEmpty ? id : name));
+          }
+        }
+      }
+      if (mounted) setState(() => _users = list);
+    } finally {
+      if (mounted) setState(() => _loadingUsers = false);
+    }
   }
 
   Future<void> _openCreate() async {
@@ -138,6 +169,35 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                     prov.load(reset: true);
                   },
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenHorizontal,
+                  8,
+                  AppSpacing.screenHorizontal,
+                  0,
+                ),
+                child: _loadingUsers
+                    ? const LinearProgressIndicator()
+                    : TsDropdownFieldNullable<String>(
+                        value: prov.supportStaffUserId,
+                        labelText: l10n.serviceFilterSupportStaff,
+                        items: [
+                          null,
+                          ..._users.map((u) => u.$1),
+                        ],
+                        itemLabel: (id) {
+                          if (id == null) return 'Tất cả';
+                          for (final u in _users) {
+                            if (u.$1 == id) return u.$2;
+                          }
+                          return id;
+                        },
+                        onChanged: (v) {
+                          prov.setSupportStaffUserId(v);
+                          prov.load(reset: true);
+                        },
+                      ),
               ),
               _filterChips(prov),
               Expanded(child: _buildBody(l10n, prov)),
@@ -318,6 +378,14 @@ class _RequestCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (request.supportStaffName != null &&
+                  request.supportStaffName!.trim().isNotEmpty)
+                Text(
+                  'NV hỗ trợ: ${request.supportStaffName}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               if (latest != null) ...[
                 const SizedBox(height: 8),
                 InkWell(

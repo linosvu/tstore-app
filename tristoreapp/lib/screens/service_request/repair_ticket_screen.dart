@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
+import 'package:tstore/core/utils/media_upload_flow.dart';
+import 'package:tstore/core/widgets/media_picker_sheet.dart';
+import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
@@ -36,6 +39,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
   // Handoff
   String? _techUserId;
+  String? _receiveStaffUserId;
   DateTime _contactDeadline = DateTime.now().add(const Duration(hours: 4));
   String _receiveType = 'store';
   final _initialCtrl = TextEditingController();
@@ -61,6 +65,17 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   String _payMethod = 'cash';
   DateTime? _payDue;
 
+  // Request editing (Thông tin YC gốc)
+  bool _editingRequest = false;
+  final _reqNameCtrl = TextEditingController();
+  final _reqPhoneCtrl = TextEditingController();
+  final _reqPhone2Ctrl = TextEditingController();
+  final _reqAddressCtrl = TextEditingController();
+  final _reqProductNameCtrl = TextEditingController();
+  final _reqProductSerialCtrl = TextEditingController();
+  final _reqIssueCtrl = TextEditingController();
+  List<Map<String, String>> _reqAttachments = [];
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +89,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   void dispose() {
     _initialCtrl.dispose();
     _extraCtrl.dispose();
+    _reqNameCtrl.dispose();
+    _reqPhoneCtrl.dispose();
+    _reqPhone2Ctrl.dispose();
+    _reqAddressCtrl.dispose();
+    _reqProductNameCtrl.dispose();
+    _reqProductSerialCtrl.dispose();
+    _reqIssueCtrl.dispose();
     _contactNoteCtrl.dispose();
     _solutionCtrl.dispose();
     _partCostCtrl.dispose();
@@ -114,24 +136,80 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       setState(() => _loading = true);
     }
     try {
-      final t = await context
-          .read<ServiceRequestsProvider>()
-          .fetchTicket(widget.ticketId);
+      final role = context.read<AuthProvider>().user?.role;
+      final includeDeleted = role == 'admin' || role == 'manager';
+      final t = await context.read<ServiceRequestsProvider>().fetchTicket(
+            widget.ticketId,
+            includeDeleted: includeDeleted,
+          );
       if (!mounted) return;
       final d = t?.repairDetail;
       setState(() {
         _ticket = t;
-        if (d?.solution != null) _solutionCtrl.text = d!.solution!;
-        if (d?.partCost != null) _partCostCtrl.text = '${d!.partCost}';
-        if (d?.laborCost != null) _laborCostCtrl.text = '${d!.laborCost}';
-        if (d?.repairResult != null) _resultCtrl.text = d!.repairResult!;
-        if (d?.etaDate != null) {
-          final parsed = DateTime.tryParse(d!.etaDate!);
+        final detail = d;
+        final req = t?.request;
+
+        // Reset stateful defaults so rewinding doesn't leave stale values.
+        _receiveType = 'store';
+        _contactDeadline = DateTime.now().add(const Duration(hours: 4));
+        _etaDate = DateTime.now().add(const Duration(days: 3));
+        _deliveryMethod = 'store';
+        _deliveryEta = null;
+        _payMethod = 'cash';
+        _payDue = null;
+
+        // Không ghi đè khi user đang sửa dở thông tin YC gốc.
+        if (req != null && !_editingRequest) {
+          _resetRequestEditorFromRequest(req);
+        }
+
+        // Received / handoff.
+        _techUserId =
+            (t?.staffUserId ?? '').trim().isEmpty ? null : t!.staffUserId;
+        final savedReceiveStaff = (detail?.receiveStaffUserId ?? '').trim();
+        _receiveStaffUserId = savedReceiveStaff.isEmpty
+            ? context.read<AuthProvider>().user?.id
+            : savedReceiveStaff;
+        _receiveType = detail?.receiveType ?? 'store';
+        _initialCtrl.text = detail?.initialAssessment ?? '';
+        _extraCtrl.text = detail?.extraNote ?? '';
+        _solutionCtrl.text = detail?.solution ?? '';
+        _partCostCtrl.text = detail?.partCost != null ? '${detail!.partCost}' : '0';
+        _laborCostCtrl.text = detail?.laborCost != null ? '${detail!.laborCost}' : '0';
+        _resultCtrl.text = detail?.repairResult ?? '';
+
+        if (detail?.etaDate != null) {
+          final parsed = DateTime.tryParse(detail!.etaDate!);
           if (parsed != null) _etaDate = parsed;
         }
-        if (d?.paymentAmount != null) {
-          _payAmountCtrl.text = '${d!.paymentAmount}';
+
+        // Hạn gọi khách được nhúng trong contactNote dạng "Hẹn gọi trước: <iso>".
+        // Tách ra để ô ghi chú không hiển thị chuỗi máy.
+        final contactNote = detail?.contactNote ?? '';
+        final m = RegExp(r'Hẹn gọi trước:\s*(\S+)').firstMatch(contactNote);
+        if (m != null) {
+          final parsed = DateTime.tryParse(m.group(1)!);
+          if (parsed != null) _contactDeadline = parsed;
+          _contactNoteCtrl.text =
+              contactNote.replaceFirst(m.group(0)!, '').trim();
+        } else {
+          _contactNoteCtrl.text = contactNote;
         }
+
+        // Delivery.
+        _deliveryMethod = detail?.deliveryMethod ?? 'store';
+        _shippingPayerCtrl.text = detail?.shippingFeePayer ?? '';
+        _deliveryEta = detail?.deliveryEta != null
+            ? DateTime.tryParse(detail!.deliveryEta!)
+            : null;
+
+        // Payment.
+        _payMethod = detail?.paymentMethod ?? 'cash';
+        _payAmountCtrl.text =
+            detail?.paymentAmount != null ? '${detail!.paymentAmount}' : '0';
+        _payDue = detail?.paymentDueDate != null
+            ? DateTime.tryParse(detail!.paymentDueDate!)
+            : null;
         _loading = false;
       });
     } catch (_) {
@@ -177,6 +255,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (!hasEvidence) return 'Cần thêm bằng chứng tiếp nhận (ảnh/video).';
     if (!hasStaff) return 'Cần chữ ký nhân viên.';
     if (!hasCustomer) return 'Cần chữ ký khách.';
+    if (_receiveStaffUserId == null) return 'Chọn nhân viên tiếp nhận.';
     if (_techUserId == null) return 'Chọn nhân viên kỹ thuật.';
     if (_initialCtrl.text.trim().isEmpty) {
       return 'Nhập nhận định ban đầu.';
@@ -192,6 +271,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
     await _action('handoff-tech', body: {
       'techUserId': _techUserId,
+      'receiveStaffUserId': _receiveStaffUserId,
       'contactDeadlineAt': _contactDeadline.toUtc().toIso8601String(),
       'receiveType': _receiveType,
       'initialAssessment': _initialCtrl.text.trim(),
@@ -203,6 +283,471 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   bool get _isManager {
     final role = context.read<AuthProvider>().user?.role;
     return role == 'admin' || role == 'manager';
+  }
+
+  bool _canRewindRepair(ServiceTicketPublic t, RepairDetailPublic? d) {
+    if (t.isDeleted) return false;
+    final user = context.read<AuthProvider>().user;
+    final role = user?.role;
+    if (role == 'admin' || role == 'manager') return true;
+    if (role != 'staff') return false;
+
+    final uid = user?.id;
+    if (uid == null || uid.trim().isEmpty) return false;
+    // Staff chỉ được rewind phiếu do mình tạo hoặc mình đang được gán.
+    return t.createdByUserId == uid || t.staffUserId == uid;
+  }
+
+  String _targetStatusFromStepIndex(int i) {
+    switch (i) {
+      case 0:
+        return 'received';
+      case 1:
+        return 'inspecting';
+      case 2:
+        return 'approving';
+      case 3:
+        return 'notifying';
+      case 4:
+        return 'repairing';
+      case 5:
+        return 'delivering';
+      case 6:
+        return 'paying';
+      default:
+        return 'received';
+    }
+  }
+
+  Future<void> _rewindToStep(
+    int stepIndex,
+    ServiceTicketPublic t,
+    RepairDetailPublic? d,
+  ) async {
+    if (_busy) return;
+    final currentIdx = repairStepIndex(
+      t.status,
+      customerRejectPending: d?.customerRejectPending ?? false,
+    );
+    if (stepIndex >= currentIdx) return;
+
+    final targetStatus = _targetStatusFromStepIndex(stepIndex);
+    final title = 'Quay lại: ${repairStepLabels[stepIndex]}';
+
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: const Text(
+          'Phiếu sẽ lùi về bước này để chỉnh sửa. Bằng chứng và chữ ký của '
+          'bước này cùng các bước sau sẽ hết hiệu lực — cần chụp và ký lại.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Quay lại'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    await _action(
+      'rewind-repair',
+      body: {'targetStatus': targetStatus},
+    );
+  }
+
+  bool _canEditRequest(ServiceTicketPublic t, RepairDetailPublic? d) {
+    final req = t.request;
+    if (req == null) return false;
+    if (!_canRewindRepair(t, d)) return false;
+    // patchRequest chặn nếu request đã closed.
+    return req.status != 'completed' && req.status != 'cancelled';
+  }
+
+  Future<void> _copyText(String text, String snackMessage) async {
+    final v = text.trim();
+    if (v.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: v));
+    if (!mounted) return;
+    AppMessenger.showSnackBar(context, SnackBar(content: Text(snackMessage)));
+  }
+
+  void _resetRequestEditorFromRequest(ServiceRequestBrief req) {
+    _reqAttachments = req.attachments
+        .map(
+          (a) => {'url': a.url, 'mediaType': (a.mediaType ?? 'image')},
+        )
+        .toList();
+    _reqNameCtrl.text = req.customerName;
+    _reqPhoneCtrl.text = req.customerPhone;
+    _reqPhone2Ctrl.text = req.customerPhone2 ?? '';
+    _reqAddressCtrl.text = req.customerAddress ?? '';
+    _reqProductNameCtrl.text = req.productName;
+    _reqProductSerialCtrl.text = req.productSerial ?? '';
+    _reqIssueCtrl.text = req.issueDescription;
+  }
+
+  Future<void> _pickRequestAttachments() async {
+    final picks = await showMediaPickerSheet(
+      context,
+      allowVideo: true,
+    );
+    if (picks == null || picks.isEmpty) return;
+    final api = context.read<AuthProvider>().api;
+
+    setState(() => _busy = true);
+    try {
+      for (final pick in picks) {
+        final uploaded = await uploadPickedMedia(pick: pick, api: api);
+        if (uploaded == null) continue;
+        _reqAttachments.add({
+          'url': uploaded.url,
+          'mediaType': pick.isVideo ? 'video' : 'image',
+        });
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _removeRequestAttachmentAt(int index) {
+    if (index < 0 || index >= _reqAttachments.length) return;
+    setState(() => _reqAttachments.removeAt(index));
+  }
+
+  Future<void> _saveRequestEdits(ServiceRequestBrief req) async {
+    if (_busy) return;
+    if (_reqNameCtrl.text.trim().isEmpty ||
+        _reqPhoneCtrl.text.trim().isEmpty ||
+        _reqProductNameCtrl.text.trim().isEmpty ||
+        _reqIssueCtrl.text.trim().isEmpty) {
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Nhập đủ tên khách, SĐT, sản phẩm và lỗi.')),
+      );
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final body = <String, dynamic>{
+        'customerName': _reqNameCtrl.text.trim(),
+        'customerPhone': _reqPhoneCtrl.text.trim(),
+        'customerPhone2':
+            _reqPhone2Ctrl.text.trim().isEmpty ? null : _reqPhone2Ctrl.text.trim(),
+        'customerAddress':
+            _reqAddressCtrl.text.trim().isEmpty ? null : _reqAddressCtrl.text.trim(),
+        'productName': _reqProductNameCtrl.text.trim(),
+        'productSerial':
+            _reqProductSerialCtrl.text.trim().isEmpty ? null : _reqProductSerialCtrl.text.trim(),
+        'issueDescription': _reqIssueCtrl.text.trim(),
+        'attachments': _reqAttachments,
+      };
+
+      final updated =
+          await context.read<ServiceRequestsProvider>().patchRequest(
+                req.id,
+                body,
+              );
+
+      if (!mounted) return;
+      if (updated == null) {
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Không thể lưu thông tin yêu cầu.')),
+        );
+        return;
+      }
+
+      setState(() => _editingRequest = false);
+      await _load();
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Đã lưu thông tin yêu cầu.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _buildRequestInfoEditor(
+    ServiceTicketPublic t,
+    RepairDetailPublic? d,
+  ) {
+    final req = t.request;
+    if (req == null) return const SizedBox.shrink();
+
+    final canEdit = _canEditRequest(t, d);
+    if (!_editingRequest) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LockedRequestInfoCard(request: req),
+          if (canEdit)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : () {
+                    setState(() {
+                      _editingRequest = true;
+                      _resetRequestEditorFromRequest(req);
+                    });
+                  },
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Chỉnh sửa'),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return SectionCard(
+      title: 'Thông tin yêu cầu gốc (${req.code ?? req.id.substring(0, 8)})',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _reqNameCtrl,
+            decoration: const InputDecoration(labelText: 'Tên khách'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqPhoneCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'SĐT',
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.copy),
+                onPressed: _busy ? null : () => _copyText(
+                      _reqPhoneCtrl.text,
+                      'Đã copy SĐT',
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqPhone2Ctrl,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'SĐT 2',
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.copy),
+                onPressed: _busy ? null : () => _copyText(
+                      _reqPhone2Ctrl.text,
+                      'Đã copy SĐT 2',
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqAddressCtrl,
+            decoration: const InputDecoration(labelText: 'Địa chỉ'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqProductNameCtrl,
+            decoration: const InputDecoration(labelText: 'Sản phẩm'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqProductSerialCtrl,
+            decoration: const InputDecoration(labelText: 'Serial'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqIssueCtrl,
+            decoration: const InputDecoration(labelText: 'Lỗi'),
+            minLines: 2,
+            maxLines: 4,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Đính kèm (${_reqAttachments.length})',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _pickRequestAttachments,
+            icon: const Icon(Icons.attach_file),
+            label: const Text('Thêm đính kèm'),
+          ),
+          const SizedBox(height: 8),
+          if (_reqAttachments.isNotEmpty)
+            Column(
+              children: [
+                for (var i = 0; i < _reqAttachments.length; i++)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      (_reqAttachments[i]['mediaType'] == 'video')
+                          ? Icons.videocam_outlined
+                          : Icons.photo_outlined,
+                    ),
+                    title: Text(
+                      (_reqAttachments[i]['mediaType'] == 'video')
+                          ? 'Video'
+                          : 'Ảnh',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: _busy ? null : () => _removeRequestAttachmentAt(i),
+                    ),
+                    onTap: () {
+                      final url = _reqAttachments[i]['url'];
+                      final mediaType = _reqAttachments[i]['mediaType'] ?? 'image';
+                      if (url == null || url.isEmpty) return;
+                      Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => MediaViewerPage(
+                            items: [
+                              MediaViewerItem(url: url, mediaType: mediaType),
+                            ],
+                            initialIndex: 0,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: _busy ? null : () => _saveRequestEdits(req),
+                  child: const Text('Lưu'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _busy
+                    ? null
+                    : () {
+                        setState(() {
+                          _editingRequest = false;
+                          _resetRequestEditorFromRequest(req);
+                        });
+                      },
+                child: const Text('Hủy'),
+              ),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Future<void> _softDeleteTicket() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Xóa phiếu SC'),
+          content: const Text(
+            'Phiếu sẽ bị ẩn khỏi danh sách (có thể khôi phục). Tiếp tục?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Xóa'),
+            ),
+          ],
+        );
+      },
+    );
+    if (go != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final t = await context
+          .read<ServiceRequestsProvider>()
+          .softDeleteTicket(widget.ticketId);
+      if (!mounted) return;
+      if (t != null) {
+        setState(() {
+          _ticket = t;
+          _busy = false;
+        });
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã xóa phiếu SC.')),
+        );
+      } else {
+        setState(() => _busy = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    }
+  }
+
+  Future<void> _restoreTicket() async {
+    setState(() => _busy = true);
+    try {
+      final t = await context
+          .read<ServiceRequestsProvider>()
+          .restoreTicket(widget.ticketId);
+      if (!mounted) return;
+      if (t != null) {
+        setState(() {
+          _ticket = t;
+          _busy = false;
+        });
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã khôi phục phiếu SC.')),
+        );
+      } else {
+        setState(() => _busy = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    }
   }
 
   @override
@@ -244,6 +789,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 RepairStepper(
                   status: t.status,
                   customerRejectPending: d?.customerRejectPending ?? false,
+                  editable: _canRewindRepair(t, d),
+                  onStepTap: (i) => _rewindToStep(i, t, d),
                 ),
                 const SizedBox(height: 10),
                 CountdownBanner(
@@ -251,17 +798,35 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   isOverdue: t.isOverdue,
                 ),
                 const SizedBox(height: 12),
-                if (t.request != null)
-                  LockedRequestInfoCard(request: t.request!),
+                _buildRequestInfoEditor(t, d),
                 const SizedBox(height: 12),
                 ..._buildStepBody(t, d, userIds, nameOf, l10n),
                 const SizedBox(height: 12),
                 TicketLogList(logs: t.logs),
-                if (![
-                  'completed',
-                  'customer_rejected',
-                  'cancelled',
-                ].contains(t.status)) ...[
+                if (_isManager) ...[
+                  const SizedBox(height: 12),
+                  if (t.isDeleted)
+                    FilledButton.icon(
+                      onPressed: _busy ? null : _restoreTicket,
+                      icon: const Icon(Icons.restore),
+                      label: const Text('Khôi phục phiếu SC'),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _softDeleteTicket,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Xóa phiếu SC'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                ],
+                if (!t.isDeleted &&
+                    ![
+                      'completed',
+                      'customer_rejected',
+                      'cancelled',
+                    ].contains(t.status)) ...[
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _busy
@@ -356,12 +921,38 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       ),
       const SizedBox(height: 12),
       SectionCard(
+        title: 'Nhân viên tiếp nhận *',
+        child: TsDropdownFieldNullable<String>(
+          value: _receiveStaffUserId,
+          labelText: 'Nhân viên đã ký / tiếp nhận',
+          items: [
+            ...userIds,
+            if (_receiveStaffUserId != null &&
+                !userIds.contains(_receiveStaffUserId))
+              _receiveStaffUserId!,
+          ],
+          itemLabel: (id) {
+            if (id == null) return '— Chọn nhân viên —';
+            return nameOf[id] ?? id;
+          },
+          onChanged: (v) => setState(() => _receiveStaffUserId = v),
+        ),
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
         title: 'Bàn giao kỹ thuật',
         child: Column(
           children: [
             TsDropdownFieldNullable<String>(
               value: _techUserId,
-              items: userIds,
+              labelText: 'Nhân viên kỹ thuật',
+              // NV đang được gán có thể đã bị vô hiệu hoá / ngoài trang đầu
+              // danh sách; thiếu item khớp value sẽ làm dropdown assert.
+              items: [
+                ...userIds,
+                if (_techUserId != null && !userIds.contains(_techUserId))
+                  _techUserId!,
+              ],
               itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
               onChanged: (v) => setState(() => _techUserId = v),
             ),
@@ -488,8 +1079,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             children: [
               TextField(
                 controller: _solutionCtrl,
-                decoration: const InputDecoration(labelText: 'Phương án sửa'),
+                decoration: const InputDecoration(labelText: 'Phương án sửa *'),
                 maxLines: 3,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -520,7 +1112,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 },
               ),
               FilledButton(
-                onPressed: _busy
+                onPressed: _busy || _solutionCtrl.text.trim().isEmpty
                     ? null
                     : () => _action('submit-inspect', body: {
                           'solution': _solutionCtrl.text.trim(),
@@ -694,12 +1286,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ],
             TextField(
               controller: _resultCtrl,
-              decoration: const InputDecoration(labelText: 'Kết quả sửa'),
+              decoration: const InputDecoration(labelText: 'Kết quả sửa *'),
               maxLines: 3,
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: _busy
+              onPressed: _busy || _resultCtrl.text.trim().isEmpty
                   ? null
                   : () => _action('submit-repair-result', body: {
                         'repairResult': _resultCtrl.text.trim(),

@@ -220,6 +220,8 @@ class _ServiceRequestDetailScreenState
                                 Text('Lỗi: ${item.issueDescription}'),
                                 if (item.managerName != null)
                                   Text('QL: ${item.managerName}'),
+                                if (item.supportStaffName != null)
+                                  Text('NV hỗ trợ: ${item.supportStaffName}'),
                                 if (item.cancelReason != null)
                                   Text(
                                     'Huỷ: ${item.cancelReason}',

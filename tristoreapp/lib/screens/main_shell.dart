@@ -9,6 +9,7 @@ import '../widgets/navigation/primary_bottom_nav.dart';
 import 'delivery/delivery_screen.dart';
 import 'main_shell_tabs.dart';
 import 'orders/orders_list_screen.dart';
+import 'orders/repair_orders_screen.dart';
 import 'delivery/fulfillment_tab_launch_args.dart';
 import 'orders/orders_tab_launch_args.dart';
 import 'notifications/notifications_screen.dart';
@@ -131,6 +132,7 @@ class _MainShellState extends State<MainShell> {
       MainShellTab.orders => const OrdersListScreen(),
       MainShellTab.delivery => const DeliveryScreen(),
       MainShellTab.notifications => const NotificationsScreen(),
+      MainShellTab.repairs => const RepairOrdersScreen(),
       _ => const SizedBox.shrink(),
     };
   }

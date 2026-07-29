@@ -7,20 +7,21 @@ import '../../design_system/ts_bottom_nav.dart';
 import '../../providers/notification_provider.dart';
 import '../../screens/main_shell.dart';
 
-/// Bottom navigation: Home, Orders, Giao Hàng (hub), Thông báo.
+/// Bottom navigation: Home, Orders, Giao Hàng (hub), Sửa chữa, Thông báo.
 class PrimaryBottomNav extends StatelessWidget {
   const PrimaryBottomNav({
     super.key,
     required this.currentIndex,
   });
 
-  /// `0` = Home, `1` = Orders, `2` = Giao Hàng hub, `3` = Thông báo.
+  /// `0` = Home, `1` = Orders, `2` = Giao Hàng hub, `3` = Sửa chữa, `4` = Thông báo.
   final int currentIndex;
 
   static const List<String> _routes = [
     AppRoutes.home,
     AppRoutes.orders,
     AppRoutes.delivery,
+    AppRoutes.repairs,
     AppRoutes.notifications,
   ];
 
@@ -61,6 +62,11 @@ class PrimaryBottomNav extends StatelessWidget {
             icon: Icons.local_shipping_outlined,
             selectedIcon: Icons.local_shipping_rounded,
             label: l10n.deliveryNav,
+          ),
+          TsBottomNavItem(
+            icon: Icons.build_outlined,
+            selectedIcon: Icons.build_rounded,
+            label: l10n.serviceTabRepair,
           ),
           TsBottomNavItem(
             icon: Icons.notifications_outlined,

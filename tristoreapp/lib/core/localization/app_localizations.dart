@@ -52,7 +52,7 @@ class AppLocalizations {
   String get managementAssigneePick => 'Chọn người thực hiện';
   String get managementPaymentPaid => 'Đã thanh toán';
   String get managementPaymentUnpaid => 'Chưa thanh toán';
-  String get managementPaymentScheduled => 'Hẹn thanh toán';
+  String get managementPaymentScheduled => 'Công nợ';
   String get managementScheduledDelivery => 'Hẹn giao';
   String get managementPriorityNormal => 'Ưu tiên thường';
   String get managementPriorityHigh => 'Ưu tiên cao';
@@ -691,16 +691,16 @@ class AppLocalizations {
   String get saleOrderRecordPaymentMethodCard => 'Quẹt thẻ';
   String get saleOrderRecordPaymentMethodOther => 'Thanh toán khác';
   String get saleOrderRecordPaymentNote => 'Ghi chú thanh toán';
-  String get saleOrderRecordPaymentSchedule => 'Hẹn thanh toán';
-  String get saleOrderRecordPaymentSchedulePick => 'Chọn ngày hẹn';
+  String get saleOrderRecordPaymentSchedule => 'Công nợ';
+  String get saleOrderRecordPaymentSchedulePick => 'Chọn ngày công nợ';
   String get saleOrderRecordPaymentScheduleRequired =>
-      'Bật hẹn thanh toán cần chọn ngày trong tương lai.';
-  String get saleOrderRecordPaymentScheduleAmountLabel => 'Số hẹn thu';
-  String get saleOrderRecordPaymentPreviousSchedule => 'Lần hẹn thu trước';
+      'Bật công nợ cần chọn ngày trong tương lai.';
+  String get saleOrderRecordPaymentScheduleAmountLabel => 'Số công nợ';
+  String get saleOrderRecordPaymentPreviousSchedule => 'Lần công nợ trước';
   String get saleOrderRecordPaymentScheduleModeHint =>
-      'Chỉ đặt lịch nhắc thu — chưa ghi nhận tiền thực tế.';
-  String get saleOrderRecordPaymentScheduleSubmit => 'Ghi nhận hẹn';
-  String get saleOrderPaymentScheduleReminderLabel => 'Hẹn thu';
+      'Chỉ ghi công nợ / nhắc thu — chưa ghi nhận tiền thực tế.';
+  String get saleOrderRecordPaymentScheduleSubmit => 'Ghi nhận công nợ';
+  String get saleOrderPaymentScheduleReminderLabel => 'Công nợ';
   String get saleOrderRecordPaymentSubmit => 'Ghi nhận';
   String get saleOrderRecordPaymentConfirm => 'Xác nhận';
   String get saleOrderRecordPaymentPendingTitle =>
@@ -815,11 +815,14 @@ class AppLocalizations {
   String get serviceSerial => 'Serial';
   String get serviceIssue => 'Mô tả lỗi';
   String get serviceManager => 'Quản lý';
+  String get serviceSupportStaff => 'Nhân viên hỗ trợ';
+  String get serviceRepairStaff => 'Nhân viên sửa chữa';
   String get serviceDirection => 'Hướng xử lý';
   String get serviceFeeAppointment => 'Phí & lịch hẹn';
   String get serviceAppointmentDate => 'Ngày hẹn';
   String get serviceAppointmentSlot => 'Khung giờ';
   String get serviceStaff => 'Nhân viên xử lý';
+  String get serviceFilterSupportStaff => 'NV hỗ trợ';
   String get serviceEscalate => 'Leo thang / tạo phiếu con';
   String get serviceCompleteRequest => 'Hoàn tất yêu cầu';
   String get serviceCancelRequest => 'Huỷ yêu cầu';
@@ -895,7 +898,7 @@ class AppLocalizations {
   String get dashboardReminderDraft => 'Phiếu tạm / nháp cần xử lý';
   String get dashboardReminderPrep => 'Phiếu chuẩn bị đang chờ';
   String get dashboardReminderDelivery => 'Đơn giao chưa hoàn tất';
-  String get dashboardReminderScheduledPayment => 'Đơn đang hẹn thanh toán';
+  String get dashboardReminderScheduledPayment => 'Đơn đang công nợ';
   String get dashboardReminderOpsTitle => 'Đơn hàng · Chuẩn bị · Giao hàng';
   String get dashboardReminderOverdue => 'Trễ hẹn giao';
   String get dashboardReminderDueWithin24h => 'Phải giao trong 24h';
@@ -948,14 +951,14 @@ class AppLocalizations {
   String get saleOrderBaseOwed => 'Tiền hàng chưa TT';
   String get saleOrderPayFull => 'Đã thanh toán đủ';
   String get saleOrderPayPartial => 'Trả trước một phần';
-  String get saleOrderPayScheduled => 'Hẹn thanh toán';
+  String get saleOrderPayScheduled => 'Công nợ';
   String get saleOrderPayOnDelivery => 'Thanh toán khi giao hàng';
-  String get saleOrderScheduledDate => 'Ngày hẹn thanh toán';
+  String get saleOrderScheduledDate => 'Ngày công nợ';
 
-  /// Ngày hẹn trả phần còn lại (kèm trả trước một phần).
-  String get saleOrderRemainderDueDate => 'Hẹn ngày trả';
+  /// Ngày trả phần còn lại (kèm trả trước một phần).
+  String get saleOrderRemainderDueDate => 'Ngày công nợ';
   String get saleOrderRemainderDateRequired =>
-      'Vui lòng chọn ngày trả phần còn lại.';
+      'Vui lòng chọn ngày công nợ cho phần còn lại.';
   String get saleOrderPartialPrepaidInvalid =>
       'Số trả trước phải lớn hơn 0 và nhỏ hơn số còn phải thu.';
   String get saleOrderReviewSectionCustomer => 'Khách hàng';

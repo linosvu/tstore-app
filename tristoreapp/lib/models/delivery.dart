@@ -146,7 +146,6 @@ class DeliveryPublic {
     this.cancelReason,
     required this.paymentCollected,
     this.deliveryNote,
-    this.scheduledAt,
     required this.priority,
     this.shippingCarrier,
     required this.isPublicBoard,
@@ -171,7 +170,6 @@ class DeliveryPublic {
   final String? cancelReason;
   final bool paymentCollected;
   final String? deliveryNote;
-  final String? scheduledAt;
   final String priority;
   final String? shippingCarrier;
   final bool isPublicBoard;
@@ -189,6 +187,9 @@ class DeliveryPublic {
   /// Phiếu chuẩn bị mới nhất + ảnh (chi tiết đơn giao).
   final LinkedPreparationBrief? linkedPreparation;
 
+  /// Hẹn giao lấy từ đơn hàng (nguồn duy nhất).
+  String? get expectedDeliveryAt => saleOrder?.expectedDeliveryAt;
+
   factory DeliveryPublic.fromJson(Map<String, dynamic> json) {
     final imgs = json['checkinImages'];
     final linesRaw = json['lines'];
@@ -205,7 +206,6 @@ class DeliveryPublic {
       cancelReason: json['cancelReason'] as String?,
       paymentCollected: json['paymentCollected'] as bool? ?? false,
       deliveryNote: json['deliveryNote'] as String?,
-      scheduledAt: json['scheduledAt'] as String?,
       priority: json['priority'] as String? ?? 'normal',
       shippingCarrier: json['shippingCarrier'] as String?,
       isPublicBoard: json['isPublicBoard'] as bool? ?? false,

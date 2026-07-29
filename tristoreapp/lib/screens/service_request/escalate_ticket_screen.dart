@@ -180,7 +180,9 @@ class _EscalateTicketScreenState extends State<EscalateTicketScreen> {
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: l10n.serviceStaff,
+            title: _type == 'repair'
+                ? l10n.serviceRepairStaff
+                : l10n.serviceStaff,
             child: TsDropdownFieldNullable<String>(
               value: _staffUserId,
               items: userIds,
