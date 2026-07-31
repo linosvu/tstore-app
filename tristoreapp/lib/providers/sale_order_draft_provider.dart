@@ -20,7 +20,7 @@ class SaleOrderDraftLine {
     this.bulky = false,
     this.needsInstallation = false,
     this.carefulPackaging = false,
-    this.alreadyPaid = true,
+    this.alreadyPaid = false,
   });
 
   /// ID dòng trên server (khi sửa đơn đã có — giữ FK giao/chuẩn bị).

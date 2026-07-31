@@ -12,6 +12,10 @@ abstract final class AppMessenger {
   static Timer? _dismissTimer;
   static _ToastControllerState? _controller;
 
+  /// Entries đã insert nhưng chưa `remove` — kể cả lúc chưa `mounted`
+  /// (chưa kịp build frame đầu). Tránh orphan toast khi dismiss sớm.
+  static final Set<OverlayEntry> _alive = <OverlayEntry>{};
+
   /// Tiện ích cho message dạng chuỗi đơn giản.
   static void show(
     BuildContext context,
@@ -36,20 +40,21 @@ abstract final class AppMessenger {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
 
-    final duration = snackBar.duration;
+    final duration = snackBar.duration <= Duration.zero
+        ? const Duration(seconds: 3)
+        : snackBar.duration;
     final bg = snackBar.backgroundColor;
     final action = snackBar.action;
     final content = snackBar.content;
 
-    // Đang có toast: thay nội dung mới, reset timer (mượt hơn dismiss + insert).
+    // Đang có toast đã build: thay nội dung mới, reset timer.
     if (_current != null && _controller != null && _controller!.mounted) {
       _controller!.replace(
         content: content,
         backgroundColor: bg,
         action: action,
       );
-      _dismissTimer?.cancel();
-      _dismissTimer = Timer(duration, _dismissCurrent);
+      _armTimer(duration);
       return;
     }
 
@@ -64,13 +69,24 @@ abstract final class AppMessenger {
         action: action,
         onRegister: (state) => _controller = state,
         onDismiss: () {
-          if (_current == entry) _dismissCurrent();
+          if (_current == entry) {
+            _dismissCurrent();
+          } else {
+            // Toast orphan (đã mất ref global) — vẫn cho phép vuốt/chạm để xoá.
+            _removeEntry(entry);
+          }
         },
       ),
     );
 
     _current = entry;
+    _alive.add(entry);
     overlay.insert(entry);
+    _armTimer(duration);
+  }
+
+  static void _armTimer(Duration duration) {
+    _dismissTimer?.cancel();
     _dismissTimer = Timer(duration, _dismissCurrent);
   }
 
@@ -82,13 +98,17 @@ abstract final class AppMessenger {
     _controller = null;
     _current = null;
     if (controller != null && controller.mounted) {
-      // Chạy animation đóng rồi remove (dispose trong widget).
-      controller.dismiss(() {
-        if (entry != null && entry.mounted) entry.remove();
-      });
-    } else if (entry != null && entry.mounted) {
-      entry.remove();
+      controller.dismiss(() => _removeEntry(entry));
+    } else {
+      // Entry có thể đã insert nhưng chưa mounted (chưa build) — vẫn phải remove.
+      _removeEntry(entry);
     }
+  }
+
+  static void _removeEntry(OverlayEntry? entry) {
+    if (entry == null) return;
+    if (!_alive.remove(entry)) return;
+    entry.remove();
   }
 }
 
@@ -161,14 +181,22 @@ class _ToastControllerState extends State<_TopToast>
   }
 
   Future<void> dismiss(VoidCallback onDone) async {
-    if (_closing) return;
+    if (_closing) {
+      onDone();
+      return;
+    }
     _closing = true;
     try {
-      if (mounted) await _ctrl.reverse();
+      if (mounted) {
+        // Ticker có thể bị tắt khi entry nằm dưới route opaque — không treo mãi.
+        await _ctrl.reverse().timeout(
+          const Duration(milliseconds: 500),
+          onTimeout: () {},
+        );
+      }
     } catch (_) {
       // ignore animation interruption
     }
-    if (!mounted) return;
     onDone();
   }
 

@@ -881,19 +881,23 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
       return;
     }
     if (!mounted) return;
-    AppMessenger.showSnackBar(context, 
-      SnackBar(
-          content: Text(l10n.saleOrderConfirmed),
-          backgroundColor: AppColors.success),
-    );
-
     if (_createPreparation) {
       // Làm mới danh sách chuẩn bị hàng để đơn vừa tạo hiện ngay trên bảng chung
       context.read<PreparationProvider>().refresh();
-      AppMessenger.showSnackBar(context, 
-        SnackBar(content: Text(l10n.saleOrderPreparationCreated)),
-      );
     }
+    // Một toast duy nhất — tránh 2 showSnackBar liên tiếp (race orphan overlay).
+    AppMessenger.showSnackBar(
+      context,
+      SnackBar(
+        content: Text(
+          _createPreparation
+              ? '${l10n.saleOrderConfirmed} ${l10n.saleOrderPreparationCreated}'
+              : l10n.saleOrderConfirmed,
+        ),
+        backgroundColor: AppColors.success,
+        duration: const Duration(seconds: 3),
+      ),
+    );
 
     // Nếu chọn giao hàng: tải lại đơn vừa xác nhận rồi mở sheet tạo giao hàng
     if (_homeDelivery && p.orderId != null) {
