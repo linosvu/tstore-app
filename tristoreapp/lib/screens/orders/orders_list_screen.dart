@@ -835,7 +835,10 @@ class _OrderRowCard extends StatelessWidget {
     final managedByName = (order.managedBy?.name ?? '').trim();
     final createdByName = (order.createdBy?.name ?? '').trim();
     final saleChannelLabel = order.saleChannelShortLabel;
-    final showCreatorRow = createdByName.isNotEmpty || saleChannelLabel != null;
+    final showReceived = order.customerReceived;
+    final showCreatorRow = createdByName.isNotEmpty ||
+        saleChannelLabel != null ||
+        showReceived;
     final notesText = (order.notes ?? '').trim();
     return Material(
       color: scheme.surface,
@@ -996,6 +999,26 @@ class _OrderRowCard extends StatelessWidget {
                                             ).copyWith(
                                               fontSize: 11,
                                               color: AppColors.secondary,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        if (showReceived &&
+                                            (createdByName.isNotEmpty ||
+                                                saleChannelLabel != null))
+                                          TextSpan(
+                                            text: ' · ',
+                                            style: AppTextStyles.dataSecondary(
+                                              context,
+                                            ).copyWith(fontSize: 11),
+                                          ),
+                                        if (showReceived)
+                                          TextSpan(
+                                            text: l10n.ordersCustomerReceivedShort,
+                                            style: AppTextStyles.dataSecondary(
+                                              context,
+                                            ).copyWith(
+                                              fontSize: 11,
+                                              color: const Color(0xFF7C3AED),
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),

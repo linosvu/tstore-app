@@ -640,7 +640,8 @@ class AppLocalizations {
   String get ordersSaleChannelOnline => 'Online';
   String get ordersSaleChannelUnset => 'Chưa chọn';
   String get ordersSaleChannelShortStore => 'Đơn CH';
-  String get ordersSaleChannelShortOnline => 'Đơn Online';
+  String get ordersSaleChannelShortOnline => 'Online';
+  String get ordersCustomerReceivedShort => 'Đã Nhận';
   String get saleOrderNotesSectionTitle => 'Ghi chú đơn hàng';
   String get saleOrderNotesHint => 'Tối đa 500 ký tự';
   String get saleOrderExpectedDeliveryTitle => 'Thời gian dự kiến giao hàng';

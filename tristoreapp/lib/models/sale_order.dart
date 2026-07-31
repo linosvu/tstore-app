@@ -321,11 +321,14 @@ class SaleOrderPublic {
 
   final String id;
   final String createdByUserId;
+
   /// `internal` | `kiotviet`
   final String orderSource;
+
   /// `store` | `online` | null — kênh bán (cửa hàng / online).
   final String? saleChannel;
   final String? kiotVietOrderCode;
+
   /// ISO datetime từ KiotViet `purchaseDate` (nếu có).
   final String? kiotVietPurchaseDate;
   final String? customerId;
@@ -339,21 +342,29 @@ class SaleOrderPublic {
   final int subtotal;
   final int linesPrepaidTotal;
   final int amountDue;
+
   /// Trạng thái chuẩn bị mới nhất (chỉ có ở API danh sách đơn bán).
   final String? linkedPreparationStatus;
+
   /// Trạng thái đơn giao mới nhất (chỉ có ở API danh sách đơn bán).
   final String? linkedDeliveryStatus;
+
   /// Tên người chuẩn bị (chỉ có ở API danh sách đơn bán).
   final String? linkedPreparationAssignedName;
+
   /// Tên người giao hàng (chỉ có ở API danh sách đơn bán).
   final String? linkedDeliveryAssignedName;
+
   /// Id phiếu chuẩn bị mới nhất (danh sách / chi tiết đơn).
   final String? linkedPreparationId;
+
   /// Id đơn giao mới nhất (danh sách / chi tiết đơn).
   final String? linkedDeliveryId;
   final String? notes;
+
   /// ISO 8601 — thời gian dự kiến giao hàng (đơn bán).
   final String? expectedDeliveryAt;
+
   /// true = khách đã nhận hàng, không cần tạo đơn giao.
   final bool customerReceived;
   final SaleOrderCreatorBrief? createdBy;
@@ -362,6 +373,7 @@ class SaleOrderPublic {
   final String? managedByUserId;
   final SaleOrderCreatorBrief? managedBy;
   final String? confirmedAt;
+
   /// Soft-delete timestamp (null = còn hiệu lực).
   final String? deletedAt;
   final String createdAt;
@@ -382,7 +394,7 @@ class SaleOrderPublic {
 
   String? get saleChannelShortLabel => switch (saleChannel) {
         'store' => 'Đơn CH',
-        'online' => 'Đơn Online',
+        'online' => 'Online',
         _ => null,
       };
 
@@ -401,8 +413,7 @@ class SaleOrderPublic {
     return amountDue <= 0;
   }
 
-  bool get hasPendingPaymentToConfirm =>
-      payments.any(
+  bool get hasPendingPaymentToConfirm => payments.any(
         (p) => p.recordStatus == 'pending' && !p.isScheduleReminder,
       );
 
@@ -454,8 +465,7 @@ class SaleOrderPublic {
       isDeliveryDoneForFinish(linkedDeliveryStatus: linkedDeliveryStatus);
 
   bool get isOnManagementBoard =>
-      isKiotVietOrder &&
-      (managedByUserId == null || managedByUserId!.isEmpty);
+      isKiotVietOrder && (managedByUserId == null || managedByUserId!.isEmpty);
 
   bool get isDeleted => deletedAt != null && deletedAt!.trim().isNotEmpty;
 
@@ -493,7 +503,8 @@ class SaleOrderPublic {
       amountDue: (json['amountDue'] as num?)?.toInt() ?? 0,
       linkedPreparationStatus: json['linkedPreparationStatus'] as String?,
       linkedDeliveryStatus: json['linkedDeliveryStatus'] as String?,
-      linkedPreparationAssignedName: json['linkedPreparationAssignedName'] as String?,
+      linkedPreparationAssignedName:
+          json['linkedPreparationAssignedName'] as String?,
       linkedDeliveryAssignedName: json['linkedDeliveryAssignedName'] as String?,
       linkedPreparationId: json['linkedPreparationId'] as String?,
       linkedDeliveryId: json['linkedDeliveryId'] as String?,
