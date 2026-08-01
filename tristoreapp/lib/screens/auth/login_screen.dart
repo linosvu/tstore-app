@@ -50,6 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final ui = context.appUi;
+    final sessionMsg = context.watch<AuthProvider>().sessionExpiredMessage;
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -105,6 +106,48 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 15,
                       ),
                     ),
+                    if (sessionMsg != null) ...[
+                      const SizedBox(height: AppSpacing.space4),
+                      Material(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.info_outline_rounded,
+                                color: Color(0xFFC2410C),
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  sessionMsg,
+                                  style: const TextStyle(
+                                    color: Color(0xFF9A3412),
+                                    fontSize: 13.5,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => context
+                                    .read<AuthProvider>()
+                                    .clearSessionExpiredMessage(),
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Color(0xFF9A3412),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.space6),
                     Container(
                       decoration: BoxDecoration(

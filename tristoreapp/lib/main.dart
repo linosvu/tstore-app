@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,11 +39,7 @@ void main() async {
   final api = ApiClient();
   final auth = AuthProvider(api: api);
   api.onUnauthorized = () {
-    auth.logout();
-    rootNavigatorKey.currentState?.pushNamedAndRemoveUntil(
-      AppRoutes.login,
-      (_) => false,
-    );
+    unawaited(_handleUnauthorized(auth));
   };
 
   SystemChrome.setSystemUIOverlayStyle(
@@ -51,13 +49,36 @@ void main() async {
     ),
   );
 
-  runApp(MyApp(auth: auth));
+  runApp(MyApp(auth: auth, api: api));
+}
+
+Future<void> _handleUnauthorized(AuthProvider auth) async {
+  await auth.forceLocalLogout();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _navigateToLoginIfNeeded();
+  });
+}
+
+void _navigateToLoginIfNeeded() {
+  final nav = rootNavigatorKey.currentState;
+  if (nav == null) return;
+  final route = ModalRoute.of(nav.context);
+  final name = route?.settings.name;
+  if (name == AppRoutes.login) return;
+  // Splash = một route duy nhất, chưa đặt tên — để SplashScreen tự điều hướng.
+  // Màn chi tiết (push không tên) vẫn canPop → vẫn về login.
+  if (!nav.canPop() &&
+      (name == null || name == Navigator.defaultRouteName)) {
+    return;
+  }
+  nav.pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, required this.auth});
+  const MyApp({super.key, required this.auth, required this.api});
 
   final AuthProvider auth;
+  final ApiClient api;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -71,10 +92,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       PushNotificationService.instance.handleInitialMessage();
     });
+    widget.auth.addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    if (widget.auth.isAuthenticated) {
+      widget.api.resetUnauthorizedGuard();
+      final ctx = rootNavigatorKey.currentContext;
+      if (ctx != null) {
+        unawaited(ctx.read<AddressCatalogProvider>().ensureLoaded());
+      }
+      return;
+    }
+    if (widget.auth.status != AuthStatus.unauthenticated) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigateToLoginIfNeeded();
+    });
   }
 
   @override
   void dispose() {
+    widget.auth.removeListener(_onAuthChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -96,8 +134,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider<AuthProvider>.value(value: widget.auth),
         ChangeNotifierProvider(
           create: (ctx) =>
-              AddressCatalogProvider(api: ctx.read<AuthProvider>().api)
-                ..load(),
+              AddressCatalogProvider(api: ctx.read<AuthProvider>().api),
         ),
         ChangeNotifierProvider(
           create: (ctx) => DeliveryProvider(api: ctx.read<AuthProvider>().api),

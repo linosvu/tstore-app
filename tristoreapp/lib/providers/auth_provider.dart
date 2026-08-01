@@ -25,12 +25,21 @@ class AuthProvider extends ChangeNotifier {
   AuthStatus _status = AuthStatus.unknown;
   AuthUser? _user;
   String? _lastError;
+  /// Banner trên màn login khi bị đá do token hết hạn / không hợp lệ.
+  String? _sessionExpiredMessage;
 
   AuthStatus get status => _status;
   AuthUser? get user => _user;
   String? get lastError => _lastError;
+  String? get sessionExpiredMessage => _sessionExpiredMessage;
   bool get isAuthenticated =>
       _status == AuthStatus.authenticated && _user != null;
+
+  void clearSessionExpiredMessage() {
+    if (_sessionExpiredMessage == null) return;
+    _sessionExpiredMessage = null;
+    notifyListeners();
+  }
 
   /// Gọi khi khởi động: có token thì xác thực `/auth/me`.
   Future<void> tryRestore() async {
@@ -55,7 +64,7 @@ class AuthProvider extends ChangeNotifier {
       unawaited(_registerFcmToken());
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        await _clearSession();
+        await forceLocalLogout();
       } else {
         _lastError = _messageFromDio(e);
         _status = AuthStatus.unauthenticated;
@@ -74,6 +83,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> login(String email, String password) async {
     _lastError = null;
+    _sessionExpiredMessage = null;
     notifyListeners();
     try {
       final res = await _api.post<Map<String, dynamic>>(
@@ -93,6 +103,7 @@ class AuthProvider extends ChangeNotifier {
         return;
       }
       await TokenStorage.writeAccessToken(token);
+      _api.resetUnauthorizedGuard();
       final userJson = data['user'] as Map<String, dynamic>?;
       if (userJson == null) {
         await tryRestore();
@@ -100,6 +111,7 @@ class AuthProvider extends ChangeNotifier {
       }
       _user = AuthUser.fromJson(userJson);
       _status = AuthStatus.authenticated;
+      _sessionExpiredMessage = null;
       notifyListeners();
       unawaited(_registerFcmToken());
     } on DioException catch (e) {
@@ -111,8 +123,20 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Đăng xuất chủ động (nút profile): thử huỷ FCM rồi xoá phiên.
   Future<void> logout() async {
     await _unregisterFcmToken();
+    await _clearSession();
+  }
+
+  /// Token hết hạn / 401: xoá phiên local ngay, không gọi API (tránh 401 lặp).
+  Future<void> forceLocalLogout({
+    String message =
+        'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+  }) async {
+    await _fcmTokenRefreshSub?.cancel();
+    _fcmTokenRefreshSub = null;
+    _sessionExpiredMessage = message;
     await _clearSession();
   }
 
@@ -269,6 +293,9 @@ class AuthProvider extends ChangeNotifier {
       final m = data['message'];
       if (m is String) return m;
       if (m is List && m.isNotEmpty) return m.first.toString();
+    }
+    if (e.response?.statusCode == 401) {
+      return 'Email hoặc mật khẩu không đúng.';
     }
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.connectionError ||

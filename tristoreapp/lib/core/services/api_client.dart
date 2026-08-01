@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 import 'token_storage.dart';
 
-/// HTTP client gắn Bearer token; 401 → [onUnauthorized].
+/// HTTP client gắn Bearer token; 401 phiên hết hạn → [onUnauthorized].
 class ApiClient {
   ApiClient() {
     _dio = Dio(
@@ -26,8 +26,8 @@ class ApiClient {
           handler.next(options);
         },
         onError: (e, handler) {
-          if (e.response?.statusCode == 401) {
-            onUnauthorized?.call();
+          if (_shouldHandleUnauthorized(e)) {
+            _notifyUnauthorizedOnce();
           }
           handler.next(e);
         },
@@ -38,8 +38,43 @@ class ApiClient {
   /// Gán sau khi có [AuthProvider] (tránh vòng phụ thuộc).
   void Function()? onUnauthorized;
   late final Dio _dio;
+  bool _handlingUnauthorized = false;
 
   Dio get dio => _dio;
+
+  /// Cho phép gọi lại sau khi user đăng nhập lại.
+  void resetUnauthorizedGuard() {
+    _handlingUnauthorized = false;
+  }
+
+  bool _shouldHandleUnauthorized(DioException e) {
+    if (e.response?.statusCode != 401) return false;
+    final path = e.requestOptions.path;
+    // Sai mật khẩu / auth công khai — không coi là hết phiên.
+    if (_isPublicAuthPath(path)) return false;
+    final auth = e.requestOptions.headers['Authorization'];
+    final hadBearer =
+        auth is String && auth.startsWith('Bearer ') && auth.length > 7;
+    return hadBearer;
+  }
+
+  bool _isPublicAuthPath(String path) {
+    final p = path.toLowerCase();
+    return p.contains('/auth/login') ||
+        p.endsWith('/auth/login') ||
+        p.contains('/auth/register');
+  }
+
+  void _notifyUnauthorizedOnce() {
+    if (_handlingUnauthorized) return;
+    _handlingUnauthorized = true;
+    try {
+      onUnauthorized?.call();
+    } catch (err, st) {
+      debugPrint('[ApiClient] onUnauthorized failed: $err\n$st');
+      _handlingUnauthorized = false;
+    }
+  }
 
   Future<Response<T>> get<T>(
     String path, {

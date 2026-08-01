@@ -10,7 +10,6 @@ import 'package:tstore/providers/address_catalog_provider.dart';
 import 'package:tstore/core/config/api_config.dart';
 import 'package:tstore/core/constants/app_colors.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
-import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/core/utils/dio_error_message.dart';
@@ -987,12 +986,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     } on DioException catch (e) {
       if (!mounted) return;
       if (isDioUnauthorized(e)) {
-        await context.read<AuthProvider>().logout();
-        if (!mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.login,
-          (_) => false,
-        );
+        // Interceptor / auth gate đã đưa về login.
         return;
       }
       setState(() {
