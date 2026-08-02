@@ -826,7 +826,7 @@ class AppLocalizations {
   String get serviceFilterSupportStaff => 'NV hỗ trợ';
   String get serviceEscalate => 'Leo thang / tạo phiếu con';
   String get serviceCompleteRequest => 'Hoàn tất yêu cầu';
-  String get serviceCancelRequest => 'Huỷ yêu cầu';
+  String get serviceCancelRequest => 'Huỷ hỗ trợ';
   String get serviceOnlineTicket => 'Phiếu hỗ trợ online';
   String get serviceOnsiteTicket => 'Phiếu hỗ trợ tại nhà';
   String get serviceRepairTicket => 'Phiếu sửa chữa';

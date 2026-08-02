@@ -109,7 +109,7 @@ class _ServiceRequestDetailScreenState
   Future<void> _cancel() async {
     final item = _item;
     if (item == null || _busy) return;
-    final reason = await promptReason(context, title: 'Lý do hủy yêu cầu');
+    final reason = await promptReason(context, title: 'Lý do hủy hỗ trợ');
     if (reason == null) return;
     setState(() => _busy = true);
     try {
@@ -120,7 +120,7 @@ class _ServiceRequestDetailScreenState
         setState(() => _item = updated);
         AppMessenger.showSnackBar(
           context,
-          const SnackBar(content: Text('Đã hủy yêu cầu.')),
+          const SnackBar(content: Text('Đã hủy hỗ trợ.')),
         );
       }
     } catch (e) {
