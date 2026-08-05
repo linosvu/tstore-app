@@ -189,19 +189,6 @@ class ServiceRequestsProvider extends ChangeNotifier {
     return ServiceRequestPublic.fromJson(data);
   }
 
-  Future<ServiceTicketPublic?> createChildTicket(
-    String requestId,
-    Map<String, dynamic> body,
-  ) async {
-    final res = await _api.post<Map<String, dynamic>>(
-      '/admin/service-requests/$requestId/tickets',
-      data: body,
-    );
-    final data = res.data;
-    if (data == null) return null;
-    return ServiceTicketPublic.fromJson(data);
-  }
-
   Future<ServiceTicketPublic?> patchFeeAppointment(
     String ticketId,
     Map<String, dynamic> body,

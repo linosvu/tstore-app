@@ -8,7 +8,6 @@ import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
-import 'escalate_ticket_screen.dart';
 import 'service_ui.dart';
 import 'widgets/countdown_banner.dart';
 import 'widgets/evidence_section.dart';
@@ -134,21 +133,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
     });
   }
 
-  Future<void> _escalate() async {
-    final t = _ticket;
-    if (t == null) return;
-    await Navigator.push<ServiceTicketPublic>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EscalateTicketScreen(
-          requestId: t.requestId,
-          previousTicketId: t.id,
-          suggestedType: 'onsite',
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -243,7 +227,7 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: _busy || completeBlock != null ? null : _fail,
-                    child: const Text('Thất bại — leo thang'),
+                    child: const Text('Thất bại'),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
@@ -262,11 +246,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                             }
                           },
                     child: const Text('Hủy phiếu'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _escalate,
-                    child: Text(l10n.serviceEscalate),
                   ),
                 ],
                 const SizedBox(height: 12),

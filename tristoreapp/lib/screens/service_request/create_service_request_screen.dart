@@ -11,6 +11,7 @@ import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 import 'service_ui.dart';
+import 'repair_ticket_screen.dart';
 import 'widgets/fee_field.dart';
 
 class CreateServiceRequestScreen extends StatefulWidget {
@@ -30,8 +31,11 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   String _channel = 'phone';
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _phone2Ctrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _customerNoteCtrl = TextEditingController();
+  final _buyerNameCtrl = TextEditingController();
+  final _buyerPhoneCtrl = TextEditingController();
+  final _buyerAddressCtrl = TextEditingController();
   final _productCtrl = TextEditingController();
   final _serialCtrl = TextEditingController();
   final _issueCtrl = TextEditingController();
@@ -43,8 +47,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   int _feeAmount = 0;
   DateTime _appointmentDate = DateTime.now().add(const Duration(days: 1));
   String? _managerUserId;
-  String? _supportStaffUserId;
-  String? _staffUserId;
+  String? _creatorName;
   List<(String, String)> _users = [];
   final List<Map<String, String>> _attachments = [];
   bool _loadingUsers = false;
@@ -54,14 +57,17 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   @override
   void initState() {
     super.initState();
-    _ticketType = widget.defaultTicketType;
+    final def = widget.defaultTicketType;
+    _ticketType = def == 'repair'
+        ? 'repair'
+        : (supportTicketTypes.contains(def) ? def : 'online');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final me = context.read<AuthProvider>().user;
       if (me != null) {
         setState(() {
           _managerUserId = me.id;
-          _supportStaffUserId = me.id;
-          _staffUserId = me.id;
+          _creatorName =
+              (me.fullName.trim().isNotEmpty ? me.fullName : me.email).trim();
         });
       }
       _loadUsers();
@@ -72,8 +78,11 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _phone2Ctrl.dispose();
     _addressCtrl.dispose();
+    _customerNoteCtrl.dispose();
+    _buyerNameCtrl.dispose();
+    _buyerPhoneCtrl.dispose();
+    _buyerAddressCtrl.dispose();
     _productCtrl.dispose();
     _serialCtrl.dispose();
     _issueCtrl.dispose();
@@ -150,23 +159,10 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
       );
       return;
     }
-    if (_supportStaffUserId == null) {
+    if (_managerUserId == null) {
       AppMessenger.showSnackBar(
         context,
-        const SnackBar(content: Text('Chọn nhân viên hỗ trợ.')),
-      );
-      return;
-    }
-    if (_staffUserId == null) {
-      AppMessenger.showSnackBar(
-        context,
-        SnackBar(
-          content: Text(
-            _ticketType == 'repair'
-                ? 'Chọn nhân viên sửa chữa.'
-                : 'Chọn nhân viên xử lý.',
-          ),
-        ),
+        const SnackBar(content: Text('Chọn nhân viên quản lý.')),
       );
       return;
     }
@@ -176,17 +172,22 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         'channel': _channel,
         'customerName': _nameCtrl.text.trim(),
         'customerPhone': _phoneCtrl.text.trim(),
-        if (_phone2Ctrl.text.trim().isNotEmpty)
-          'customerPhone2': _phone2Ctrl.text.trim(),
         if (_addressCtrl.text.trim().isNotEmpty)
           'customerAddress': _addressCtrl.text.trim(),
+        if (_customerNoteCtrl.text.trim().isNotEmpty)
+          'customerNote': _customerNoteCtrl.text.trim(),
+        if (_buyerNameCtrl.text.trim().isNotEmpty)
+          'buyerName': _buyerNameCtrl.text.trim(),
+        if (_buyerPhoneCtrl.text.trim().isNotEmpty)
+          'buyerPhone': _buyerPhoneCtrl.text.trim(),
+        if (_buyerAddressCtrl.text.trim().isNotEmpty)
+          'buyerAddress': _buyerAddressCtrl.text.trim(),
         'productName': _productCtrl.text.trim(),
         if (_serialCtrl.text.trim().isNotEmpty)
           'productSerial': _serialCtrl.text.trim(),
         'issueDescription': _issueCtrl.text.trim(),
         if (_attachments.isNotEmpty) 'attachments': _attachments,
-        if (_managerUserId != null) 'managerUserId': _managerUserId,
-        'supportStaffUserId': _supportStaffUserId,
+        'managerUserId': _managerUserId,
         'ticketType': _ticketType,
         'isFree': _isFree,
         'feeAmount': _isFree ? 0 : _feeAmount,
@@ -194,7 +195,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         'appointmentSlot': _slotCtrl.text.trim().isEmpty
             ? '09:00-11:00'
             : _slotCtrl.text.trim(),
-        'staffUserId': _staffUserId,
+        // NV hỗ trợ / NV SC — mặc định người tạo (API).
         if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
       };
       final created =
@@ -205,7 +206,16 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
           context,
           SnackBar(content: Text(l10n.serviceRequestCreated)),
         );
-        Navigator.pop(context, true);
+        final ticketId = created.latestTicket?.id;
+        if (_ticketType == 'repair' && ticketId != null) {
+          await Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => RepairTicketScreen(ticketId: ticketId),
+            ),
+          );
+        } else {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -235,6 +245,18 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
         children: [
           SectionCard(
+            title: 'Người tạo yêu cầu',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.person_outline),
+              title: Text(
+                _creatorName?.isNotEmpty == true ? _creatorName! : '—',
+              ),
+              subtitle: const Text('Tự động theo tài khoản đăng nhập'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
             title: l10n.serviceChannel,
             child: Wrap(
               spacing: 8,
@@ -256,7 +278,8 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
               children: [
                 TextField(
                   controller: _nameCtrl,
-                  decoration: InputDecoration(labelText: l10n.repairCustomerName),
+                  decoration:
+                      InputDecoration(labelText: l10n.repairCustomerName),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -267,14 +290,39 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
                 ),
                 const SizedBox(height: 8),
                 TextField(
-                  controller: _phone2Ctrl,
-                  decoration: InputDecoration(labelText: l10n.servicePhone2),
+                  controller: _addressCtrl,
+                  decoration: InputDecoration(labelText: l10n.serviceAddress),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _customerNoteCtrl,
+                  decoration: const InputDecoration(labelText: 'Ghi chú'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'Người mua hàng',
+            child: Column(
+              children: [
+                TextField(
+                  controller: _buyerNameCtrl,
+                  decoration: const InputDecoration(labelText: 'Tên người mua'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _buyerPhoneCtrl,
+                  decoration: const InputDecoration(labelText: 'SĐT người mua'),
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 8),
                 TextField(
-                  controller: _addressCtrl,
-                  decoration: InputDecoration(labelText: l10n.serviceAddress),
+                  controller: _buyerAddressCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Địa chỉ người mua'),
                   maxLines: 2,
                 ),
               ],
@@ -288,7 +336,8 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
               children: [
                 TextField(
                   controller: _productCtrl,
-                  decoration: InputDecoration(labelText: l10n.serviceProductName),
+                  decoration:
+                      InputDecoration(labelText: l10n.serviceProductName),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -321,7 +370,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: l10n.serviceManager,
+            title: 'Nhân viên quản lý',
             child: _loadingUsers
                 ? const LinearProgressIndicator()
                 : TsDropdownFieldNullable<String>(
@@ -335,49 +384,57 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
           const SizedBox(height: 12),
           SectionCard(
             title: l10n.serviceDirection,
-            child: Row(
-              children: [
-                for (final t in serviceTicketTypes)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: InkWell(
-                        onTap: () => setState(() => _ticketType = t),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: _ticketType == t
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.grey.shade300,
-                              width: _ticketType == t ? 2 : 1,
+            child: _ticketType == 'repair'
+                ? ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.build_outlined),
+                    title: Text(ticketTypeLabel('repair')),
+                    subtitle:
+                        const Text('Yêu cầu sửa chữa — một hướng duy nhất'),
+                  )
+                : Row(
+                    children: [
+                      for (final t in supportTicketTypes)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: InkWell(
+                              onTap: () => setState(() => _ticketType = t),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: _ticketType == t
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.grey.shade300,
+                                    width: _ticketType == t ? 2 : 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      t == 'online'
+                                          ? Icons.headset_mic_outlined
+                                          : t == 'onsite'
+                                              ? Icons.home_outlined
+                                              : Icons.more_horiz,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      ticketTypeLabel(t),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                t == 'online'
-                                    ? Icons.headset_mic_outlined
-                                    : t == 'onsite'
-                                        ? Icons.home_outlined
-                                        : Icons.build_outlined,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                ticketTypeLabel(t),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          ),
                         ),
-                      ),
-                    ),
+                    ],
                   ),
-              ],
-            ),
           ),
           const SizedBox(height: 12),
           SectionCard(
@@ -406,34 +463,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-          SectionCard(
-            title: l10n.serviceSupportStaff,
-            child: _loadingUsers
-                ? const LinearProgressIndicator()
-                : TsDropdownFieldNullable<String>(
-                    value: _supportStaffUserId,
-                    items: userIds,
-                    itemLabel: (id) =>
-                        id == null ? '—' : (nameOf[id] ?? id),
-                    onChanged: (v) => setState(() => _supportStaffUserId = v),
-                  ),
-          ),
-          const SizedBox(height: 12),
-          SectionCard(
-            title: _ticketType == 'repair'
-                ? l10n.serviceRepairStaff
-                : l10n.serviceStaff,
-            child: _loadingUsers
-                ? const LinearProgressIndicator()
-                : TsDropdownFieldNullable<String>(
-                    value: _staffUserId,
-                    items: userIds,
-                    itemLabel: (id) =>
-                        id == null ? '—' : (nameOf[id] ?? id),
-                    onChanged: (v) => setState(() => _staffUserId = v),
-                  ),
           ),
           const SizedBox(height: 12),
           SectionCard(

@@ -1,10 +1,9 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:tstore/core/utils/product_image_compress.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
@@ -15,7 +14,7 @@ import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 
-/// Chữ ký: vẽ → PNG tạm → upload.
+/// Chữ ký: vẽ → PNG nền trắng → upload (không JPEG).
 /// Giữ nét khi parent rebuild (AutomaticKeepAlive + soft reload phía màn cha).
 class SignaturePadSection extends StatefulWidget {
   const SignaturePadSection({
@@ -27,6 +26,8 @@ class SignaturePadSection extends StatefulWidget {
     required this.onChanged,
     this.readOnly = false,
     this.title,
+    this.hidePadWhenSigned = false,
+    this.header,
   });
 
   final String ticketId;
@@ -36,6 +37,10 @@ class SignaturePadSection extends StatefulWidget {
   final VoidCallback onChanged;
   final bool readOnly;
   final String? title;
+  /// Ẩn pad khi đã có chữ ký (màn tiếp nhận SC).
+  final bool hidePadWhenSigned;
+  /// Widget phía trên pad (vd. dropdown NV tiếp nhận).
+  final Widget? header;
 
   @override
   State<SignaturePadSection> createState() => _SignaturePadSectionState();
@@ -47,6 +52,7 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
   List<Offset> _current = [];
   final _repaintKey = GlobalKey();
   bool _busy = false;
+  bool _resign = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -92,6 +98,7 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
             sig.id,
           );
       if (!mounted) return;
+      setState(() => _resign = false);
       widget.onChanged();
       AppMessenger.showSnackBar(
         context,
@@ -117,7 +124,6 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
       );
       return;
     }
-    // Chốt nét đang vẽ trước khi capture.
     if (_current.isNotEmpty) {
       _strokes.add(List<Offset>.from(_current));
       _current = [];
@@ -127,20 +133,15 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
       final boundary = _repaintKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
       if (boundary == null) throw Exception('Không render được chữ ký');
-      // Đợi frame vẽ xong trước khi toImage.
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
       final image = await boundary.toImage(pixelRatio: 2);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) throw Exception('Xuất PNG thất bại');
-      final dir = await getTemporaryDirectory();
-      final path =
-          '${dir.path}/sig_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File(path);
-      await file.writeAsBytes(byteData.buffer.asUint8List());
+      final bytes = byteData.buffer.asUint8List();
 
       final api = context.read<AuthProvider>().api;
-      final url = await uploadProductImageFromPath(path, api);
+      final url = await uploadSignaturePngBytes(Uint8List.fromList(bytes), api);
       if (url == null || url.isEmpty) {
         throw Exception('Upload chữ ký thất bại');
       }
@@ -156,6 +157,7 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
       setState(() {
         _strokes.clear();
         _current = [];
+        _resign = false;
       });
       widget.onChanged();
       AppMessenger.showSnackBar(
@@ -180,11 +182,18 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
     final title = widget.title ??
         'Chữ ký ${widget.signer == 'customer' ? 'khách' : 'nhân viên'}';
     final existing = _existing;
+    final showPad = !widget.readOnly &&
+        (existing.isEmpty || _resign || !widget.hidePadWhenSigned);
+
     return SectionCard(
       title: title,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.header != null) ...[
+            widget.header!,
+            const SizedBox(height: 12),
+          ],
           if (existing.isNotEmpty) ...[
             Text(
               'Đã lưu ${existing.length} chữ ký.',
@@ -213,7 +222,8 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                               onTap: () => _previewSignature(sig),
                               child: Container(
                                 foregroundDecoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Image.network(
@@ -238,7 +248,8 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                                 backgroundColor: Colors.black54,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: _busy ? null : () => _deleteSignature(sig),
+                              onPressed:
+                                  _busy ? null : () => _deleteSignature(sig),
                               icon: const Icon(Icons.close),
                             ),
                           ),
@@ -248,7 +259,15 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                 },
               ),
             ),
-            if (!widget.readOnly)
+            if (!widget.readOnly && widget.hidePadWhenSigned && !_resign)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => setState(() => _resign = true),
+                  child: const Text('Ký lại'),
+                ),
+              ),
+            if (!widget.readOnly && !widget.hidePadWhenSigned)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
@@ -257,7 +276,7 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                 ),
               ),
           ],
-          if (!widget.readOnly) ...[
+          if (showPad) ...[
             const SizedBox(height: 8),
             Container(
               height: 160,
@@ -267,7 +286,6 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                 color: Colors.white,
               ),
               clipBehavior: Clip.hardEdge,
-              // Eager pan: chiếm gesture để ListView cha không scroll khi đang ký.
               child: RawGestureDetector(
                 gestures: <Type, GestureRecognizerFactory>{
                   _EagerPanGestureRecognizer:
@@ -308,21 +326,22 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
                 },
                 child: RepaintBoundary(
                   key: _repaintKey,
-                  child: CustomPaint(
-                    painter: _SignaturePainter(
-                      strokes: [
-                        ..._strokes,
-                        if (_current.isNotEmpty) _current,
-                      ],
+                  child: ColoredBox(
+                    color: Colors.white,
+                    child: CustomPaint(
+                      painter: _SignaturePainter(
+                        strokes: [
+                          ..._strokes,
+                          if (_current.isNotEmpty) _current,
+                        ],
+                      ),
+                      size: Size.infinite,
                     ),
-                    size: Size.infinite,
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            // FilledButton theme dùng minWidth = infinity → không đặt trong Row
-            // (sẽ overflow + bị SectionCard clip, nút Xác nhận biến mất).
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
@@ -349,7 +368,7 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
             const Padding(
               padding: EdgeInsets.only(top: 4),
               child: Text(
-                'Bấm Xác nhận để lưu chữ ký trước khi bàn giao.',
+                'Bấm Xác nhận để lưu chữ ký.',
                 style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ),
@@ -382,9 +401,15 @@ class _SignaturePainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
     for (final stroke in strokes) {
-      if (stroke.isEmpty) continue;
-      if (stroke.length == 1) {
-        canvas.drawCircle(stroke.first, 1.5, paint);
+      if (stroke.length < 2) {
+        if (stroke.length == 1) {
+          canvas.drawCircle(
+            stroke.first,
+            1.2,
+            paint..style = PaintingStyle.fill,
+          );
+          paint.style = PaintingStyle.stroke;
+        }
         continue;
       }
       final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
@@ -396,14 +421,6 @@ class _SignaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) {
-    if (oldDelegate.strokes.length != strokes.length) return true;
-    for (var i = 0; i < strokes.length; i++) {
-      if (!identical(oldDelegate.strokes[i], strokes[i]) &&
-          oldDelegate.strokes[i].length != strokes[i].length) {
-        return true;
-      }
-    }
-    return !identical(oldDelegate.strokes, strokes);
-  }
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) =>
+      oldDelegate.strokes != strokes;
 }

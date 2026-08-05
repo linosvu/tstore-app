@@ -6,6 +6,7 @@ import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/utils/media_upload_flow.dart';
 import 'package:tstore/core/widgets/media_picker_sheet.dart';
+import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
@@ -37,40 +38,55 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   bool _busy = false;
   List<(String, String)> _users = [];
 
-  // Handoff
+  // Handoff / inspect
   String? _techUserId;
   String? _receiveStaffUserId;
   DateTime _contactDeadline = DateTime.now().add(const Duration(hours: 4));
-  String _receiveType = 'store';
+  String? _repairMethod;
+  bool _inspectFormDirty = false;
   final _initialCtrl = TextEditingController();
-  final _extraCtrl = TextEditingController();
+  final _receiveNoteCtrl = TextEditingController();
+  final _methodNoteCtrl = TextEditingController();
 
-  // Contact / inspect
+  // Contact / inspect leftovers used later
   final _contactNoteCtrl = TextEditingController();
+
+  // Repairing
+  bool _repairFormDirty = false;
   final _solutionCtrl = TextEditingController();
   final _partCostCtrl = TextEditingController(text: '0');
   final _laborCostCtrl = TextEditingController(text: '0');
-  DateTime _etaDate = DateTime.now().add(const Duration(days: 3));
-
-  // Result
+  final _warrantyCtrl = TextEditingController(text: '0');
+  final _repairContactNoteCtrl = TextEditingController();
+  final _receiveBackNoteCtrl = TextEditingController();
   final _resultCtrl = TextEditingController();
 
   // Delivery
+  bool _deliveryFormDirty = false;
+  String? _deliveryStaffUserId;
   String _deliveryMethod = 'store';
   DateTime? _deliveryEta;
   final _shippingPayerCtrl = TextEditingController();
 
   // Payment
+  bool _payFormDirty = false;
   final _payAmountCtrl = TextEditingController(text: '0');
+  final _payNoteCtrl = TextEditingController();
   String _payMethod = 'cash';
   DateTime? _payDue;
+  final List<String> _payProofUrls = [];
 
   // Request editing (Thông tin YC gốc)
   bool _editingRequest = false;
+  bool _resignReceiveStaff = false;
+  bool _resignReceiveCustomer = false;
   final _reqNameCtrl = TextEditingController();
   final _reqPhoneCtrl = TextEditingController();
-  final _reqPhone2Ctrl = TextEditingController();
   final _reqAddressCtrl = TextEditingController();
+  final _reqCustomerNoteCtrl = TextEditingController();
+  final _reqBuyerNameCtrl = TextEditingController();
+  final _reqBuyerPhoneCtrl = TextEditingController();
+  final _reqBuyerAddressCtrl = TextEditingController();
   final _reqProductNameCtrl = TextEditingController();
   final _reqProductSerialCtrl = TextEditingController();
   final _reqIssueCtrl = TextEditingController();
@@ -88,11 +104,15 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   @override
   void dispose() {
     _initialCtrl.dispose();
-    _extraCtrl.dispose();
+    _receiveNoteCtrl.dispose();
+    _methodNoteCtrl.dispose();
     _reqNameCtrl.dispose();
     _reqPhoneCtrl.dispose();
-    _reqPhone2Ctrl.dispose();
     _reqAddressCtrl.dispose();
+    _reqCustomerNoteCtrl.dispose();
+    _reqBuyerNameCtrl.dispose();
+    _reqBuyerPhoneCtrl.dispose();
+    _reqBuyerAddressCtrl.dispose();
     _reqProductNameCtrl.dispose();
     _reqProductSerialCtrl.dispose();
     _reqIssueCtrl.dispose();
@@ -100,9 +120,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     _solutionCtrl.dispose();
     _partCostCtrl.dispose();
     _laborCostCtrl.dispose();
+    _warrantyCtrl.dispose();
+    _repairContactNoteCtrl.dispose();
+    _receiveBackNoteCtrl.dispose();
     _resultCtrl.dispose();
     _shippingPayerCtrl.dispose();
     _payAmountCtrl.dispose();
+    _payNoteCtrl.dispose();
     super.dispose();
   }
 
@@ -148,68 +172,98 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         _ticket = t;
         final detail = d;
         final req = t?.request;
+        final status = t?.status;
+        final softInspect = status == 'received' ||
+            status == 'inspecting' ||
+            status == 'approving' ||
+            status == 'notifying';
+        final softRepair = status == 'repairing';
+        final softDelivery = status == 'delivering';
+        final softPay = status == 'paying';
 
-        // Reset stateful defaults so rewinding doesn't leave stale values.
-        _receiveType = 'store';
-        _contactDeadline = DateTime.now().add(const Duration(hours: 4));
-        _etaDate = DateTime.now().add(const Duration(days: 3));
-        _deliveryMethod = 'store';
-        _deliveryEta = null;
-        _payMethod = 'cash';
-        _payDue = null;
+        // Reset defaults for later steps; soft-preserve inspect/receive form.
+        if (!softInspect || !_inspectFormDirty) {
+          _contactDeadline = DateTime.now().add(const Duration(hours: 4));
+        }
 
-        // Không ghi đè khi user đang sửa dở thông tin YC gốc.
         if (req != null && !_editingRequest) {
           _resetRequestEditorFromRequest(req);
         }
 
-        // Received / handoff.
-        _techUserId =
-            (t?.staffUserId ?? '').trim().isEmpty ? null : t!.staffUserId;
-        final savedReceiveStaff = (detail?.receiveStaffUserId ?? '').trim();
-        _receiveStaffUserId = savedReceiveStaff.isEmpty
-            ? context.read<AuthProvider>().user?.id
-            : savedReceiveStaff;
-        _receiveType = detail?.receiveType ?? 'store';
-        _initialCtrl.text = detail?.initialAssessment ?? '';
-        _extraCtrl.text = detail?.extraNote ?? '';
-        _solutionCtrl.text = detail?.solution ?? '';
-        _partCostCtrl.text = detail?.partCost != null ? '${detail!.partCost}' : '0';
-        _laborCostCtrl.text = detail?.laborCost != null ? '${detail!.laborCost}' : '0';
-        _resultCtrl.text = detail?.repairResult ?? '';
-
-        if (detail?.etaDate != null) {
-          final parsed = DateTime.tryParse(detail!.etaDate!);
-          if (parsed != null) _etaDate = parsed;
+        if (!softInspect || !_inspectFormDirty) {
+          final staffId = (t?.staffUserId ?? '').trim();
+          _techUserId = staffId.isEmpty ? null : staffId;
+          final savedReceiveStaff = (detail?.receiveStaffUserId ?? '').trim();
+          _receiveStaffUserId = savedReceiveStaff.isEmpty
+              ? context.read<AuthProvider>().user?.id
+              : savedReceiveStaff;
+          _initialCtrl.text = detail?.initialAssessment ?? '';
+          _methodNoteCtrl.text = detail?.extraNote ?? '';
+          _repairMethod = detail?.repairMethod;
+          if (detail?.contactDeadlineAt != null) {
+            final parsed = DateTime.tryParse(detail!.contactDeadlineAt!);
+            if (parsed != null) _contactDeadline = parsed;
+          }
         }
 
-        // Hạn gọi khách được nhúng trong contactNote dạng "Hẹn gọi trước: <iso>".
-        // Tách ra để ô ghi chú không hiển thị chuỗi máy.
+        if (_receiveNoteCtrl.text.trim().isEmpty) {
+          _receiveNoteCtrl.text = t?.note ?? '';
+        }
+
         final contactNote = detail?.contactNote ?? '';
-        final m = RegExp(r'Hẹn gọi trước:\s*(\S+)').firstMatch(contactNote);
-        if (m != null) {
-          final parsed = DateTime.tryParse(m.group(1)!);
-          if (parsed != null) _contactDeadline = parsed;
-          _contactNoteCtrl.text =
-              contactNote.replaceFirst(m.group(0)!, '').trim();
-        } else {
+        if (!softInspect || !_inspectFormDirty) {
           _contactNoteCtrl.text = contactNote;
         }
 
-        // Delivery.
-        _deliveryMethod = detail?.deliveryMethod ?? 'store';
-        _shippingPayerCtrl.text = detail?.shippingFeePayer ?? '';
-        _deliveryEta = detail?.deliveryEta != null
-            ? DateTime.tryParse(detail!.deliveryEta!)
-            : null;
+        final preserveRepair = softRepair && _repairFormDirty;
+        final preserveDelivery = softDelivery && _deliveryFormDirty;
+        final preservePay = softPay && _payFormDirty;
+        final preserveCosts = preserveRepair || preserveDelivery;
 
-        // Payment.
-        _payMethod = detail?.paymentMethod ?? 'cash';
-        _payAmountCtrl.text =
-            detail?.paymentAmount != null ? '${detail!.paymentAmount}' : '0';
-        _payDue = detail?.paymentDueDate != null
-            ? DateTime.tryParse(detail!.paymentDueDate!)
-            : null;
+        if (!preserveRepair) {
+          _solutionCtrl.text = detail?.solution ?? '';
+          _repairContactNoteCtrl.text = detail?.repairContactNote ?? '';
+          _receiveBackNoteCtrl.text = detail?.receiveBackNote ?? '';
+          _resultCtrl.text = detail?.repairResult ?? '';
+        }
+        if (!preserveCosts) {
+          _partCostCtrl.text = '${detail?.partCost ?? 0}';
+          _laborCostCtrl.text = '${detail?.laborCost ?? 0}';
+          _warrantyCtrl.text = '${detail?.warrantyMonths ?? 0}';
+        }
+
+        if (!preserveDelivery) {
+          _deliveryMethod = detail?.deliveryMethod ?? 'store';
+          _shippingPayerCtrl.text = detail?.shippingFeePayer ?? '';
+          _deliveryEta = detail?.deliveryEta != null
+              ? DateTime.tryParse(detail!.deliveryEta!)
+              : null;
+          final savedDelivery = (detail?.deliveryStaffUserId ?? '').trim();
+          _deliveryStaffUserId = savedDelivery.isEmpty
+              ? context.read<AuthProvider>().user?.id
+              : savedDelivery;
+        }
+
+        if (!preservePay) {
+          final aborted = detail?.abortedAt != null;
+          final costTotal =
+              (detail?.partCost ?? 0) + (detail?.laborCost ?? 0);
+          _payMethod = detail?.paymentMethod ?? (aborted ? 'free' : 'cash');
+          if (detail?.paymentAmount != null) {
+            _payAmountCtrl.text = '${detail!.paymentAmount}';
+          } else if (aborted || _payMethod == 'free') {
+            _payAmountCtrl.text = '0';
+          } else {
+            _payAmountCtrl.text = '$costTotal';
+          }
+          _payDue = detail?.paymentDueDate != null
+              ? DateTime.tryParse(detail!.paymentDueDate!)
+              : null;
+          _payNoteCtrl.text = detail?.paymentNote ?? '';
+          _payProofUrls
+            ..clear()
+            ..addAll(detail?.paymentProofUrls ?? const []);
+        }
         _loading = false;
       });
     } catch (_) {
@@ -217,21 +271,28 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
   }
 
-  Future<void> _action(String action, {Map<String, dynamic>? body}) async {
-    if (_busy) return;
+  Future<bool> _action(String action, {Map<String, dynamic>? body}) async {
+    if (_busy) return false;
     setState(() => _busy = true);
     try {
       final updated = await context
           .read<ServiceRequestsProvider>()
           .ticketAction(widget.ticketId, action, body: body);
       if (updated != null && mounted) {
-        setState(() => _ticket = updated);
+        setState(() {
+          _ticket = updated;
+          _repairFormDirty = false;
+          _deliveryFormDirty = false;
+          _payFormDirty = false;
+        });
         AppMessenger.showSnackBar(
           context,
           const SnackBar(content: Text('Đã cập nhật.')),
         );
         await _load();
+        return true;
       }
+      return false;
     } catch (e) {
       if (mounted) {
         AppMessenger.showSnackBar(
@@ -239,6 +300,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
         );
       }
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -256,10 +318,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (!hasStaff) return 'Cần chữ ký nhân viên.';
     if (!hasCustomer) return 'Cần chữ ký khách.';
     if (_receiveStaffUserId == null) return 'Chọn nhân viên tiếp nhận.';
-    if (_techUserId == null) return 'Chọn nhân viên kỹ thuật.';
-    if (_initialCtrl.text.trim().isEmpty) {
-      return 'Nhập nhận định ban đầu.';
-    }
     return null;
   }
 
@@ -270,14 +328,98 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       return;
     }
     await _action('handoff-tech', body: {
-      'techUserId': _techUserId,
       'receiveStaffUserId': _receiveStaffUserId,
-      'contactDeadlineAt': _contactDeadline.toUtc().toIso8601String(),
-      'receiveType': _receiveType,
-      'initialAssessment': _initialCtrl.text.trim(),
-      if (_extraCtrl.text.trim().isNotEmpty)
-        'extraNote': _extraCtrl.text.trim(),
+      if (_receiveNoteCtrl.text.trim().isNotEmpty)
+        'note': _receiveNoteCtrl.text.trim(),
     });
+    if (mounted) setState(() => _inspectFormDirty = false);
+  }
+
+  String? _startRepairBlockReason(ServiceTicketPublic t, RepairDetailPublic? d) {
+    if (t.staffUserId.trim().isEmpty) {
+      return 'QL cần bàn giao kỹ thuật (chọn KTV + hẹn gọi).';
+    }
+    if (d?.contactDeadlineAt == null) {
+      return 'QL cần chọn giờ hẹn gọi khách.';
+    }
+    if (_initialCtrl.text.trim().isEmpty) {
+      return 'Nhập đánh giá ban đầu.';
+    }
+    if (d?.contactConfirmedAt == null) {
+      return 'Cần xác nhận đã liên hệ khách.';
+    }
+    if (!t.evidences.any((e) => e.stage == 'contact')) {
+      return 'Cần bằng chứng gọi khách.';
+    }
+    if (_repairMethod == null) {
+      return 'Chọn hình thức sửa chữa.';
+    }
+    if (!t.evidences.any((e) => e.stage == 'repair_method')) {
+      return 'Cần ảnh/video bàn giao hình thức sửa chữa.';
+    }
+    return null;
+  }
+
+  Future<void> _assignTech(ServiceTicketPublic t) async {
+    if (_techUserId == null) {
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Chọn nhân viên kỹ thuật.')),
+      );
+      return;
+    }
+    setState(() => _inspectFormDirty = true);
+    await _action('assign-tech', body: {
+      'techUserId': _techUserId,
+      'contactDeadlineAt': _contactDeadline.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> _startRepair(ServiceTicketPublic t, RepairDetailPublic? d) async {
+    final block = _startRepairBlockReason(t, d);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('start-repair', body: {
+      'repairMethod': _repairMethod,
+      'initialAssessment': _initialCtrl.text.trim(),
+      if (_methodNoteCtrl.text.trim().isNotEmpty)
+        'extraNote': _methodNoteCtrl.text.trim(),
+    });
+    if (mounted) setState(() => _inspectFormDirty = false);
+  }
+
+  Future<void> _cancelRequest(ServiceTicketPublic t) async {
+    final r = await promptReason(
+      context,
+      title: 'Hủy yêu cầu sửa chữa',
+    );
+    if (r == null || !mounted) return;
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await context
+          .read<ServiceRequestsProvider>()
+          .ticketAction(widget.ticketId, 'cancel-repair', body: {'reason': r});
+      if (!mounted) return;
+      if (updated != null) {
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã hủy yêu cầu.')),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   bool get _isManager {
@@ -305,14 +447,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       case 1:
         return 'inspecting';
       case 2:
-        return 'approving';
-      case 3:
-        return 'notifying';
-      case 4:
         return 'repairing';
-      case 5:
+      case 3:
         return 'delivering';
-      case 6:
+      case 4:
         return 'paying';
       default:
         return 'received';
@@ -385,8 +523,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         .toList();
     _reqNameCtrl.text = req.customerName;
     _reqPhoneCtrl.text = req.customerPhone;
-    _reqPhone2Ctrl.text = req.customerPhone2 ?? '';
     _reqAddressCtrl.text = req.customerAddress ?? '';
+    _reqCustomerNoteCtrl.text = req.customerNote ?? '';
+    _reqBuyerNameCtrl.text = req.buyerName ?? '';
+    _reqBuyerPhoneCtrl.text = req.buyerPhone ?? '';
+    _reqBuyerAddressCtrl.text = req.buyerAddress ?? '';
     _reqProductNameCtrl.text = req.productName;
     _reqProductSerialCtrl.text = req.productSerial ?? '';
     _reqIssueCtrl.text = req.issueDescription;
@@ -445,10 +586,20 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       final body = <String, dynamic>{
         'customerName': _reqNameCtrl.text.trim(),
         'customerPhone': _reqPhoneCtrl.text.trim(),
-        'customerPhone2':
-            _reqPhone2Ctrl.text.trim().isEmpty ? null : _reqPhone2Ctrl.text.trim(),
         'customerAddress':
             _reqAddressCtrl.text.trim().isEmpty ? null : _reqAddressCtrl.text.trim(),
+        'customerNote': _reqCustomerNoteCtrl.text.trim().isEmpty
+            ? null
+            : _reqCustomerNoteCtrl.text.trim(),
+        'buyerName': _reqBuyerNameCtrl.text.trim().isEmpty
+            ? null
+            : _reqBuyerNameCtrl.text.trim(),
+        'buyerPhone': _reqBuyerPhoneCtrl.text.trim().isEmpty
+            ? null
+            : _reqBuyerPhoneCtrl.text.trim(),
+        'buyerAddress': _reqBuyerAddressCtrl.text.trim().isEmpty
+            ? null
+            : _reqBuyerAddressCtrl.text.trim(),
         'productName': _reqProductNameCtrl.text.trim(),
         'productSerial':
             _reqProductSerialCtrl.text.trim().isEmpty ? null : _reqProductSerialCtrl.text.trim(),
@@ -498,33 +649,31 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
     final canEdit = _canEditRequest(t, d);
     if (!_editingRequest) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LockedRequestInfoCard(request: req),
-          if (canEdit)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : () {
-                    setState(() {
-                      _editingRequest = true;
-                      _resetRequestEditorFromRequest(req);
-                    });
-                  },
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Chỉnh sửa'),
-                ),
-              ),
-            ),
-        ],
+      return LockedRequestInfoCard(
+        request: req,
+        onEdit: !canEdit || _busy
+            ? null
+            : () {
+                setState(() {
+                  _editingRequest = true;
+                  _resetRequestEditorFromRequest(req);
+                });
+              },
       );
     }
 
     return SectionCard(
       title: 'Thông tin yêu cầu gốc (${req.code ?? req.id.substring(0, 8)})',
+      titleTrailing: IconButton(
+        tooltip: 'Hủy chỉnh sửa',
+        onPressed: _busy
+            ? null
+            : () => setState(() {
+                  _editingRequest = false;
+                  _resetRequestEditorFromRequest(req);
+                }),
+        icon: const Icon(Icons.close),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -540,25 +689,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               labelText: 'SĐT',
               suffixIcon: IconButton(
                 icon: const Icon(Icons.copy),
-                onPressed: _busy ? null : () => _copyText(
-                      _reqPhoneCtrl.text,
-                      'Đã copy SĐT',
-                    ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _reqPhone2Ctrl,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'SĐT 2',
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.copy),
-                onPressed: _busy ? null : () => _copyText(
-                      _reqPhone2Ctrl.text,
-                      'Đã copy SĐT 2',
-                    ),
+                onPressed: _busy
+                    ? null
+                    : () => _copyText(
+                          _reqPhoneCtrl.text,
+                          'Đã copy SĐT',
+                        ),
               ),
             ),
           ),
@@ -566,6 +702,40 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           TextField(
             controller: _reqAddressCtrl,
             decoration: const InputDecoration(labelText: 'Địa chỉ'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqCustomerNoteCtrl,
+            decoration: const InputDecoration(labelText: 'Ghi chú'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqBuyerNameCtrl,
+            decoration: const InputDecoration(labelText: 'Tên người mua'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqBuyerPhoneCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'SĐT người mua',
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.copy),
+                onPressed: _busy
+                    ? null
+                    : () => _copyText(
+                          _reqBuyerPhoneCtrl.text,
+                          'Đã copy SĐT người mua',
+                        ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reqBuyerAddressCtrl,
+            decoration: const InputDecoration(labelText: 'Địa chỉ người mua'),
             maxLines: 2,
           ),
           const SizedBox(height: 8),
@@ -598,68 +768,61 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           ),
           const SizedBox(height: 8),
           if (_reqAttachments.isNotEmpty)
-            Column(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 for (var i = 0; i < _reqAttachments.length; i++)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      (_reqAttachments[i]['mediaType'] == 'video')
-                          ? Icons.videocam_outlined
-                          : Icons.photo_outlined,
-                    ),
-                    title: Text(
-                      (_reqAttachments[i]['mediaType'] == 'video')
-                          ? 'Video'
-                          : 'Ảnh',
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: _busy ? null : () => _removeRequestAttachmentAt(i),
-                    ),
-                    onTap: () {
-                      final url = _reqAttachments[i]['url'];
-                      final mediaType = _reqAttachments[i]['mediaType'] ?? 'image';
-                      if (url == null || url.isEmpty) return;
-                      Navigator.push<void>(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => MediaViewerPage(
-                            items: [
-                              MediaViewerItem(url: url, mediaType: mediaType),
-                            ],
-                            initialIndex: 0,
+                  Stack(
+                    children: [
+                      MediaTile(
+                        url: _reqAttachments[i]['url'] ?? '',
+                        mediaType: _reqAttachments[i]['mediaType'] ?? 'image',
+                        width: 64,
+                        height: 64,
+                        onTap: () {
+                          Navigator.push<void>(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => MediaViewerPage(
+                                items: [
+                                  for (final a in _reqAttachments)
+                                    MediaViewerItem(
+                                      url: a['url'] ?? '',
+                                      mediaType: a['mediaType'] ?? 'image',
+                                    ),
+                                ],
+                                initialIndex: i,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          iconSize: 16,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black54,
+                            foregroundColor: Colors.white,
                           ),
+                          onPressed: _busy
+                              ? null
+                              : () => _removeRequestAttachmentAt(i),
+                          icon: const Icon(Icons.close),
                         ),
-                      );
-                    },
+                      ),
+                    ],
                   ),
               ],
             ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  onPressed: _busy ? null : () => _saveRequestEdits(req),
-                  child: const Text('Lưu'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: _busy
-                    ? null
-                    : () {
-                        setState(() {
-                          _editingRequest = false;
-                          _resetRequestEditorFromRequest(req);
-                        });
-                      },
-                child: const Text('Hủy'),
-              ),
-            ],
-          )
+          FilledButton(
+            onPressed: _busy ? null : () => _saveRequestEdits(req),
+            child: const Text('Lưu thông tin yêu cầu'),
+          ),
         ],
       ),
     );
@@ -822,6 +985,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                     ),
                 ],
                 if (!t.isDeleted &&
+                    t.status != 'received' &&
+                    t.status != 'inspecting' &&
+                    t.status != 'approving' &&
+                    t.status != 'notifying' &&
+                    t.status != 'repairing' &&
+                    t.status != 'delivering' &&
+                    !(t.status == 'paying' && d?.abortedAt != null) &&
                     ![
                       'completed',
                       'customer_rejected',
@@ -863,15 +1033,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       case 'received':
         return _receivedStep(t, userIds, nameOf);
       case 'inspecting':
-        return _inspectingStep(t, d);
       case 'approving':
-        return _approvingStep(d);
       case 'notifying':
-        return _notifyingStep(t, d);
+        return _inspectingStep(t, d, userIds, nameOf);
       case 'repairing':
         return _repairingStep(t, d);
       case 'delivering':
-        return _deliveringStep(t);
+        return _deliveringStep(t, d, userIds, nameOf);
       case 'paying':
         return _payingStep(t, d);
       default:
@@ -891,15 +1059,161 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     List<String> userIds,
     Map<String, String> nameOf,
   ) {
-    return [
-      EvidenceSection(
-        ticketId: t.id,
-        stage: 'receive',
-        evidences: t.evidences,
-        onChanged: _load,
-        title: 'Bằng chứng tiếp nhận *',
+    final staffSigs = t.signatures
+        .where((s) => s.stage == 'receive' && s.signer == 'staff')
+        .toList();
+    final customerSigs = t.signatures
+        .where((s) => s.stage == 'receive' && s.signer == 'customer')
+        .toList();
+    final bothSigned = staffSigs.isNotEmpty && customerSigs.isNotEmpty;
+
+    final receiveStaffDropdown = TsDropdownFieldNullable<String>(
+      value: _receiveStaffUserId,
+      labelText: 'Nhân viên tiếp nhận *',
+      items: [
+        ...userIds,
+        if (_receiveStaffUserId != null &&
+            !userIds.contains(_receiveStaffUserId))
+          _receiveStaffUserId!,
+      ],
+      itemLabel: (id) {
+        if (id == null) return '— Chọn nhân viên —';
+        return nameOf[id] ?? id;
+      },
+      onChanged: (v) => setState(() {
+            _receiveStaffUserId = v;
+            _inspectFormDirty = true;
+          }),
+    );
+
+    final evidence = EvidenceSection(
+      ticketId: t.id,
+      stage: 'receive',
+      evidences: t.evidences,
+      onChanged: _load,
+      title: 'Bằng chứng tiếp nhận *',
+      noteField: TextField(
+        controller: _receiveNoteCtrl,
+        decoration: const InputDecoration(
+          labelText: 'Ghi chú bằng chứng tiếp nhận',
+        ),
+        maxLines: 2,
+        onChanged: (_) => _inspectFormDirty = true,
       ),
-      const SizedBox(height: 12),
+    );
+
+    final ctas = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_handoffBlockReason(t) != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              _handoffBlockReason(t)!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        FilledButton(
+          onPressed: _busy || _handoffBlockReason(t) != null
+              ? null
+              : () => _handoff(t),
+          child: const Text('Chuyển sang Kiểm tra'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _busy ? null : () => _cancelRequest(t),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('Hủy yêu cầu'),
+        ),
+      ],
+    );
+
+    if (bothSigned) {
+      return [
+        SectionCard(
+          title: 'Chữ ký tiếp nhận',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              receiveStaffDropdown,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _signatureThumb(
+                      label: 'NV tiếp nhận',
+                      url: staffSigs.last.imageUrl,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _signatureThumb(
+                      label: 'Khách',
+                      url: customerSigs.last.imageUrl,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _resignReceiveStaff = true),
+                    child: const Text('Ký lại NV'),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _resignReceiveCustomer = true),
+                    child: const Text('Ký lại khách'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        if (_resignReceiveStaff) ...[
+          const SizedBox(height: 8),
+          SignaturePadSection(
+            key: ValueKey('sig-${t.id}-receive-staff-resign'),
+            ticketId: t.id,
+            stage: 'receive',
+            signer: 'staff',
+            signatures: const [],
+            onChanged: () {
+              setState(() => _resignReceiveStaff = false);
+              _load();
+            },
+            title: 'Ký lại — nhân viên',
+          ),
+        ],
+        if (_resignReceiveCustomer) ...[
+          const SizedBox(height: 8),
+          SignaturePadSection(
+            key: ValueKey('sig-${t.id}-receive-customer-resign'),
+            ticketId: t.id,
+            stage: 'receive',
+            signer: 'customer',
+            signatures: const [],
+            onChanged: () {
+              setState(() => _resignReceiveCustomer = false);
+              _load();
+            },
+            title: 'Ký lại — khách',
+          ),
+        ],
+        const SizedBox(height: 12),
+        evidence,
+        const SizedBox(height: 12),
+        ctas,
+      ];
+    }
+
+    return [
       SignaturePadSection(
         key: ValueKey('sig-${t.id}-receive-staff'),
         ticketId: t.id,
@@ -907,7 +1221,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         signer: 'staff',
         signatures: t.signatures,
         onChanged: _load,
-        title: 'Chữ ký nhân viên *',
+        title: 'Chữ ký nhân viên tiếp nhận *',
+        header: receiveStaffDropdown,
       ),
       const SizedBox(height: 8),
       SignaturePadSection(
@@ -920,129 +1235,177 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         title: 'Chữ ký khách *',
       ),
       const SizedBox(height: 12),
-      SectionCard(
-        title: 'Nhân viên tiếp nhận *',
-        child: TsDropdownFieldNullable<String>(
-          value: _receiveStaffUserId,
-          labelText: 'Nhân viên đã ký / tiếp nhận',
-          items: [
-            ...userIds,
-            if (_receiveStaffUserId != null &&
-                !userIds.contains(_receiveStaffUserId))
-              _receiveStaffUserId!,
-          ],
-          itemLabel: (id) {
-            if (id == null) return '— Chọn nhân viên —';
-            return nameOf[id] ?? id;
-          },
-          onChanged: (v) => setState(() => _receiveStaffUserId = v),
-        ),
-      ),
+      evidence,
       const SizedBox(height: 12),
-      SectionCard(
-        title: 'Bàn giao kỹ thuật',
-        child: Column(
-          children: [
-            TsDropdownFieldNullable<String>(
-              value: _techUserId,
-              labelText: 'Nhân viên kỹ thuật',
-              // NV đang được gán có thể đã bị vô hiệu hoá / ngoài trang đầu
-              // danh sách; thiếu item khớp value sẽ làm dropdown assert.
-              items: [
-                ...userIds,
-                if (_techUserId != null && !userIds.contains(_techUserId))
-                  _techUserId!,
-              ],
-              itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
-              onChanged: (v) => setState(() => _techUserId = v),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Hẹn gọi khách trước'),
-              subtitle: Text(_contactDeadline.toLocal().toString()),
-              trailing: const Icon(Icons.schedule),
-              onTap: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _contactDeadline,
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 30)),
-                );
-                if (d == null || !mounted) return;
-                final tm = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(_contactDeadline),
-                );
-                if (tm == null) return;
-                setState(() {
-                  _contactDeadline = DateTime(
-                    d.year,
-                    d.month,
-                    d.day,
-                    tm.hour,
-                    tm.minute,
-                  );
-                });
-              },
-            ),
-            TsDropdownField<String>(
-              value: _receiveType,
-              items: const ['store', 'home'],
-              itemLabel: (v) => v == 'store' ? 'Tại cửa hàng' : 'Tại nhà',
-              onChanged: (v) {
-                if (v != null) setState(() => _receiveType = v);
-              },
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _initialCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Đánh giá ban đầu *',
-              ),
-              maxLines: 2,
-              onChanged: (_) => setState(() {}),
-            ),
-            TextField(
-              controller: _extraCtrl,
-              decoration: const InputDecoration(labelText: 'Ghi chú thêm'),
-            ),
-            const SizedBox(height: 12),
-            if (_handoffBlockReason(t) != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  _handoffBlockReason(t)!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontSize: 13,
+      ctas,
+    ];
+  }
+
+  Widget _signatureThumb({required String label, required String url}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 4),
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () {
+                Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => MediaViewerPage(
+                      items: [MediaViewerItem(url: url, mediaType: 'image')],
+                      initialIndex: 0,
+                    ),
                   ),
+                );
+              },
+              child: Container(
+                foregroundDecoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Image.network(
+                  resolveMediaUrl(url),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Center(child: Icon(Icons.draw_outlined)),
                 ),
               ),
-            FilledButton(
-              onPressed: _busy || _handoffBlockReason(t) != null
-                  ? null
-                  : () => _handoff(t),
-              child: const Text('Bàn giao kỹ thuật'),
             ),
-          ],
+          ),
         ),
-      ),
-    ];
+      ],
+    );
   }
 
   List<Widget> _inspectingStep(
     ServiceTicketPublic t,
     RepairDetailPublic? d,
+    List<String> userIds,
+    Map<String, String> nameOf,
   ) {
     final contacted = d?.contactConfirmedAt != null;
+    final meId = context.read<AuthProvider>().user?.id;
+    final canAssign = _isManager ||
+        (t.request?.managerUserId != null &&
+            t.request!.managerUserId == meId);
+    final techAssigned = t.staffUserId.trim().isNotEmpty;
+    const methods = [
+      'store',
+      'warranty_center',
+      'external',
+      'other',
+    ];
+
     return [
+      SectionCard(
+        title: 'Bàn giao kỹ thuật',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TsDropdownFieldNullable<String>(
+              value: (_techUserId ?? t.staffUserId).trim().isEmpty
+                  ? null
+                  : (_techUserId ?? t.staffUserId),
+              labelText: 'Nhân viên kỹ thuật *',
+              items: [
+                ...userIds,
+                if ((_techUserId ?? t.staffUserId).trim().isNotEmpty &&
+                    !userIds.contains(_techUserId ?? t.staffUserId))
+                  (_techUserId ?? t.staffUserId),
+              ],
+              itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
+              onChanged: !canAssign
+                  ? null
+                  : (v) => setState(() {
+                        _techUserId = v;
+                        _inspectFormDirty = true;
+                      }),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Hẹn gọi khách trước *'),
+              subtitle: Text(
+                (d?.contactDeadlineAt != null
+                        ? DateTime.tryParse(d!.contactDeadlineAt!)
+                        : null)
+                    ?.toLocal()
+                    .toString() ??
+                    _contactDeadline.toLocal().toString(),
+              ),
+              trailing: const Icon(Icons.schedule),
+              onTap: !canAssign
+                  ? null
+                  : () async {
+                      final d0 = await showDatePicker(
+                        context: context,
+                        initialDate: _contactDeadline,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                      );
+                      if (d0 == null || !mounted) return;
+                      final tm = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(_contactDeadline),
+                      );
+                      if (tm == null) return;
+                      setState(() {
+                        _contactDeadline = DateTime(
+                          d0.year,
+                          d0.month,
+                          d0.day,
+                          tm.hour,
+                          tm.minute,
+                        );
+                        _inspectFormDirty = true;
+                      });
+                    },
+            ),
+            if (canAssign) ...[
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: _busy ? null : () => _assignTech(t),
+                child: Text(techAssigned ? 'Cập nhật bàn giao' : 'Lưu bàn giao'),
+              ),
+            ] else if (!techAssigned)
+              const Text(
+                'Chờ quản lý bàn giao kỹ thuật.',
+                style: TextStyle(color: Colors.orange),
+              )
+            else
+              Text(
+                'KTV: ${t.staffName ?? nameOf[t.staffUserId] ?? t.staffUserId}',
+                style: const TextStyle(color: Colors.green),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
+        title: 'Đánh giá ban đầu *',
+        child: TextField(
+          controller: _initialCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Nhận định / đánh giá ban đầu',
+          ),
+          maxLines: 3,
+          onChanged: (_) => setState(() => _inspectFormDirty = true),
+        ),
+      ),
+      const SizedBox(height: 12),
       EvidenceSection(
         ticketId: t.id,
         stage: 'contact',
         evidences: t.evidences,
         onChanged: _load,
-        title: 'Bằng chứng gọi khách',
+        title: 'Bằng chứng gọi khách *',
       ),
       const SizedBox(height: 12),
       if (!contacted)
@@ -1053,6 +1416,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               TextField(
                 controller: _contactNoteCtrl,
                 decoration: const InputDecoration(labelText: 'Ghi chú liên hệ'),
+                onChanged: (_) => _inspectFormDirty = true,
               ),
               const SizedBox(height: 8),
               FilledButton(
@@ -1067,252 +1431,433 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ],
           ),
         )
-      else ...[
+      else
         const Text(
           'Đã xác nhận liên hệ khách.',
           style: TextStyle(color: Colors.green),
         ),
-        const SizedBox(height: 12),
-        SectionCard(
-          title: 'Gửi duyệt kiểm tra lỗi',
-          child: Column(
-            children: [
-              TextField(
-                controller: _solutionCtrl,
-                decoration: const InputDecoration(labelText: 'Phương án sửa *'),
-                maxLines: 3,
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _partCostCtrl,
-                decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              TextField(
-                controller: _laborCostCtrl,
-                decoration: const InputDecoration(labelText: 'Tiền công'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Ngày hẹn xong (ETA)'),
-                subtitle: Text(yyyyMmDd(_etaDate)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _etaDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 180)),
-                  );
-                  if (picked != null) setState(() => _etaDate = picked);
-                },
-              ),
-              FilledButton(
-                onPressed: _busy || _solutionCtrl.text.trim().isEmpty
-                    ? null
-                    : () => _action('submit-inspect', body: {
-                          'solution': _solutionCtrl.text.trim(),
-                          'partCost': int.tryParse(_partCostCtrl.text) ?? 0,
-                          'laborCost': int.tryParse(_laborCostCtrl.text) ?? 0,
-                          'etaDate': yyyyMmDd(_etaDate),
-                        }),
-                child: const Text('Gửi duyệt kiểm tra'),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ];
-  }
-
-  List<Widget> _approvingStep(RepairDetailPublic? d) {
-    return [
-      SectionCard(
-        title: 'Duyệt kiểm tra lỗi',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Phương án: ${d?.solution ?? '—'}'),
-            Text('Linh kiện: ${d?.partCost ?? 0} đ'),
-            Text('Công: ${d?.laborCost ?? 0} đ'),
-            Text('ETA: ${d?.etaDate ?? '—'}'),
-            if (_isManager) ...[
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _busy ? null : () => _action('approve-inspect'),
-                child: const Text('Duyệt'),
-              ),
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () async {
-                        final r = await promptReason(context);
-                        if (r != null) {
-                          await _action('reject-inspect', body: {'reason': r});
-                        }
-                      },
-                child: const Text('Từ chối'),
-              ),
-            ] else
-              const Text('Đang chờ quản lý duyệt…'),
-          ],
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _notifyingStep(
-    ServiceTicketPublic t,
-    RepairDetailPublic? d,
-  ) {
-    if (d?.customerRejectPending == true) {
-      return [
-        SectionCard(
-          title: 'Khách từ chối — chờ QLĐ xác nhận',
-          child: _isManager
-              ? FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _action('confirm-customer-reject'),
-                  child: const Text('Xác nhận khách từ chối'),
-                )
-              : const Text('Đang chờ quản lý xác nhận.'),
-        ),
-      ];
-    }
-    return [
-      EvidenceSection(
-        ticketId: t.id,
-        stage: 'notify',
-        evidences: t.evidences,
-        onChanged: _load,
-        title: 'Bằng chứng thông báo khách',
-      ),
       const SizedBox(height: 12),
       SectionCard(
-        title: 'Khách xác nhận',
+        title: 'Hình thức sửa chữa *',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Phương án: ${d?.solution ?? '—'}'),
-            Text(
-              'Chi phí: ${(d?.partCost ?? 0) + (d?.laborCost ?? 0)} đ',
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final m in methods)
+                  ChoiceChip(
+                    label: Text(repairMethodLabel(m)),
+                    selected: _repairMethod == m,
+                    onSelected: (_) => setState(() {
+                      _repairMethod = m;
+                      _inspectFormDirty = true;
+                    }),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _busy ? null : () => _action('customer-agree'),
-              child: const Text('Khách đồng ý sửa'),
-            ),
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final r = await promptReason(
-                        context,
-                        title: 'Lý do khách từ chối',
-                      );
-                      if (r != null) {
-                        await _action(
-                          'customer-reject',
-                          body: {'reason': r},
-                        );
-                      }
-                    },
-              child: const Text('Khách từ chối'),
+            EvidenceSection(
+              ticketId: t.id,
+              stage: 'repair_method',
+              evidences: t.evidences,
+              onChanged: _load,
+              title: 'Ảnh/video bàn giao *',
+              noteField: TextField(
+                controller: _methodNoteCtrl,
+                decoration: const InputDecoration(labelText: 'Ghi chú'),
+                maxLines: 2,
+                onChanged: (_) => _inspectFormDirty = true,
+              ),
             ),
           ],
         ),
       ),
+      const SizedBox(height: 12),
+      if (_startRepairBlockReason(t, d) != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            _startRepairBlockReason(t, d)!,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      FilledButton(
+        onPressed: _busy || _startRepairBlockReason(t, d) != null
+            ? null
+            : () => _startRepair(t, d),
+        child: const Text('Chuyển sang Sửa chữa'),
+      ),
+      const SizedBox(height: 8),
+      OutlinedButton(
+        onPressed: _busy ? null : () => _cancelRequest(t),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.error,
+        ),
+        child: const Text('Hủy yêu cầu'),
+      ),
     ];
+  }
+
+  bool _needsReceiveBack(RepairDetailPublic? d) {
+    final m = d?.repairMethod ?? _repairMethod;
+    return m == 'warranty_center' || m == 'external' || m == 'other';
+  }
+
+  Map<String, dynamic> _repairWorkBody() {
+    return {
+      'solution': _solutionCtrl.text.trim(),
+      'repairResult': _resultCtrl.text.trim(),
+      'partCost': int.tryParse(_partCostCtrl.text.trim()) ?? 0,
+      'laborCost': int.tryParse(_laborCostCtrl.text.trim()) ?? 0,
+      'warrantyMonths': int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
+      if (_repairContactNoteCtrl.text.trim().isNotEmpty)
+        'repairContactNote': _repairContactNoteCtrl.text.trim(),
+      if (_receiveBackNoteCtrl.text.trim().isNotEmpty)
+        'receiveBackNote': _receiveBackNoteCtrl.text.trim(),
+    };
+  }
+
+  String? _advanceDeliveryBlockReason(
+    ServiceTicketPublic t,
+    RepairDetailPublic? d,
+  ) {
+    if (_solutionCtrl.text.trim().isEmpty) {
+      return 'Nhập nội dung sửa chữa.';
+    }
+    if (_resultCtrl.text.trim().isEmpty) return 'Nhập kết quả sửa chữa.';
+    if (int.tryParse(_warrantyCtrl.text.trim()) == null) {
+      return 'Nhập bảo hành (tháng).';
+    }
+    if (!t.evidences.any((e) => e.stage == 'repair_contact')) {
+      return 'Cần bằng chứng liên hệ khách (bước sửa).';
+    }
+    if (!t.evidences.any((e) => e.stage == 'repair_result')) {
+      return 'Cần bằng chứng kết quả sửa.';
+    }
+    if (_needsReceiveBack(d) &&
+        !t.evidences.any((e) => e.stage == 'receive_back')) {
+      return 'Cần bằng chứng nhận lại sản phẩm.';
+    }
+    return null;
+  }
+
+  Future<void> _advanceDelivery(
+    ServiceTicketPublic t,
+    RepairDetailPublic? d,
+  ) async {
+    final block = _advanceDeliveryBlockReason(t, d);
+    if (block != null) {
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
+      return;
+    }
+    await _action('advance-delivery', body: _repairWorkBody());
+  }
+
+  Future<void> _abortToPayment() async {
+    final r = await promptReason(
+      context,
+      title: 'Hủy giữa chừng — lý do',
+      hint: 'Lý do chuyển sang Thanh toán & Duyệt',
+    );
+    if (r != null) {
+      await _action('abort-to-payment', body: {'reason': r});
+    }
+  }
+
+  Future<void> _addPayProof() async {
+    final picks = await showMediaPickerSheet(context, allowVideo: false);
+    if (picks == null || picks.isEmpty || !mounted) return;
+    final api = context.read<AuthProvider>().api;
+    setState(() => _busy = true);
+    try {
+      for (final pick in picks) {
+        final uploaded = await uploadPickedMedia(pick: pick, api: api);
+        if (uploaded == null || uploaded.url.isEmpty) continue;
+        _payProofUrls.add(uploaded.url);
+      }
+      if (mounted) {
+        setState(() {
+          _payFormDirty = true;
+          _busy = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        AppMessenger.showSnackBar(
+          context,
+          SnackBar(content: Text('Không tải được chứng từ: $e')),
+        );
+      }
+    }
   }
 
   List<Widget> _repairingStep(
     ServiceTicketPublic t,
     RepairDetailPublic? d,
   ) {
-    final hasResult = (d?.repairResult ?? '').trim().isNotEmpty;
+    final method = d?.repairMethod ?? _repairMethod;
+    final needBack = _needsReceiveBack(d);
+    final elapsed = formatRepairElapsed(
+      d?.repairStartedAt,
+      fallbackIso: t.statusChangedAt,
+    );
+    final block = _advanceDeliveryBlockReason(t, d);
+
     return [
+      SectionCard(
+        title: 'Thông tin sửa chữa',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Hình thức: ${repairMethodLabel(method)}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if ((d?.extraNote ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('Ghi chú: ${d!.extraNote}'),
+            ],
+            const SizedBox(height: 8),
+            Text('Đã sửa: $elapsed'),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
+        title: 'Nội dung & chi phí',
+        child: Column(
+          children: [
+            TextField(
+              controller: _solutionCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Nội dung sửa chữa *',
+              ),
+              maxLines: 3,
+              onChanged: (_) => setState(() => _repairFormDirty = true),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _partCostCtrl,
+              decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() => _repairFormDirty = true),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _laborCostCtrl,
+              decoration: const InputDecoration(labelText: 'Tiền công'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() => _repairFormDirty = true),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _warrantyCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Bảo hành (tháng) *',
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() => _repairFormDirty = true),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      EvidenceSection(
+        ticketId: t.id,
+        stage: 'repair_contact',
+        evidences: t.evidences,
+        onChanged: () => _load(),
+        title: 'Bằng chứng liên hệ khách *',
+        noteField: TextField(
+          controller: _repairContactNoteCtrl,
+          decoration: const InputDecoration(labelText: 'Ghi chú liên hệ'),
+          maxLines: 2,
+          onChanged: (_) => setState(() => _repairFormDirty = true),
+        ),
+      ),
+      if (needBack) ...[
+        const SizedBox(height: 12),
+        EvidenceSection(
+          ticketId: t.id,
+          stage: 'receive_back',
+          evidences: t.evidences,
+          onChanged: () => _load(),
+          title: 'Nhận lại sản phẩm *',
+          noteField: TextField(
+            controller: _receiveBackNoteCtrl,
+            decoration: const InputDecoration(labelText: 'Ghi chú nhận lại'),
+            maxLines: 2,
+            onChanged: (_) => setState(() => _repairFormDirty = true),
+          ),
+        ),
+      ],
+      const SizedBox(height: 12),
       EvidenceSection(
         ticketId: t.id,
         stage: 'repair_result',
         evidences: t.evidences,
-        onChanged: _load,
+        onChanged: () => _load(),
         title: 'Bằng chứng kết quả sửa *',
       ),
       const SizedBox(height: 12),
       SectionCard(
         title: 'Kết quả sửa chữa',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (d?.rejectCountResult != null && d!.rejectCountResult > 0)
-              Text(
-                'Đã trả về ${d.rejectCountResult} lần',
-                style: const TextStyle(color: Colors.orange),
-              ),
-            if (hasResult) ...[
-              Text('Đã gửi: ${d!.repairResult}'),
-              const SizedBox(height: 8),
-              if (_isManager) ...[
-                FilledButton(
-                  onPressed: _busy ? null : () => _action('approve-result'),
-                  child: const Text('QL duyệt kết quả → bàn giao'),
-                ),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () async {
-                          final r = await promptReason(
-                            context,
-                            title: 'Lý do trả về',
-                          );
-                          if (r != null) {
-                            await _action(
-                              'reject-result',
-                              body: {'reason': r},
-                            );
-                          }
-                        },
-                  child: const Text('Trả về sửa lại'),
-                ),
-              ] else
-                const Text('Đang chờ quản lý duyệt kết quả…'),
-              const Divider(),
-              const Text('Gửi lại kết quả (nếu bị trả về):'),
-            ],
-            TextField(
-              controller: _resultCtrl,
-              decoration: const InputDecoration(labelText: 'Kết quả sửa *'),
-              maxLines: 3,
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _busy || _resultCtrl.text.trim().isEmpty
-                  ? null
-                  : () => _action('submit-repair-result', body: {
-                        'repairResult': _resultCtrl.text.trim(),
-                      }),
-              child: Text(hasResult ? 'Gửi lại kết quả' : 'Gửi duyệt kết quả'),
-            ),
-          ],
+        child: TextField(
+          controller: _resultCtrl,
+          decoration: const InputDecoration(labelText: 'Kết quả *'),
+          maxLines: 3,
+          onChanged: (_) => setState(() => _repairFormDirty = true),
         ),
+      ),
+      const SizedBox(height: 12),
+      if (block != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            block,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      FilledButton(
+        onPressed: _busy || block != null
+            ? null
+            : () => _advanceDelivery(t, d),
+        child: const Text('Chuyển qua Bàn giao'),
+      ),
+      const SizedBox(height: 8),
+      OutlinedButton(
+        onPressed: _busy ? null : _abortToPayment,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.error,
+        ),
+        child: const Text('Hủy'),
       ),
     ];
   }
 
-  List<Widget> _deliveringStep(ServiceTicketPublic t) {
+  String? _completeDeliveryBlockReason(ServiceTicketPublic t) {
+    if (_deliveryStaffUserId == null || _deliveryStaffUserId!.trim().isEmpty) {
+      return 'Chọn nhân viên bàn giao.';
+    }
+    if (!t.evidences.any((e) => e.stage == 'delivery')) {
+      return 'Cần bằng chứng bàn giao.';
+    }
+    final hasStaff = t.signatures.any(
+      (s) => s.stage == 'delivery' && s.signer == 'staff',
+    );
+    final hasCustomer = t.signatures.any(
+      (s) => s.stage == 'delivery' && s.signer == 'customer',
+    );
+    if (!hasStaff) return 'Cần chữ ký nhân viên.';
+    if (!hasCustomer) return 'Cần chữ ký khách.';
+    if (_deliveryMethod == 'home' && _deliveryEta == null) {
+      return 'Chọn thời gian giao tại nhà.';
+    }
+    if (_deliveryMethod == 'shipping' &&
+        _shippingPayerCtrl.text.trim().isEmpty) {
+      return 'Nhập người trả phí ship.';
+    }
+    return null;
+  }
+
+  List<Widget> _deliveringStep(
+    ServiceTicketPublic t,
+    RepairDetailPublic? d,
+    List<String> userIds,
+    Map<String, String> nameOf,
+  ) {
+    final part = int.tryParse(_partCostCtrl.text.trim()) ?? 0;
+    final labor = int.tryParse(_laborCostCtrl.text.trim()) ?? 0;
+    final total = part + labor;
+    final block = _completeDeliveryBlockReason(t);
+
     return [
+      SectionCard(
+        title: 'Chi phí & bảo hành',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _partCostCtrl,
+              decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() => _deliveryFormDirty = true),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _laborCostCtrl,
+              decoration: const InputDecoration(labelText: 'Tiền công'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() => _deliveryFormDirty = true),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tổng chi phí: $total đ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _warrantyCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Bảo hành (tháng)',
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() => _deliveryFormDirty = true),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Chỉ bảo hành những lỗi vừa sửa chữa',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
       EvidenceSection(
         ticketId: t.id,
         stage: 'delivery',
         evidences: t.evidences,
-        onChanged: _load,
-        title: 'Bằng chứng bàn giao',
+        onChanged: () => _load(),
+        title: 'Bằng chứng bàn giao *',
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
+        title: 'Nhân viên bàn giao *',
+        child: TsDropdownFieldNullable<String>(
+          value: (_deliveryStaffUserId ?? '').trim().isEmpty
+              ? null
+              : _deliveryStaffUserId,
+          labelText: 'Nhân viên bàn giao',
+          items: [
+            ...userIds,
+            if ((_deliveryStaffUserId ?? '').trim().isNotEmpty &&
+                !userIds.contains(_deliveryStaffUserId))
+              _deliveryStaffUserId!,
+          ],
+          itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
+          onChanged: (v) => setState(() {
+            _deliveryStaffUserId = v;
+            _deliveryFormDirty = true;
+          }),
+        ),
       ),
       const SizedBox(height: 8),
       SignaturePadSection(
@@ -1321,7 +1866,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         stage: 'delivery',
         signer: 'staff',
         signatures: t.signatures,
-        onChanged: _load,
+        onChanged: () => _load(),
         title: 'Chữ ký nhân viên *',
       ),
       const SizedBox(height: 8),
@@ -1331,12 +1876,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         stage: 'delivery',
         signer: 'customer',
         signatures: t.signatures,
-        onChanged: _load,
+        onChanged: () => _load(),
         title: 'Chữ ký khách *',
       ),
       const SizedBox(height: 12),
       SectionCard(
-        title: 'Hoàn tất bàn giao',
+        title: 'Hình thức bàn giao',
         child: Column(
           children: [
             TsDropdownField<String>(
@@ -1353,7 +1898,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 }
               },
               onChanged: (v) {
-                if (v != null) setState(() => _deliveryMethod = v);
+                if (v != null) {
+                  setState(() {
+                    _deliveryMethod = v;
+                    _deliveryFormDirty = true;
+                  });
+                }
               },
             ),
             if (_deliveryMethod == 'home')
@@ -1364,13 +1914,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   _deliveryEta?.toLocal().toString() ?? 'Chọn thời gian',
                 ),
                 onTap: () async {
-                  final d = await showDatePicker(
+                  final day = await showDatePicker(
                     context: context,
                     initialDate: DateTime.now(),
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 60)),
                   );
-                  if (d == null || !mounted) return;
+                  if (day == null || !mounted) return;
                   final tm = await showTimePicker(
                     context: context,
                     initialTime: TimeOfDay.now(),
@@ -1378,12 +1928,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   if (tm == null) return;
                   setState(() {
                     _deliveryEta = DateTime(
-                      d.year,
-                      d.month,
-                      d.day,
+                      day.year,
+                      day.month,
+                      day.day,
                       tm.hour,
                       tm.minute,
                     );
+                    _deliveryFormDirty = true;
                   });
                 },
               ),
@@ -1393,23 +1944,47 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Người trả phí ship',
                 ),
+                onChanged: (_) => setState(() => _deliveryFormDirty = true),
               ),
-            const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _busy
-                  ? null
-                  : () => _action('complete-delivery', body: {
-                        'deliveryMethod': _deliveryMethod,
-                        if (_deliveryMethod == 'home' && _deliveryEta != null)
-                          'deliveryEta':
-                              _deliveryEta!.toUtc().toIso8601String(),
-                        if (_shippingPayerCtrl.text.trim().isNotEmpty)
-                          'shippingFeePayer': _shippingPayerCtrl.text.trim(),
-                      }),
-              child: const Text('Hoàn tất bàn giao'),
-            ),
           ],
         ),
+      ),
+      const SizedBox(height: 12),
+      if (block != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            block,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      FilledButton(
+        onPressed: _busy || block != null
+            ? null
+            : () => _action('complete-delivery', body: {
+                  'deliveryMethod': _deliveryMethod,
+                  'deliveryStaffUserId': _deliveryStaffUserId,
+                  'partCost': int.tryParse(_partCostCtrl.text.trim()) ?? 0,
+                  'laborCost': int.tryParse(_laborCostCtrl.text.trim()) ?? 0,
+                  'warrantyMonths':
+                      int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
+                  if (_deliveryMethod == 'home' && _deliveryEta != null)
+                    'deliveryEta': _deliveryEta!.toUtc().toIso8601String(),
+                  if (_shippingPayerCtrl.text.trim().isNotEmpty)
+                    'shippingFeePayer': _shippingPayerCtrl.text.trim(),
+                }),
+        child: const Text('Sang Thanh toán & Duyệt'),
+      ),
+      const SizedBox(height: 8),
+      OutlinedButton(
+        onPressed: _busy ? null : _abortToPayment,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.error,
+        ),
+        child: const Text('Hủy'),
       ),
     ];
   }
@@ -1419,84 +1994,262 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     RepairDetailPublic? d,
   ) {
     final submitted = d?.paymentSubmittedAt != null;
+    final aborted = d?.abortedAt != null;
+    final costTotal = (d?.partCost ?? 0) + (d?.laborCost ?? 0);
+    final due = aborted
+        ? (d?.paymentAmount ?? 0)
+        : (d?.paymentAmount ?? costTotal);
+    final isFree = _payMethod == 'free';
+
     return [
+      if (aborted)
+        SectionCard(
+          title: 'Hủy giữa chừng',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Lý do: ${d?.abortReason ?? '—'}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Quản lý chọn miễn phí / số tiền rồi Duyệt để đóng phiếu.',
+              ),
+            ],
+          ),
+        ),
+      if (aborted) const SizedBox(height: 12),
       SectionCard(
-        title: 'Thanh toán',
+        title: 'Thanh toán & Duyệt',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text('Tổng chi phí sửa: $costTotal đ'),
+            Text('Còn lại / cần thu: $due đ'),
+            const SizedBox(height: 12),
             if (!submitted) ...[
-              TextField(
-                controller: _payAmountCtrl,
-                decoration: const InputDecoration(labelText: 'Số tiền'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              const SizedBox(height: 8),
-              TsDropdownField<String>(
-                value: _payMethod,
-                items: const [
-                  'cash',
-                  'bank_transfer',
-                  'card',
-                  'pay_later',
-                ],
-                itemLabel: (v) {
-                  switch (v) {
-                    case 'bank_transfer':
-                      return 'Chuyển khoản';
-                    case 'card':
-                      return 'Thẻ';
-                    case 'pay_later':
-                      return 'Ghi nợ';
-                    default:
-                      return 'Tiền mặt';
-                  }
-                },
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Miễn phí'),
+                value: isFree,
                 onChanged: (v) {
-                  if (v != null) setState(() => _payMethod = v);
+                  setState(() {
+                    _payFormDirty = true;
+                    if (v) {
+                      _payMethod = 'free';
+                      _payAmountCtrl.text = '0';
+                    } else {
+                      _payMethod = 'cash';
+                      _payAmountCtrl.text = '$due';
+                    }
+                  });
                 },
               ),
-              if (_payMethod == 'pay_later')
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Hạn thanh toán'),
-                  subtitle: Text(
-                    _payDue != null ? yyyyMmDd(_payDue!) : 'Chọn ngày',
-                  ),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now().add(const Duration(days: 7)),
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (picked != null) setState(() => _payDue = picked);
+              if (!isFree) ...[
+                TextField(
+                  controller: _payAmountCtrl,
+                  decoration: const InputDecoration(labelText: 'Số tiền'),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() => _payFormDirty = true),
+                ),
+                const SizedBox(height: 8),
+                TsDropdownField<String>(
+                  value: _payMethod == 'free' ? 'cash' : _payMethod,
+                  items: const [
+                    'cash',
+                    'bank_transfer',
+                    'card',
+                    'pay_later',
+                  ],
+                  itemLabel: (v) {
+                    switch (v) {
+                      case 'bank_transfer':
+                        return 'Chuyển khoản';
+                      case 'card':
+                        return 'Thẻ';
+                      case 'pay_later':
+                        return 'Ghi nợ';
+                      default:
+                        return 'Tiền mặt';
+                    }
+                  },
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _payMethod = v;
+                        _payFormDirty = true;
+                      });
+                    }
                   },
                 ),
+                if (_payMethod == 'pay_later')
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Hạn thanh toán'),
+                    subtitle: Text(
+                      _payDue != null ? yyyyMmDd(_payDue!) : 'Chọn ngày',
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate:
+                            DateTime.now().add(const Duration(days: 7)),
+                        firstDate: DateTime.now(),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _payDue = picked;
+                          _payFormDirty = true;
+                        });
+                      }
+                    },
+                  ),
+                if (_payMethod == 'bank_transfer' || _payMethod == 'cash') ...[
+                  const SizedBox(height: 8),
+                  const Text('Chứng từ (tuỳ chọn)'),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (var i = 0; i < _payProofUrls.length; i++)
+                        InputChip(
+                          label: Text('Ảnh ${i + 1}'),
+                          onDeleted: () => setState(() {
+                            _payProofUrls.removeAt(i);
+                            _payFormDirty = true;
+                          }),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => MediaViewerPage(
+                                  items: _payProofUrls
+                                      .map(
+                                        (u) => MediaViewerItem(
+                                          url: u,
+                                          mediaType: 'image',
+                                        ),
+                                      )
+                                      .toList(),
+                                  initialIndex: i,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ActionChip(
+                        avatar: const Icon(Icons.add_a_photo, size: 18),
+                        label: const Text('Thêm'),
+                        onPressed: _busy ? null : _addPayProof,
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+              const SizedBox(height: 8),
+              TextField(
+                controller: _payNoteCtrl,
+                decoration: const InputDecoration(labelText: 'Ghi chú'),
+                maxLines: 2,
+                onChanged: (_) => setState(() => _payFormDirty = true),
+              ),
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: _busy
                     ? null
                     : () => _action('submit-payment', body: {
-                          'paymentAmount':
-                              int.tryParse(_payAmountCtrl.text) ?? 0,
+                          'paymentAmount': isFree
+                              ? 0
+                              : (int.tryParse(_payAmountCtrl.text) ?? 0),
                           'paymentMethod': _payMethod,
+                          if (_payNoteCtrl.text.trim().isNotEmpty)
+                            'paymentNote': _payNoteCtrl.text.trim(),
                           if (_payMethod == 'pay_later' && _payDue != null)
                             'paymentDueDate': yyyyMmDd(_payDue!),
+                          if (_payProofUrls.isNotEmpty)
+                            'paymentProofUrls': List<String>.from(_payProofUrls),
                         }),
                 child: const Text('Ghi nhận thanh toán'),
               ),
+              if (aborted && _isManager) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          if (!isFree ||
+                              _payNoteCtrl.text.trim().isNotEmpty ||
+                              _payProofUrls.isNotEmpty) {
+                            final ok = await _action('submit-payment', body: {
+                              'paymentAmount': isFree
+                                  ? 0
+                                  : (int.tryParse(_payAmountCtrl.text) ?? 0),
+                              'paymentMethod': _payMethod,
+                              if (_payNoteCtrl.text.trim().isNotEmpty)
+                                'paymentNote': _payNoteCtrl.text.trim(),
+                              if (_payProofUrls.isNotEmpty)
+                                'paymentProofUrls':
+                                    List<String>.from(_payProofUrls),
+                            });
+                            if (!ok) return;
+                          }
+                          await _action('confirm-payment');
+                        },
+                  child: const Text('Duyệt kết thúc'),
+                ),
+              ],
             ] else ...[
-              Text('Đã ghi nhận: ${d?.paymentAmount ?? 0} đ'),
+              Text(
+                isFree || (d?.paymentMethod == 'free')
+                    ? 'Miễn phí'
+                    : 'Đã ghi nhận: ${d?.paymentAmount ?? 0} đ',
+              ),
               Text('PT: ${d?.paymentMethod ?? '—'}'),
+              if ((d?.paymentNote ?? '').trim().isNotEmpty)
+                Text('Ghi chú: ${d!.paymentNote}'),
+              if ((d?.paymentProofUrls ?? const []).isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (var i = 0; i < d!.paymentProofUrls.length; i++)
+                      ActionChip(
+                        label: Text('Chứng từ ${i + 1}'),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => MediaViewerPage(
+                                items: d.paymentProofUrls
+                                    .map(
+                                      (u) => MediaViewerItem(
+                                        url: u,
+                                        mediaType: 'image',
+                                      ),
+                                    )
+                                    .toList(),
+                                initialIndex: i,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
               if (_isManager)
                 FilledButton(
                   onPressed: _busy ? null : () => _action('confirm-payment'),
-                  child: const Text('QL xác nhận đã thu tiền'),
+                  child: Text(aborted ? 'Duyệt kết thúc' : 'Duyệt thanh toán'),
                 )
               else
-                const Text('Chờ quản lý xác nhận thanh toán…'),
+                const Text('Chờ quản lý duyệt…'),
             ],
           ],
         ),

@@ -3,13 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:tstore/core/utils/media_upload_flow.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/widgets/media_picker_sheet.dart';
+import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 
-/// Thêm / xem bằng chứng theo stage.
+/// Thêm / xem bằng chứng theo stage (thumbnail nhỏ).
 class EvidenceSection extends StatefulWidget {
   const EvidenceSection({
     super.key,
@@ -19,6 +20,7 @@ class EvidenceSection extends StatefulWidget {
     required this.onChanged,
     this.readOnly = false,
     this.title = 'Bằng chứng',
+    this.noteField,
   });
 
   final String ticketId;
@@ -27,6 +29,8 @@ class EvidenceSection extends StatefulWidget {
   final VoidCallback onChanged;
   final bool readOnly;
   final String title;
+  /// Ghi chú dưới bằng chứng (vd. tiếp nhận SC).
+  final Widget? noteField;
 
   @override
   State<EvidenceSection> createState() => _EvidenceSectionState();
@@ -86,22 +90,26 @@ class _EvidenceSectionState extends State<EvidenceSection> {
                     )
                   : const Icon(Icons.add_a_photo_outlined),
             ),
-      child: items.isEmpty
-          ? const Text('Chưa có bằng chứng.', style: TextStyle(color: Colors.grey))
-          : Wrap(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (items.isEmpty)
+            const Text(
+              'Chưa có bằng chứng.',
+              style: TextStyle(color: Colors.grey),
+            )
+          else
+            Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 for (var i = 0; i < items.length; i++)
-                  ActionChip(
-                    avatar: Icon(
-                      items[i].kind == 'video'
-                          ? Icons.videocam_outlined
-                          : Icons.image_outlined,
-                      size: 16,
-                    ),
-                    label: Text('${items[i].kind} ${i + 1}'),
-                    onPressed: () {
+                  MediaTile(
+                    url: items[i].fileUrl,
+                    mediaType: items[i].kind,
+                    width: 64,
+                    height: 64,
+                    onTap: () {
                       Navigator.push<void>(
                         context,
                         MaterialPageRoute<void>(
@@ -121,6 +129,12 @@ class _EvidenceSectionState extends State<EvidenceSection> {
                   ),
               ],
             ),
+          if (widget.noteField != null) ...[
+            const SizedBox(height: 12),
+            widget.noteField!,
+          ],
+        ],
+      ),
     );
   }
 }

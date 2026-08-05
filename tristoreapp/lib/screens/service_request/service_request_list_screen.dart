@@ -13,6 +13,7 @@ import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 import 'create_service_request_screen.dart';
 import 'online_ticket_screen.dart';
 import 'onsite_ticket_screen.dart';
+import 'other_ticket_screen.dart';
 import 'repair_ticket_screen.dart';
 import 'service_request_detail_screen.dart';
 import 'service_ui.dart';
@@ -116,17 +117,13 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
   }
 
   void _openTicket(ServiceTicketBrief t) {
-    Widget screen;
-    switch (t.type) {
-      case 'online':
-        screen = OnlineTicketScreen(ticketId: t.id);
-      case 'onsite':
-        screen = OnsiteTicketScreen(ticketId: t.id);
-      case 'repair':
-        screen = RepairTicketScreen(ticketId: t.id);
-      default:
-        screen = OnlineTicketScreen(ticketId: t.id);
-    }
+    final Widget screen = switch (t.type) {
+      'online' => OnlineTicketScreen(ticketId: t.id),
+      'onsite' => OnsiteTicketScreen(ticketId: t.id),
+      'other' => OtherTicketScreen(ticketId: t.id),
+      'repair' => RepairTicketScreen(ticketId: t.id),
+      _ => OnlineTicketScreen(ticketId: t.id),
+    };
     Navigator.push<void>(
       context,
       MaterialPageRoute<void>(builder: (_) => screen),

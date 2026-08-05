@@ -86,11 +86,16 @@ class ServiceRequestPublic {
   const ServiceRequestPublic({
     required this.id,
     this.code,
+    this.direction = 'support',
     required this.channel,
     required this.customerName,
     required this.customerPhone,
     this.customerPhone2,
     this.customerAddress,
+    this.customerNote,
+    this.buyerName,
+    this.buyerPhone,
+    this.buyerAddress,
     required this.productName,
     this.productSerial,
     required this.issueDescription,
@@ -102,6 +107,7 @@ class ServiceRequestPublic {
     required this.status,
     this.cancelReason,
     required this.createdByUserId,
+    this.createdByName,
     this.closedAt,
     this.createdAt,
     this.updatedAt,
@@ -111,11 +117,17 @@ class ServiceRequestPublic {
 
   final String id;
   final String? code;
+  /** `support` | `repair` */
+  final String direction;
   final String channel;
   final String customerName;
   final String customerPhone;
   final String? customerPhone2;
   final String? customerAddress;
+  final String? customerNote;
+  final String? buyerName;
+  final String? buyerPhone;
+  final String? buyerAddress;
   final String productName;
   final String? productSerial;
   final String issueDescription;
@@ -127,6 +139,7 @@ class ServiceRequestPublic {
   final String status;
   final String? cancelReason;
   final String createdByUserId;
+  final String? createdByName;
   final String? closedAt;
   final String? createdAt;
   final String? updatedAt;
@@ -141,17 +154,24 @@ class ServiceRequestPublic {
 
   bool get hasOverdueTicket => tickets.any((t) => t.isOverdue);
 
+  bool get isRepairDirection => direction == 'repair';
+
   factory ServiceRequestPublic.fromJson(Map<String, dynamic> json) {
     final attRaw = json['attachments'];
     final ticketsRaw = json['tickets'];
     return ServiceRequestPublic(
       id: json['id'] as String,
       code: json['code'] as String?,
+      direction: json['direction'] as String? ?? 'support',
       channel: json['channel'] as String? ?? 'other',
       customerName: json['customerName'] as String? ?? '',
       customerPhone: json['customerPhone'] as String? ?? '',
       customerPhone2: json['customerPhone2'] as String?,
       customerAddress: json['customerAddress'] as String?,
+      customerNote: json['customerNote'] as String?,
+      buyerName: json['buyerName'] as String?,
+      buyerPhone: json['buyerPhone'] as String?,
+      buyerAddress: json['buyerAddress'] as String?,
       productName: json['productName'] as String? ?? '',
       productSerial: json['productSerial'] as String?,
       issueDescription: json['issueDescription'] as String? ?? '',
@@ -168,6 +188,7 @@ class ServiceRequestPublic {
       status: json['status'] as String? ?? 'new',
       cancelReason: json['cancelReason'] as String?,
       createdByUserId: json['createdByUserId'] as String? ?? '',
+      createdByName: json['createdByName'] as String?,
       closedAt: json['closedAt'] as String?,
       createdAt: json['createdAt'] as String?,
       updatedAt: json['updatedAt'] as String?,
@@ -191,13 +212,20 @@ class ServiceRequestBrief {
     required this.customerPhone,
     this.customerPhone2,
     this.customerAddress,
+    this.customerNote,
+    this.buyerName,
+    this.buyerPhone,
+    this.buyerAddress,
     required this.productName,
     this.productSerial,
     required this.issueDescription,
     this.attachments = const [],
     this.managerUserId,
+    this.managerName,
     this.supportStaffUserId,
     this.supportStaffName,
+    this.createdByUserId,
+    this.createdByName,
     required this.status,
   });
 
@@ -208,13 +236,20 @@ class ServiceRequestBrief {
   final String customerPhone;
   final String? customerPhone2;
   final String? customerAddress;
+  final String? customerNote;
+  final String? buyerName;
+  final String? buyerPhone;
+  final String? buyerAddress;
   final String productName;
   final String? productSerial;
   final String issueDescription;
   final List<ServiceAttachment> attachments;
   final String? managerUserId;
+  final String? managerName;
   final String? supportStaffUserId;
   final String? supportStaffName;
+  final String? createdByUserId;
+  final String? createdByName;
   final String status;
 
   factory ServiceRequestBrief.fromJson(Map<String, dynamic> json) {
@@ -227,6 +262,10 @@ class ServiceRequestBrief {
       customerPhone: json['customerPhone'] as String? ?? '',
       customerPhone2: json['customerPhone2'] as String?,
       customerAddress: json['customerAddress'] as String?,
+      customerNote: json['customerNote'] as String?,
+      buyerName: json['buyerName'] as String?,
+      buyerPhone: json['buyerPhone'] as String?,
+      buyerAddress: json['buyerAddress'] as String?,
       productName: json['productName'] as String? ?? '',
       productSerial: json['productSerial'] as String?,
       issueDescription: json['issueDescription'] as String? ?? '',
@@ -237,8 +276,11 @@ class ServiceRequestBrief {
             ]
           : const [],
       managerUserId: json['managerUserId'] as String?,
+      managerName: json['managerName'] as String?,
       supportStaffUserId: json['supportStaffUserId'] as String?,
       supportStaffName: json['supportStaffName'] as String?,
+      createdByUserId: json['createdByUserId'] as String?,
+      createdByName: json['createdByName'] as String?,
       status: json['status'] as String? ?? 'new',
     );
   }
@@ -252,17 +294,27 @@ class RepairDetailPublic {
     this.receiveStaffName,
     this.initialAssessment,
     this.extraNote,
+    this.repairMethod,
     this.solution,
     this.partCost,
     this.laborCost,
     this.etaDate,
     this.contactConfirmedAt,
+    this.contactDeadlineAt,
     this.contactNote,
     this.rejectCountInspect = 0,
     this.rejectCountResult = 0,
     this.approvedInspectAt,
     this.approvedInspectBy,
     this.repairResult,
+    this.warrantyMonths,
+    this.receiveBackNote,
+    this.repairContactNote,
+    this.deliveryStaffUserId,
+    this.deliveryStaffName,
+    this.abortReason,
+    this.abortedAt,
+    this.repairStartedAt,
     this.deliveryMethod,
     this.deliveryEta,
     this.shippingFeePayer,
@@ -270,6 +322,7 @@ class RepairDetailPublic {
     this.paymentMethod,
     this.paymentDueDate,
     this.paymentNote,
+    this.paymentProofUrls = const [],
     this.paymentSubmittedAt,
     this.paymentConfirmedAt,
     this.paymentConfirmedBy,
@@ -282,17 +335,27 @@ class RepairDetailPublic {
   final String? receiveStaffName;
   final String? initialAssessment;
   final String? extraNote;
+  final String? repairMethod;
   final String? solution;
   final int? partCost;
   final int? laborCost;
   final String? etaDate;
   final String? contactConfirmedAt;
+  final String? contactDeadlineAt;
   final String? contactNote;
   final int rejectCountInspect;
   final int rejectCountResult;
   final String? approvedInspectAt;
   final String? approvedInspectBy;
   final String? repairResult;
+  final int? warrantyMonths;
+  final String? receiveBackNote;
+  final String? repairContactNote;
+  final String? deliveryStaffUserId;
+  final String? deliveryStaffName;
+  final String? abortReason;
+  final String? abortedAt;
+  final String? repairStartedAt;
   final String? deliveryMethod;
   final String? deliveryEta;
   final String? shippingFeePayer;
@@ -300,12 +363,14 @@ class RepairDetailPublic {
   final String? paymentMethod;
   final String? paymentDueDate;
   final String? paymentNote;
+  final List<String> paymentProofUrls;
   final String? paymentSubmittedAt;
   final String? paymentConfirmedAt;
   final String? paymentConfirmedBy;
   final bool customerRejectPending;
 
   factory RepairDetailPublic.fromJson(Map<String, dynamic> json) {
+    final proofs = json['paymentProofUrls'];
     return RepairDetailPublic(
       ticketId: json['ticketId'] as String? ?? '',
       receiveType: json['receiveType'] as String?,
@@ -313,17 +378,27 @@ class RepairDetailPublic {
       receiveStaffName: json['receiveStaffName'] as String?,
       initialAssessment: json['initialAssessment'] as String?,
       extraNote: json['extraNote'] as String?,
+      repairMethod: json['repairMethod'] as String?,
       solution: json['solution'] as String?,
       partCost: (json['partCost'] as num?)?.toInt(),
       laborCost: (json['laborCost'] as num?)?.toInt(),
       etaDate: json['etaDate'] as String?,
       contactConfirmedAt: json['contactConfirmedAt'] as String?,
+      contactDeadlineAt: json['contactDeadlineAt'] as String?,
       contactNote: json['contactNote'] as String?,
       rejectCountInspect: (json['rejectCountInspect'] as num?)?.toInt() ?? 0,
       rejectCountResult: (json['rejectCountResult'] as num?)?.toInt() ?? 0,
       approvedInspectAt: json['approvedInspectAt'] as String?,
       approvedInspectBy: json['approvedInspectBy'] as String?,
       repairResult: json['repairResult'] as String?,
+      warrantyMonths: (json['warrantyMonths'] as num?)?.toInt(),
+      receiveBackNote: json['receiveBackNote'] as String?,
+      repairContactNote: json['repairContactNote'] as String?,
+      deliveryStaffUserId: json['deliveryStaffUserId'] as String?,
+      deliveryStaffName: json['deliveryStaffName'] as String?,
+      abortReason: json['abortReason'] as String?,
+      abortedAt: json['abortedAt'] as String?,
+      repairStartedAt: json['repairStartedAt'] as String?,
       deliveryMethod: json['deliveryMethod'] as String?,
       deliveryEta: json['deliveryEta'] as String?,
       shippingFeePayer: json['shippingFeePayer'] as String?,
@@ -331,6 +406,9 @@ class RepairDetailPublic {
       paymentMethod: json['paymentMethod'] as String?,
       paymentDueDate: json['paymentDueDate'] as String?,
       paymentNote: json['paymentNote'] as String?,
+      paymentProofUrls: proofs is List
+          ? proofs.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+          : const [],
       paymentSubmittedAt: json['paymentSubmittedAt'] as String?,
       paymentConfirmedAt: json['paymentConfirmedAt'] as String?,
       paymentConfirmedBy: json['paymentConfirmedBy'] as String?,
@@ -338,6 +416,7 @@ class RepairDetailPublic {
     );
   }
 }
+
 
 class TicketEvidencePublic {
   const TicketEvidencePublic({
@@ -679,20 +758,28 @@ class SupportTicketStats {
 class TakeDeviceResult {
   const TakeDeviceResult({
     required this.onsite,
-    required this.repair,
+    required this.repairTicket,
+    this.repairRequest,
   });
 
   final ServiceTicketPublic onsite;
-  final ServiceTicketPublic repair;
+  final ServiceTicketPublic repairTicket;
+  final ServiceRequestPublic? repairRequest;
 
   factory TakeDeviceResult.fromJson(Map<String, dynamic> json) {
+    final repairRaw = json['repairTicket'] ?? json['repair'];
     return TakeDeviceResult(
       onsite: ServiceTicketPublic.fromJson(
         json['onsite'] as Map<String, dynamic>? ?? {},
       ),
-      repair: ServiceTicketPublic.fromJson(
-        json['repair'] as Map<String, dynamic>? ?? {},
+      repairTicket: ServiceTicketPublic.fromJson(
+        repairRaw as Map<String, dynamic>? ?? {},
       ),
+      repairRequest: json['repairRequest'] is Map<String, dynamic>
+          ? ServiceRequestPublic.fromJson(
+              json['repairRequest'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 }

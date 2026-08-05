@@ -213,14 +213,18 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
         setState(() => _ticket = result.onsite);
         AppMessenger.showSnackBar(
           context,
-          const SnackBar(content: Text('Đã nhận máy — mở phiếu sửa chữa.')),
+          const SnackBar(
+            content: Text('Đã nhận máy — đã tạo yêu cầu sửa chữa mới.'),
+          ),
         );
         await Navigator.push<void>(
           context,
           MaterialPageRoute(
-            builder: (_) => RepairTicketScreen(ticketId: result.repair.id),
+            builder: (_) =>
+                RepairTicketScreen(ticketId: result.repairTicket.id),
           ),
         );
+        if (mounted) await _load();
       }
     } catch (e) {
       if (mounted) {

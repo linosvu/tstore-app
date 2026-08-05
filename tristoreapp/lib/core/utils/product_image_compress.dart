@@ -52,3 +52,35 @@ Future<String?> uploadProductImageFromPath(
     return null;
   }
 }
+
+/// Upload PNG chữ ký (không JPEG) — tránh nền trong suốt thành đen.
+Future<String?> uploadSignaturePngBytes(
+  Uint8List bytes,
+  ApiClient api, {
+  void Function(double progress)? onProgress,
+}) async {
+  if (bytes.isEmpty) return null;
+  onProgress?.call(0);
+  final form = FormData.fromMap({
+    'file': MultipartFile.fromBytes(
+      bytes,
+      filename: 'signature.png',
+      contentType: DioMediaType('image', 'png'),
+    ),
+  });
+  try {
+    final res = await api.post<Map<String, dynamic>>(
+      '/admin/upload',
+      data: form,
+      onSendProgress: (sent, total) {
+        if (total > 0) {
+          onProgress?.call((sent / total).clamp(0.0, 1.0));
+        }
+      },
+    );
+    onProgress?.call(1);
+    return res.data?['url'] as String?;
+  } on DioException {
+    return null;
+  }
+}

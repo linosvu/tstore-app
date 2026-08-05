@@ -16,7 +16,10 @@ const serviceRequestStatuses = [
   'cancelled',
 ];
 
-const serviceTicketTypes = ['online', 'onsite', 'repair'];
+const serviceTicketTypes = ['online', 'onsite', 'other', 'repair'];
+
+/** Hướng xử lý khi tạo yêu cầu Hỗ trợ. */
+const supportTicketTypes = ['online', 'onsite', 'other'];
 
 const repairTicketStatuses = [
   'received',
@@ -52,6 +55,8 @@ String ticketTypeLabel(String t) {
       return 'Hỗ trợ online';
     case 'onsite':
       return 'Hỗ trợ tại nhà';
+    case 'other':
+      return 'Hỗ trợ khác';
     case 'repair':
       return 'Sửa chữa';
     default:
@@ -112,7 +117,7 @@ String ticketStatusLabel(String type, String s) {
     case 'delivering':
       return 'Bàn giao';
     case 'paying':
-      return 'Thanh toán';
+      return 'Thanh toán & Duyệt';
     case 'completed':
       return 'Hoàn tất';
     case 'customer_rejected':
@@ -158,27 +163,25 @@ String yyyyMmDd(DateTime d) =>
     '${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
-/// Repair wizard steps (M8–M13).
+/// Repair wizard steps.
 int repairStepIndex(String status, {bool customerRejectPending = false}) {
   switch (status) {
     case 'received':
       return 0;
     case 'inspecting':
-      return 1;
-    case 'approving':
-      return 2;
+    case 'approving': // legacy → map Kiểm tra
     case 'notifying':
-      return customerRejectPending ? 3 : 3;
+      return 1;
     case 'repairing':
-      return 4;
+      return 2;
     case 'delivering':
-      return 5;
+      return 3;
     case 'paying':
-      return 6;
+      return 4;
     case 'completed':
     case 'customer_rejected':
     case 'cancelled':
-      return 7;
+      return 5;
     default:
       return 0;
   }
@@ -187,13 +190,42 @@ int repairStepIndex(String status, {bool customerRejectPending = false}) {
 const repairStepLabels = [
   'Tiếp nhận',
   'Kiểm tra',
-  'Duyệt KT',
-  'Khách xác nhận',
   'Sửa chữa',
   'Bàn giao',
-  'Thanh toán',
+  'Thanh toán & Duyệt',
   'Xong',
 ];
+
+/// Thời gian đã sửa: từ [isoStart] đến hiện tại (ngày + giờ + phút).
+String formatRepairElapsed(String? isoStart, {String? fallbackIso}) {
+  final raw = (isoStart != null && isoStart.isNotEmpty) ? isoStart : fallbackIso;
+  if (raw == null || raw.isEmpty) return '—';
+  final start = DateTime.tryParse(raw);
+  if (start == null) return '—';
+  final d = DateTime.now().difference(start.toLocal());
+  if (d.isNegative) return '0 ngày 0 giờ';
+  final days = d.inDays;
+  final hours = d.inHours % 24;
+  final mins = d.inMinutes % 60;
+  if (days > 0) return '$days ngày $hours giờ $mins phút';
+  if (hours > 0) return '$hours giờ $mins phút';
+  return '$mins phút';
+}
+
+String repairMethodLabel(String? method) {
+  switch (method) {
+    case 'store':
+      return 'Tại cửa hàng';
+    case 'warranty_center':
+      return 'Trung tâm bảo hành';
+    case 'external':
+      return 'Sửa ngoài';
+    case 'other':
+      return 'Khác';
+    default:
+      return method ?? '—';
+  }
+}
 
 Future<String?> promptReason(
   BuildContext context, {
