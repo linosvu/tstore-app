@@ -38,6 +38,8 @@ class ServiceTicketBrief {
     this.deliveryStaffName,
     this.repairStartedAt,
     this.contactDeadlineAt,
+    this.etaDate,
+    this.deliveryEta,
     this.feeAmount = 0,
     this.isFree = true,
     this.appointmentDate,
@@ -58,6 +60,10 @@ class ServiceTicketBrief {
   final String? deliveryStaffName;
   final String? repairStartedAt;
   final String? contactDeadlineAt;
+  /// YYYY-MM-DD — ETA hoàn thành sửa (bước Sửa chữa).
+  final String? etaDate;
+  /// ISO — hẹn giao khi bàn giao tận nhà.
+  final String? deliveryEta;
   final int feeAmount;
   final bool isFree;
   final String? appointmentDate;
@@ -82,6 +88,8 @@ class ServiceTicketBrief {
       deliveryStaffName: json['deliveryStaffName'] as String?,
       repairStartedAt: json['repairStartedAt'] as String?,
       contactDeadlineAt: json['contactDeadlineAt'] as String?,
+      etaDate: json['etaDate'] as String?,
+      deliveryEta: json['deliveryEta'] as String?,
       feeAmount: (json['feeAmount'] as num?)?.toInt() ?? 0,
       isFree: json['isFree'] as bool? ?? true,
       appointmentDate: json['appointmentDate'] as String?,

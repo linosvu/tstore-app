@@ -353,18 +353,105 @@ class _RequestCard extends StatelessWidget {
     return 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
   }
 
-  String? _appointmentLabel(ServiceTicketBrief ticket) {
-    final date = (ticket.appointmentDate ?? '').trim();
-    if (date.isEmpty) return null;
-    String displayDate = date;
-    final parsed = DateTime.tryParse(date);
+  String? _etaDateLabel(String? etaDate) {
+    final raw = (etaDate ?? '').trim();
+    if (raw.isEmpty) return null;
+    String displayDate = raw;
+    final parsed = DateTime.tryParse(raw);
     if (parsed != null) {
       displayDate =
           '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
     }
-    final slot = (ticket.appointmentSlot ?? '').trim();
-    if (slot.isEmpty) return 'Lịch: $displayDate';
-    return 'Lịch: $displayDate · $slot';
+    return 'ETA · $displayDate';
+  }
+
+  /// Thời gian góc phải theo bước SC hiện tại (không dùng lịch tạo YC / hẹn gọi cũ).
+  ({String? label, bool overdue, bool showScheduleIcon}) _repairSecondarySchedule(
+    ServiceTicketBrief ticket,
+  ) {
+    final step = repairStepIndex(ticket.status);
+    if (step >= 5) {
+      return (label: null, overdue: false, showScheduleIcon: false);
+    }
+
+    String? labeledCountdown(String? iso, {required String prefix}) {
+      final rem = _deadlineRemaining(iso);
+      if (rem.isNotEmpty) return '$prefix · $rem';
+      if (iso != null && iso.trim().isNotEmpty) {
+        return '$prefix · ${formatServiceTime(iso)}';
+      }
+      return null;
+    }
+
+    bool isPast(String? iso) {
+      if (iso == null || iso.trim().isEmpty) return false;
+      final dt = DateTime.tryParse(iso);
+      return dt != null && dt.isBefore(DateTime.now());
+    }
+
+    switch (step) {
+      case 0: {
+        final iso = ticket.contactDeadlineAt;
+        final label = labeledCountdown(iso, prefix: 'Hẹn gọi');
+        return (
+          label: label,
+          overdue: isPast(iso),
+          showScheduleIcon: label != null,
+        );
+      }
+      case 1: {
+        final iso = ticket.deadlineAt;
+        final rem = _deadlineRemaining(iso, markOverdue: ticket.isOverdue);
+        return (
+          label: rem.isEmpty ? null : rem,
+          overdue: ticket.isOverdue || isPast(iso),
+          showScheduleIcon: false,
+        );
+      }
+      case 2: {
+        final eta = _etaDateLabel(ticket.etaDate);
+        if (eta != null) {
+          final etaIso = (ticket.etaDate ?? '').trim();
+          final endOfDay = DateTime.tryParse(etaIso.length == 10
+              ? '${etaIso}T23:59:59'
+              : etaIso);
+          return (
+            label: eta,
+            overdue: endOfDay != null && endOfDay.isBefore(DateTime.now()),
+            showScheduleIcon: true,
+          );
+        }
+        final iso = ticket.deadlineAt;
+        final rem = _deadlineRemaining(iso, markOverdue: ticket.isOverdue);
+        return (
+          label: rem.isEmpty ? null : 'ETA · $rem',
+          overdue: ticket.isOverdue || isPast(iso),
+          showScheduleIcon: rem.isNotEmpty,
+        );
+      }
+      case 3: {
+        final iso = (ticket.deliveryEta ?? '').trim().isNotEmpty
+            ? ticket.deliveryEta
+            : ticket.deadlineAt;
+        final label = labeledCountdown(iso, prefix: 'Hẹn giao');
+        return (
+          label: label,
+          overdue: isPast(iso),
+          showScheduleIcon: label != null,
+        );
+      }
+      case 4: {
+        final iso = ticket.deadlineAt;
+        final rem = _deadlineRemaining(iso, markOverdue: ticket.isOverdue);
+        return (
+          label: rem.isEmpty ? null : rem,
+          overdue: ticket.isOverdue || isPast(iso),
+          showScheduleIcon: false,
+        );
+      }
+      default:
+        return (label: null, overdue: false, showScheduleIcon: false);
+    }
   }
 
   @override
@@ -378,30 +465,15 @@ class _RequestCard extends StatelessWidget {
       latest?.repairStartedAt,
       fallbackIso: latest?.createdAt ?? request.createdAt,
     );
-    final appointment = latest != null ? _appointmentLabel(latest) : null;
 
-    // SC: ưu tiên lịch hẹn / hẹn gọi; cả SC & YC: hạn xử lý deadlineAt.
     String? secondaryLabel;
     var secondaryOverdue = false;
-    if (isRepair) {
-      if (appointment != null) {
-        secondaryLabel = appointment;
-      } else if (latest?.contactDeadlineAt != null &&
-          latest!.contactDeadlineAt!.trim().isNotEmpty) {
-        final rem = _deadlineRemaining(latest.contactDeadlineAt);
-        secondaryLabel = rem.isEmpty
-            ? 'Hẹn gọi · ${formatServiceTime(latest.contactDeadlineAt)}'
-            : 'Hẹn gọi · $rem';
-        final dt = DateTime.tryParse(latest.contactDeadlineAt!);
-        secondaryOverdue = dt != null && dt.isBefore(DateTime.now());
-      } else if (latest != null) {
-        final rem = _deadlineRemaining(
-          latest.deadlineAt,
-          markOverdue: latest.isOverdue,
-        );
-        secondaryLabel = rem.isEmpty ? null : rem;
-        secondaryOverdue = latest.isOverdue;
-      }
+    var showScheduleIcon = false;
+    if (isRepair && latest != null) {
+      final schedule = _repairSecondarySchedule(latest);
+      secondaryLabel = schedule.label;
+      secondaryOverdue = schedule.overdue;
+      showScheduleIcon = schedule.showScheduleIcon;
     } else if (latest != null) {
       final rem = _deadlineRemaining(
         latest.deadlineAt,
@@ -458,14 +530,16 @@ class _RequestCard extends StatelessWidget {
                         ),
                       if (secondaryLabel != null) ...[
                         const SizedBox(height: 2),
-                        if (isRepair && appointment != null)
+                        if (showScheduleIcon)
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.schedule_rounded,
                                 size: 13,
-                                color: scheme.primary,
+                                color: secondaryOverdue
+                                    ? Colors.red
+                                    : scheme.primary,
                               ),
                               const SizedBox(width: 3),
                               Text(
@@ -473,7 +547,9 @@ class _RequestCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: scheme.primary,
+                                  color: secondaryOverdue
+                                      ? Colors.red
+                                      : scheme.primary,
                                 ),
                               ),
                             ],
