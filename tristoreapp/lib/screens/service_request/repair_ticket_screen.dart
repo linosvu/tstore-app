@@ -206,8 +206,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           }
         }
 
-        if (_receiveNoteCtrl.text.trim().isEmpty) {
-          _receiveNoteCtrl.text = t?.note ?? '';
+        // Chỉ seed khi form chưa dirty — tránh hồi sinh ghi chú sau khi user xóa
+        // rồi upload bằng chứng (_load lại với ô trống).
+        if (!_inspectFormDirty) {
+          final ticketNote = (t?.note ?? '').trim();
+          final createNote = (req?.customerNote ?? '').trim();
+          _receiveNoteCtrl.text =
+              ticketNote.isNotEmpty ? ticketNote : createNote;
         }
 
         final contactNote = detail?.contactNote ?? '';
@@ -1067,23 +1072,36 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         .toList();
     final bothSigned = staffSigs.isNotEmpty && customerSigs.isNotEmpty;
 
-    final receiveStaffDropdown = TsDropdownFieldNullable<String>(
-      value: _receiveStaffUserId,
-      labelText: 'Nhân viên tiếp nhận *',
-      items: [
-        ...userIds,
-        if (_receiveStaffUserId != null &&
-            !userIds.contains(_receiveStaffUserId))
-          _receiveStaffUserId!,
+    final receiveStaffRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(
+          width: 120,
+          child: Text(
+            'Nhân viên tiếp nhận *',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+        ),
+        Expanded(
+          child: TsDropdownFieldNullable<String>(
+            value: _receiveStaffUserId,
+            items: [
+              ...userIds,
+              if (_receiveStaffUserId != null &&
+                  !userIds.contains(_receiveStaffUserId))
+                _receiveStaffUserId!,
+            ],
+            itemLabel: (id) {
+              if (id == null) return '— Chọn nhân viên —';
+              return nameOf[id] ?? id;
+            },
+            onChanged: (v) => setState(() {
+                  _receiveStaffUserId = v;
+                  _inspectFormDirty = true;
+                }),
+          ),
+        ),
       ],
-      itemLabel: (id) {
-        if (id == null) return '— Chọn nhân viên —';
-        return nameOf[id] ?? id;
-      },
-      onChanged: (v) => setState(() {
-            _receiveStaffUserId = v;
-            _inspectFormDirty = true;
-          }),
     );
 
     final evidence = EvidenceSection(
@@ -1135,12 +1153,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
     if (bothSigned) {
       return [
+        evidence,
+        const SizedBox(height: 12),
         SectionCard(
-          title: 'Chữ ký tiếp nhận',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              receiveStaffDropdown,
+              receiveStaffRow,
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -1207,13 +1226,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           ),
         ],
         const SizedBox(height: 12),
-        evidence,
-        const SizedBox(height: 12),
         ctas,
       ];
     }
 
     return [
+      evidence,
+      const SizedBox(height: 12),
       SignaturePadSection(
         key: ValueKey('sig-${t.id}-receive-staff'),
         ticketId: t.id,
@@ -1222,7 +1241,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         signatures: t.signatures,
         onChanged: _load,
         title: 'Chữ ký nhân viên tiếp nhận *',
-        header: receiveStaffDropdown,
+        header: receiveStaffRow,
       ),
       const SizedBox(height: 8),
       SignaturePadSection(
@@ -1234,8 +1253,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         onChanged: _load,
         title: 'Chữ ký khách *',
       ),
-      const SizedBox(height: 12),
-      evidence,
       const SizedBox(height: 12),
       ctas,
     ];

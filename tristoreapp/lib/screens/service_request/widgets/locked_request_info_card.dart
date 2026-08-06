@@ -7,10 +7,8 @@ import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 
-import '../service_ui.dart';
-
 /// Thông tin YC gốc (khoá) hiển thị trên phiếu con.
-class LockedRequestInfoCard extends StatelessWidget {
+class LockedRequestInfoCard extends StatefulWidget {
   const LockedRequestInfoCard({
     super.key,
     required this.request,
@@ -21,25 +19,36 @@ class LockedRequestInfoCard extends StatelessWidget {
   final VoidCallback? onEdit;
 
   @override
+  State<LockedRequestInfoCard> createState() => _LockedRequestInfoCardState();
+}
+
+class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
+  bool _showBuyer = false;
+
+  ServiceRequestBrief get request => widget.request;
+
+  bool get _hasBuyerInfo {
+    final name = (request.buyerName ?? '').trim();
+    final phone = (request.buyerPhone ?? '').trim();
+    final address = (request.buyerAddress ?? '').trim();
+    return name.isNotEmpty || phone.isNotEmpty || address.isNotEmpty;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final note = (request.customerNote ?? '').trim();
     return SectionCard(
       title: 'Thông tin yêu cầu (${request.code ?? request.id.substring(0, 8)})',
-      titleTrailing: onEdit == null
+      titleTrailing: widget.onEdit == null
           ? null
           : IconButton(
               tooltip: 'Chỉnh sửa',
-              onPressed: onEdit,
+              onPressed: widget.onEdit,
               icon: const Icon(Icons.edit_outlined),
             ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (request.createdByName != null &&
-              request.createdByName!.trim().isNotEmpty)
-            _row('Người tạo', request.createdByName!),
-          _row('Kênh', channelLabel(request.channel)),
           _row('Khách', request.customerName),
           _rowWithCopy(
             context,
@@ -50,28 +59,11 @@ class LockedRequestInfoCard extends StatelessWidget {
           if (request.customerAddress != null &&
               request.customerAddress!.isNotEmpty)
             _row('Địa chỉ', request.customerAddress!),
-          _row('Ghi chú', note.isEmpty ? '—' : note),
-          if (request.buyerName != null && request.buyerName!.isNotEmpty) ...[
-            _row('Người mua', request.buyerName!),
-            if (request.buyerPhone != null && request.buyerPhone!.isNotEmpty)
-              _rowWithCopy(
-                context,
-                'SĐT mua',
-                request.buyerPhone!,
-                snackMessage: 'Đã copy SĐT người mua',
-              ),
-            if (request.buyerAddress != null &&
-                request.buyerAddress!.isNotEmpty)
-              _row('Địa chỉ mua', request.buyerAddress!),
-          ],
           _row('Sản phẩm', request.productName),
           if (request.productSerial != null &&
               request.productSerial!.isNotEmpty)
             _row('Serial', request.productSerial!),
           _row('Lỗi', request.issueDescription),
-          if (request.managerName != null &&
-              request.managerName!.trim().isNotEmpty)
-            _row('NV quản lý', request.managerName!),
           if (request.attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Đính kèm', style: text.labelMedium),
@@ -106,6 +98,48 @@ class LockedRequestInfoCard extends StatelessWidget {
                   ),
               ],
             ),
+          ],
+          if (_hasBuyerInfo) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () => setState(() => _showBuyer = !_showBuyer),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      _showBuyer ? 'Thu gọn' : 'Xem thêm',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Icon(
+                      _showBuyer
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_showBuyer) ...[
+              if (request.buyerName != null && request.buyerName!.isNotEmpty)
+                _row('Người mua', request.buyerName!),
+              if (request.buyerPhone != null && request.buyerPhone!.isNotEmpty)
+                _rowWithCopy(
+                  context,
+                  'SĐT mua',
+                  request.buyerPhone!,
+                  snackMessage: 'Đã copy SĐT người mua',
+                ),
+              if (request.buyerAddress != null &&
+                  request.buyerAddress!.isNotEmpty)
+                _row('Địa chỉ mua', request.buyerAddress!),
+            ],
           ],
         ],
       ),

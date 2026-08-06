@@ -34,6 +34,10 @@ class ServiceTicketBrief {
     required this.status,
     required this.staffUserId,
     this.staffName,
+    this.receiveStaffName,
+    this.deliveryStaffName,
+    this.repairStartedAt,
+    this.contactDeadlineAt,
     this.feeAmount = 0,
     this.isFree = true,
     this.appointmentDate,
@@ -50,6 +54,10 @@ class ServiceTicketBrief {
   final String status;
   final String staffUserId;
   final String? staffName;
+  final String? receiveStaffName;
+  final String? deliveryStaffName;
+  final String? repairStartedAt;
+  final String? contactDeadlineAt;
   final int feeAmount;
   final bool isFree;
   final String? appointmentDate;
@@ -70,6 +78,10 @@ class ServiceTicketBrief {
       status: json['status'] as String? ?? 'processing',
       staffUserId: json['staffUserId'] as String? ?? '',
       staffName: json['staffName'] as String?,
+      receiveStaffName: json['receiveStaffName'] as String?,
+      deliveryStaffName: json['deliveryStaffName'] as String?,
+      repairStartedAt: json['repairStartedAt'] as String?,
+      contactDeadlineAt: json['contactDeadlineAt'] as String?,
       feeAmount: (json['feeAmount'] as num?)?.toInt() ?? 0,
       isFree: json['isFree'] as bool? ?? true,
       appointmentDate: json['appointmentDate'] as String?,

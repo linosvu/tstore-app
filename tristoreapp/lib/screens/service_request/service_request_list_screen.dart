@@ -334,11 +334,83 @@ class _RequestCard extends StatelessWidget {
   final VoidCallback onOpen;
   final void Function(ServiceTicketBrief) onOpenTicket;
 
+  String _deadlineRemaining(String? iso, {bool markOverdue = false}) {
+    if (iso == null || iso.isEmpty) return '';
+    final deadline = DateTime.tryParse(iso);
+    if (deadline == null) return '';
+    final now = DateTime.now();
+    final overdue = markOverdue || deadline.isBefore(now);
+    if (overdue) {
+      final late = now.difference(deadline);
+      return 'Quá hạn ${late.inHours}h ${late.inMinutes.remainder(60)}p';
+    }
+    final diff = deadline.difference(now);
+    if (diff.inDays >= 1) {
+      return 'Còn ${diff.inDays} ngày ${diff.inHours.remainder(24)}h';
+    }
+    return 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
+  }
+
+  String? _appointmentLabel(ServiceTicketBrief ticket) {
+    final date = (ticket.appointmentDate ?? '').trim();
+    if (date.isEmpty) return null;
+    String displayDate = date;
+    final parsed = DateTime.tryParse(date);
+    if (parsed != null) {
+      displayDate =
+          '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
+    }
+    final slot = (ticket.appointmentSlot ?? '').trim();
+    if (slot.isEmpty) return 'Lịch: $displayDate';
+    return 'Lịch: $displayDate · $slot';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final latest = request.latestTicket;
+    final isRepair = request.isRepairDirection || latest?.type == 'repair';
+    final creator = (request.createdByName ?? '').trim();
+    final manager = (request.managerName ?? '').trim();
+    final elapsed = formatRepairElapsed(
+      latest?.repairStartedAt,
+      fallbackIso: latest?.createdAt ?? request.createdAt,
+    );
+    final appointment = latest != null ? _appointmentLabel(latest) : null;
+
+    // SC: ưu tiên lịch hẹn / hẹn gọi; cả SC & YC: hạn xử lý deadlineAt.
+    String? secondaryLabel;
+    var secondaryOverdue = false;
+    if (isRepair) {
+      if (appointment != null) {
+        secondaryLabel = appointment;
+      } else if (latest?.contactDeadlineAt != null &&
+          latest!.contactDeadlineAt!.trim().isNotEmpty) {
+        final rem = _deadlineRemaining(latest.contactDeadlineAt);
+        secondaryLabel = rem.isEmpty
+            ? 'Hẹn gọi · ${formatServiceTime(latest.contactDeadlineAt)}'
+            : 'Hẹn gọi · $rem';
+        final dt = DateTime.tryParse(latest.contactDeadlineAt!);
+        secondaryOverdue = dt != null && dt.isBefore(DateTime.now());
+      } else if (latest != null) {
+        final rem = _deadlineRemaining(
+          latest.deadlineAt,
+          markOverdue: latest.isOverdue,
+        );
+        secondaryLabel = rem.isEmpty ? null : rem;
+        secondaryOverdue = latest.isOverdue;
+      }
+    } else if (latest != null) {
+      final rem = _deadlineRemaining(
+        latest.deadlineAt,
+        markOverdue: latest.isOverdue,
+      );
+      secondaryLabel = rem.isEmpty ? null : rem;
+      secondaryOverdue = latest.isOverdue;
+    }
+
     return Material(
-      color: Theme.of(context).colorScheme.surface,
+      color: scheme.surface,
       borderRadius: BorderRadius.circular(12),
       elevation: 1,
       child: InkWell(
@@ -350,16 +422,76 @@ class _RequestCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      request.displayCode,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          request.displayCode,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        StatusBadge(
+                          label: requestStatusLabel(request.status),
+                          tone: requestStatusTone(request.status),
+                        ),
+                      ],
                     ),
                   ),
-                  StatusBadge(
-                    label: requestStatusLabel(request.status),
-                    tone: requestStatusTone(request.status),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (elapsed != '—')
+                        Text(
+                          elapsed,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      if (secondaryLabel != null) ...[
+                        const SizedBox(height: 2),
+                        if (isRepair && appointment != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: 13,
+                                color: scheme.primary,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                secondaryLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.primary,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          Text(
+                            secondaryLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: secondaryOverdue
+                                  ? Colors.red
+                                  : (isRepair
+                                      ? scheme.primary
+                                      : const Color(0xFF92400E)),
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -375,6 +507,23 @@ class _RequestCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (creator.isNotEmpty || manager.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                if (creator.isNotEmpty)
+                  Text(
+                    'Người tạo: $creator',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (manager.isNotEmpty)
+                  Text(
+                    'NV quản lý: $manager',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
               if (request.supportStaffName != null &&
                   request.supportStaffName!.trim().isNotEmpty)
                 Text(
@@ -383,6 +532,16 @@ class _RequestCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+              if (isRepair && latest != null && latest.type == 'repair') ...[
+                const SizedBox(height: 8),
+                _RepairProgressBar(
+                  status: latest.status,
+                  receiveStaffName: latest.receiveStaffName,
+                  techStaffName: latest.staffName,
+                  deliveryStaffName: latest.deliveryStaffName,
+                  managerName: request.managerName,
+                ),
+              ],
               if (latest != null) ...[
                 const SizedBox(height: 8),
                 InkWell(
@@ -394,9 +553,7 @@ class _RequestCard extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
+                      color: scheme.surfaceContainerHighest
                           .withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -438,6 +595,199 @@ class _RequestCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+enum _RepairFlowStepState { pending, active, done, failed }
+
+class _RepairProgressBar extends StatelessWidget {
+  const _RepairProgressBar({
+    required this.status,
+    this.receiveStaffName,
+    this.techStaffName,
+    this.deliveryStaffName,
+    this.managerName,
+  });
+
+  final String status;
+  final String? receiveStaffName;
+  final String? techStaffName;
+  final String? deliveryStaffName;
+  final String? managerName;
+
+  static const _labels = [
+    'Tiếp nhận',
+    'Kiểm tra',
+    'Sửa chữa',
+    'Bàn giao',
+    'Thanh toán',
+  ];
+
+  _RepairFlowStepState _stateFor(int i, int activeIndex, bool failed) {
+    if (failed) {
+      if (i < activeIndex) return _RepairFlowStepState.done;
+      if (i == activeIndex) return _RepairFlowStepState.failed;
+      return _RepairFlowStepState.pending;
+    }
+    // activeIndex == length → hoàn thành (tất cả done)
+    if (activeIndex >= _labels.length) return _RepairFlowStepState.done;
+    if (i < activeIndex) return _RepairFlowStepState.done;
+    if (i == activeIndex) return _RepairFlowStepState.active;
+    return _RepairFlowStepState.pending;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final failed = status == 'cancelled' || status == 'customer_rejected';
+    final rawIndex = repairStepIndex(status);
+    // 0..4 = bước đang làm; >=5 = Xong. Khi failed ở Xong → đánh dấu bước cuối.
+    final int activeIndex;
+    if (failed) {
+      activeIndex = rawIndex >= _labels.length
+          ? _labels.length - 1
+          : rawIndex.clamp(0, _labels.length - 1);
+    } else if (rawIndex >= _labels.length) {
+      activeIndex = _labels.length; // all done
+    } else {
+      activeIndex = rawIndex;
+    }
+
+    final steps = List.generate(
+      _labels.length,
+      (i) => (_labels[i], _stateFor(i, activeIndex, failed)),
+    );
+
+    Color colorOf(_RepairFlowStepState state) {
+      switch (state) {
+        case _RepairFlowStepState.done:
+          return const Color(0xFF22C55E);
+        case _RepairFlowStepState.active:
+          return const Color(0xFF5C60E6);
+        case _RepairFlowStepState.failed:
+          return scheme.error;
+        case _RepairFlowStepState.pending:
+          return scheme.outlineVariant;
+      }
+    }
+
+    final connectorColor = (steps[0].$2 == _RepairFlowStepState.pending)
+        ? scheme.outlineVariant
+        : const Color(0xFF5C60E6);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 26,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final count = steps.length;
+              final stepWidth = constraints.maxWidth / count;
+              return Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  Positioned(
+                    left: stepWidth / 2,
+                    right: stepWidth / 2,
+                    top: 11,
+                    child: Container(height: 2, color: connectorColor),
+                  ),
+                  Row(
+                    children: List.generate(count, (i) {
+                      final state = steps[i].$2;
+                      final color = colorOf(state);
+                      return Expanded(
+                        child: Center(
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: state == _RepairFlowStepState.pending
+                                  ? Colors.transparent
+                                  : color,
+                              border: Border.all(color: color, width: 2),
+                            ),
+                            child: Center(
+                              child: state == _RepairFlowStepState.done
+                                  ? const Icon(
+                                      Icons.check_rounded,
+                                      size: 14,
+                                      color: Colors.white,
+                                    )
+                                  : Text(
+                                      '${i + 1}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: state ==
+                                                    _RepairFlowStepState
+                                                        .pending
+                                                ? color
+                                                : Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: steps.asMap().entries.map((entry) {
+            final i = entry.key;
+            final s = entry.value;
+            final assignedName = switch (i) {
+              0 => receiveStaffName?.trim(),
+              1 || 2 => techStaffName?.trim(),
+              3 => deliveryStaffName?.trim(),
+              4 => managerName?.trim(),
+              _ => null,
+            };
+            return Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    s.$1,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 9,
+                        ),
+                  ),
+                  if (assignedName != null && assignedName.isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      assignedName,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: scheme.primary,
+                            fontSize: 9,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }
