@@ -195,7 +195,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         'appointmentSlot': _slotCtrl.text.trim().isEmpty
             ? '09:00-11:00'
             : _slotCtrl.text.trim(),
-        // NV hỗ trợ / NV SC — mặc định người tạo (API).
+        // NV hỗ trợ / NV sửa chữa — mặc định người tạo (API).
         if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
       };
       final created =

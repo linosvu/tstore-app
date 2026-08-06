@@ -178,7 +178,9 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                     ? const LinearProgressIndicator()
                     : TsDropdownFieldNullable<String>(
                         value: prov.supportStaffUserId,
-                        labelText: l10n.serviceFilterSupportStaff,
+                        labelText: widget.tab == 'repair'
+                            ? l10n.serviceFilterRepairStaff
+                            : l10n.serviceFilterSupportStaff,
                         items: [
                           null,
                           ..._users.map((u) => u.$1),
@@ -507,6 +509,15 @@ class _RequestCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (request.issueDescription.trim().isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'Lỗi: ${request.issueDescription.trim()}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
               if (creator.isNotEmpty || manager.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 if (creator.isNotEmpty)
@@ -524,14 +535,6 @@ class _RequestCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
-              if (request.supportStaffName != null &&
-                  request.supportStaffName!.trim().isNotEmpty)
-                Text(
-                  'NV hỗ trợ: ${request.supportStaffName}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               if (isRepair && latest != null && latest.type == 'repair') ...[
                 const SizedBox(height: 8),
                 _RepairProgressBar(

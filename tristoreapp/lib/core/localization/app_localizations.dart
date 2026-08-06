@@ -824,6 +824,7 @@ class AppLocalizations {
   String get serviceAppointmentSlot => 'Khung giờ';
   String get serviceStaff => 'Nhân viên xử lý';
   String get serviceFilterSupportStaff => 'NV hỗ trợ';
+  String get serviceFilterRepairStaff => 'Nhân viên sửa chữa';
   String get serviceEscalate => 'Leo thang / tạo phiếu con';
   String get serviceCompleteRequest => 'Hoàn tất yêu cầu';
   String get serviceCancelRequest => 'Huỷ hỗ trợ';

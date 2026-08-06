@@ -304,7 +304,11 @@ class _ServiceRequestDetailScreenState
                                   Text('Serial: ${item.productSerial}'),
                                 Text('Lỗi: ${item.issueDescription}'),
                                 if (item.supportStaffName != null)
-                                  Text('NV hỗ trợ: ${item.supportStaffName}'),
+                                  Text(
+                                    item.isRepairDirection
+                                        ? '${l10n.serviceRepairStaff}: ${item.supportStaffName}'
+                                        : '${l10n.serviceFilterSupportStaff}: ${item.supportStaffName}',
+                                  ),
                                 if (item.cancelReason != null)
                                   Text(
                                     'Huỷ: ${item.cancelReason}',
