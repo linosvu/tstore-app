@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/utils/media_upload_flow.dart';
 import 'package:tstore/core/widgets/media_picker_sheet.dart';
@@ -11,6 +12,7 @@ import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
+import 'package:tstore/widgets/integer_thousands_input_formatter.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
@@ -33,6 +35,8 @@ class RepairTicketScreen extends StatefulWidget {
 }
 
 class _RepairTicketScreenState extends State<RepairTicketScreen> {
+  static const _thousandsSep = ThousandsGroupSeparatorKey.dot;
+
   ServiceTicketPublic? _ticket;
   bool _loading = true;
   bool _busy = false;
@@ -67,6 +71,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   String _deliveryMethod = 'store';
   DateTime? _deliveryEta;
   final _shippingPayerCtrl = TextEditingController();
+  final _deliveryNoteCtrl = TextEditingController();
+  bool _resignDeliveryStaff = false;
+  bool _resignDeliveryCustomer = false;
 
   // Payment
   bool _payFormDirty = false;
@@ -125,6 +132,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     _receiveBackNoteCtrl.dispose();
     _resultCtrl.dispose();
     _shippingPayerCtrl.dispose();
+    _deliveryNoteCtrl.dispose();
     _payAmountCtrl.dispose();
     _payNoteCtrl.dispose();
     super.dispose();
@@ -232,8 +240,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           _resultCtrl.text = detail?.repairResult ?? '';
         }
         if (!preserveCosts) {
-          _partCostCtrl.text = '${detail?.partCost ?? 0}';
-          _laborCostCtrl.text = '${detail?.laborCost ?? 0}';
+          _partCostCtrl.text = formatIntegerWithSeparator(
+            detail?.partCost ?? 0,
+            _thousandsSep,
+          );
+          _laborCostCtrl.text = formatIntegerWithSeparator(
+            detail?.laborCost ?? 0,
+            _thousandsSep,
+          );
           _warrantyCtrl.text = '${detail?.warrantyMonths ?? 0}';
         }
 
@@ -255,11 +269,15 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               (detail?.partCost ?? 0) + (detail?.laborCost ?? 0);
           _payMethod = detail?.paymentMethod ?? (aborted ? 'free' : 'cash');
           if (detail?.paymentAmount != null) {
-            _payAmountCtrl.text = '${detail!.paymentAmount}';
+            _payAmountCtrl.text = formatIntegerWithSeparator(
+              detail!.paymentAmount!,
+              _thousandsSep,
+            );
           } else if (aborted || _payMethod == 'free') {
             _payAmountCtrl.text = '0';
           } else {
-            _payAmountCtrl.text = '$costTotal';
+            _payAmountCtrl.text =
+                formatIntegerWithSeparator(costTotal, _thousandsSep);
           }
           _payDue = detail?.paymentDueDate != null
               ? DateTime.tryParse(detail!.paymentDueDate!)
@@ -1525,12 +1543,17 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return m == 'warranty_center' || m == 'external' || m == 'other';
   }
 
+  int _parseCostField(TextEditingController c) =>
+      parseIntegerLoose(c.text, _thousandsSep) ?? 0;
+
+  String _money(int v) => formatIntegerWithSeparator(v, _thousandsSep);
+
   Map<String, dynamic> _repairWorkBody() {
     return {
       'solution': _solutionCtrl.text.trim(),
       'repairResult': _resultCtrl.text.trim(),
-      'partCost': int.tryParse(_partCostCtrl.text.trim()) ?? 0,
-      'laborCost': int.tryParse(_laborCostCtrl.text.trim()) ?? 0,
+      'partCost': _parseCostField(_partCostCtrl),
+      'laborCost': _parseCostField(_laborCostCtrl),
       'warrantyMonths': int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
       if (_repairContactNoteCtrl.text.trim().isNotEmpty)
         'repairContactNote': _repairContactNoteCtrl.text.trim(),
@@ -1662,16 +1685,20 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             TextField(
               controller: _partCostCtrl,
               decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: integerThousandsKeyboardType(_thousandsSep),
+              inputFormatters: [
+                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+              ],
               onChanged: (_) => setState(() => _repairFormDirty = true),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _laborCostCtrl,
               decoration: const InputDecoration(labelText: 'Tiền công'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: integerThousandsKeyboardType(_thousandsSep),
+              inputFormatters: [
+                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+              ],
               onChanged: (_) => setState(() => _repairFormDirty = true),
             ),
             const SizedBox(height: 8),
@@ -1795,10 +1822,289 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     List<String> userIds,
     Map<String, String> nameOf,
   ) {
-    final part = int.tryParse(_partCostCtrl.text.trim()) ?? 0;
-    final labor = int.tryParse(_laborCostCtrl.text.trim()) ?? 0;
+    final part = _parseCostField(_partCostCtrl);
+    final labor = _parseCostField(_laborCostCtrl);
     final total = part + labor;
     final block = _completeDeliveryBlockReason(t);
+
+    final staffSigs = t.signatures
+        .where((s) => s.stage == 'delivery' && s.signer == 'staff')
+        .toList();
+    final customerSigs = t.signatures
+        .where((s) => s.stage == 'delivery' && s.signer == 'customer')
+        .toList();
+    final bothSigned = staffSigs.isNotEmpty && customerSigs.isNotEmpty;
+
+    final deliveryStaffRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(
+          width: 100,
+          child: Text(
+            'NV bàn giao *',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+        ),
+        Expanded(
+          child: TsDropdownFieldNullable<String>(
+            value: (_deliveryStaffUserId ?? '').trim().isEmpty
+                ? null
+                : _deliveryStaffUserId,
+            items: [
+              ...userIds,
+              if ((_deliveryStaffUserId ?? '').trim().isNotEmpty &&
+                  !userIds.contains(_deliveryStaffUserId))
+                _deliveryStaffUserId!,
+            ],
+            itemLabel: (id) => id == null ? '— Chọn nhân viên —' : (nameOf[id] ?? id),
+            onChanged: (v) => setState(() {
+              _deliveryStaffUserId = v;
+              _deliveryFormDirty = true;
+            }),
+          ),
+        ),
+      ],
+    );
+
+    final evidence = EvidenceSection(
+      ticketId: t.id,
+      stage: 'delivery',
+      evidences: t.evidences,
+      onChanged: () => _load(),
+      title: 'Bằng chứng bàn giao *',
+      noteField: TextField(
+        controller: _deliveryNoteCtrl,
+        decoration: const InputDecoration(
+          labelText: 'Ghi chú bằng chứng bàn giao',
+        ),
+        maxLines: 2,
+        onChanged: (_) => setState(() => _deliveryFormDirty = true),
+      ),
+    );
+
+    final methodCard = SectionCard(
+      title: 'Hình thức bàn giao',
+      child: Column(
+        children: [
+          TsDropdownField<String>(
+            value: _deliveryMethod,
+            items: const ['store', 'home', 'shipping'],
+            itemLabel: (v) {
+              switch (v) {
+                case 'home':
+                  return 'Giao tại nhà';
+                case 'shipping':
+                  return 'Gửi ship';
+                default:
+                  return 'Nhận tại cửa hàng';
+              }
+            },
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _deliveryMethod = v;
+                  _deliveryFormDirty = true;
+                });
+              }
+            },
+          ),
+          if (_deliveryMethod == 'home')
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Thời gian giao'),
+              subtitle: Text(
+                _deliveryEta?.toLocal().toString() ?? 'Chọn thời gian',
+              ),
+              onTap: () async {
+                final day = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 60)),
+                );
+                if (day == null || !mounted) return;
+                final tm = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.now(),
+                );
+                if (tm == null) return;
+                setState(() {
+                  _deliveryEta = DateTime(
+                    day.year,
+                    day.month,
+                    day.day,
+                    tm.hour,
+                    tm.minute,
+                  );
+                  _deliveryFormDirty = true;
+                });
+              },
+            ),
+          if (_deliveryMethod == 'shipping')
+            TextField(
+              controller: _shippingPayerCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Người trả phí ship',
+              ),
+              onChanged: (_) => setState(() => _deliveryFormDirty = true),
+            ),
+        ],
+      ),
+    );
+
+    final ctas = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (block != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              block,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        FilledButton(
+          onPressed: _busy || block != null
+              ? null
+              : () => _action('complete-delivery', body: {
+                    'deliveryMethod': _deliveryMethod,
+                    'deliveryStaffUserId': _deliveryStaffUserId,
+                    'partCost': _parseCostField(_partCostCtrl),
+                    'laborCost': _parseCostField(_laborCostCtrl),
+                    'warrantyMonths':
+                        int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
+                    if (_deliveryMethod == 'home' && _deliveryEta != null)
+                      'deliveryEta':
+                          _deliveryEta!.toUtc().toIso8601String(),
+                    if (_shippingPayerCtrl.text.trim().isNotEmpty)
+                      'shippingFeePayer': _shippingPayerCtrl.text.trim(),
+                    if (_deliveryNoteCtrl.text.trim().isNotEmpty)
+                      'note': _deliveryNoteCtrl.text.trim(),
+                  }),
+          child: const Text('Sang Thanh toán & Duyệt'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _busy ? null : _abortToPayment,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('Hủy'),
+        ),
+      ],
+    );
+
+    final List<Widget> signatureBlock;
+    if (bothSigned) {
+      signatureBlock = [
+        SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              deliveryStaffRow,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _signatureThumb(
+                      label: 'NV bàn giao',
+                      url: staffSigs.last.imageUrl,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _signatureThumb(
+                      label: 'Khách',
+                      url: customerSigs.last.imageUrl,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _resignDeliveryStaff = true),
+                    child: const Text('Ký lại NV'),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _resignDeliveryCustomer = true),
+                    child: const Text('Ký lại khách'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        if (_resignDeliveryStaff) ...[
+          const SizedBox(height: 8),
+          SignaturePadSection(
+            key: ValueKey('sig-${t.id}-delivery-staff-resign'),
+            ticketId: t.id,
+            stage: 'delivery',
+            signer: 'staff',
+            signatures: const [],
+            onChanged: () {
+              setState(() => _resignDeliveryStaff = false);
+              _load();
+            },
+            title: 'Ký lại — NV bàn giao',
+          ),
+        ],
+        if (_resignDeliveryCustomer) ...[
+          const SizedBox(height: 8),
+          SignaturePadSection(
+            key: ValueKey('sig-${t.id}-delivery-customer-resign'),
+            ticketId: t.id,
+            stage: 'delivery',
+            signer: 'customer',
+            signatures: const [],
+            onChanged: () {
+              setState(() => _resignDeliveryCustomer = false);
+              _load();
+            },
+            title: 'Ký lại — khách',
+          ),
+        ],
+      ];
+    } else {
+      signatureBlock = [
+        SectionCard(child: deliveryStaffRow),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: SignaturePadSection(
+                key: ValueKey('sig-${t.id}-delivery-staff'),
+                ticketId: t.id,
+                stage: 'delivery',
+                signer: 'staff',
+                signatures: t.signatures,
+                onChanged: () => _load(),
+                title: 'NV bàn giao *',
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SignaturePadSection(
+                key: ValueKey('sig-${t.id}-delivery-customer'),
+                ticketId: t.id,
+                stage: 'delivery',
+                signer: 'customer',
+                signatures: t.signatures,
+                onChanged: () => _load(),
+                title: 'Khách *',
+              ),
+            ),
+          ],
+        ),
+      ];
+    }
 
     return [
       SectionCard(
@@ -1809,21 +2115,25 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             TextField(
               controller: _partCostCtrl,
               decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: integerThousandsKeyboardType(_thousandsSep),
+              inputFormatters: [
+                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+              ],
               onChanged: (_) => setState(() => _deliveryFormDirty = true),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _laborCostCtrl,
               decoration: const InputDecoration(labelText: 'Tiền công'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: integerThousandsKeyboardType(_thousandsSep),
+              inputFormatters: [
+                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+              ],
               onChanged: (_) => setState(() => _deliveryFormDirty = true),
             ),
             const SizedBox(height: 8),
             Text(
-              'Tổng chi phí: $total đ',
+              'Tổng chi phí: ${_money(total)} đ',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -1848,161 +2158,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         ),
       ),
       const SizedBox(height: 12),
-      EvidenceSection(
-        ticketId: t.id,
-        stage: 'delivery',
-        evidences: t.evidences,
-        onChanged: () => _load(),
-        title: 'Bằng chứng bàn giao *',
-      ),
+      evidence,
       const SizedBox(height: 12),
-      SectionCard(
-        title: 'Nhân viên bàn giao *',
-        child: TsDropdownFieldNullable<String>(
-          value: (_deliveryStaffUserId ?? '').trim().isEmpty
-              ? null
-              : _deliveryStaffUserId,
-          labelText: 'Nhân viên bàn giao',
-          items: [
-            ...userIds,
-            if ((_deliveryStaffUserId ?? '').trim().isNotEmpty &&
-                !userIds.contains(_deliveryStaffUserId))
-              _deliveryStaffUserId!,
-          ],
-          itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
-          onChanged: (v) => setState(() {
-            _deliveryStaffUserId = v;
-            _deliveryFormDirty = true;
-          }),
-        ),
-      ),
-      const SizedBox(height: 8),
-      SignaturePadSection(
-        key: ValueKey('sig-${t.id}-delivery-staff'),
-        ticketId: t.id,
-        stage: 'delivery',
-        signer: 'staff',
-        signatures: t.signatures,
-        onChanged: () => _load(),
-        title: 'Chữ ký nhân viên *',
-      ),
-      const SizedBox(height: 8),
-      SignaturePadSection(
-        key: ValueKey('sig-${t.id}-delivery-customer'),
-        ticketId: t.id,
-        stage: 'delivery',
-        signer: 'customer',
-        signatures: t.signatures,
-        onChanged: () => _load(),
-        title: 'Chữ ký khách *',
-      ),
+      ...signatureBlock,
       const SizedBox(height: 12),
-      SectionCard(
-        title: 'Hình thức bàn giao',
-        child: Column(
-          children: [
-            TsDropdownField<String>(
-              value: _deliveryMethod,
-              items: const ['store', 'home', 'shipping'],
-              itemLabel: (v) {
-                switch (v) {
-                  case 'home':
-                    return 'Giao tại nhà';
-                  case 'shipping':
-                    return 'Gửi ship';
-                  default:
-                    return 'Nhận tại cửa hàng';
-                }
-              },
-              onChanged: (v) {
-                if (v != null) {
-                  setState(() {
-                    _deliveryMethod = v;
-                    _deliveryFormDirty = true;
-                  });
-                }
-              },
-            ),
-            if (_deliveryMethod == 'home')
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Thời gian giao'),
-                subtitle: Text(
-                  _deliveryEta?.toLocal().toString() ?? 'Chọn thời gian',
-                ),
-                onTap: () async {
-                  final day = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now(),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 60)),
-                  );
-                  if (day == null || !mounted) return;
-                  final tm = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.now(),
-                  );
-                  if (tm == null) return;
-                  setState(() {
-                    _deliveryEta = DateTime(
-                      day.year,
-                      day.month,
-                      day.day,
-                      tm.hour,
-                      tm.minute,
-                    );
-                    _deliveryFormDirty = true;
-                  });
-                },
-              ),
-            if (_deliveryMethod == 'shipping')
-              TextField(
-                controller: _shippingPayerCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Người trả phí ship',
-                ),
-                onChanged: (_) => setState(() => _deliveryFormDirty = true),
-              ),
-          ],
-        ),
-      ),
+      methodCard,
       const SizedBox(height: 12),
-      if (block != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            block,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      FilledButton(
-        onPressed: _busy || block != null
-            ? null
-            : () => _action('complete-delivery', body: {
-                  'deliveryMethod': _deliveryMethod,
-                  'deliveryStaffUserId': _deliveryStaffUserId,
-                  'partCost': int.tryParse(_partCostCtrl.text.trim()) ?? 0,
-                  'laborCost': int.tryParse(_laborCostCtrl.text.trim()) ?? 0,
-                  'warrantyMonths':
-                      int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
-                  if (_deliveryMethod == 'home' && _deliveryEta != null)
-                    'deliveryEta': _deliveryEta!.toUtc().toIso8601String(),
-                  if (_shippingPayerCtrl.text.trim().isNotEmpty)
-                    'shippingFeePayer': _shippingPayerCtrl.text.trim(),
-                }),
-        child: const Text('Sang Thanh toán & Duyệt'),
-      ),
-      const SizedBox(height: 8),
-      OutlinedButton(
-        onPressed: _busy ? null : _abortToPayment,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Theme.of(context).colorScheme.error,
-        ),
-        child: const Text('Hủy'),
-      ),
+      ctas,
     ];
   }
 
@@ -2044,8 +2206,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Tổng chi phí sửa: $costTotal đ'),
-            Text('Còn lại / cần thu: $due đ'),
+            Text('Tổng chi phí sửa: ${_money(costTotal)} đ'),
+            Text('Còn lại / cần thu: ${_money(due)} đ'),
             const SizedBox(height: 12),
             if (!submitted) ...[
               SwitchListTile(
@@ -2060,7 +2222,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       _payAmountCtrl.text = '0';
                     } else {
                       _payMethod = 'cash';
-                      _payAmountCtrl.text = '$due';
+                      _payAmountCtrl.text = _money(due);
                     }
                   });
                 },
@@ -2069,8 +2231,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 TextField(
                   controller: _payAmountCtrl,
                   decoration: const InputDecoration(labelText: 'Số tiền'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: integerThousandsKeyboardType(_thousandsSep),
+                  inputFormatters: [
+                    IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+                  ],
                   onChanged: (_) => setState(() => _payFormDirty = true),
                 ),
                 const SizedBox(height: 8),
@@ -2183,7 +2347,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                     : () => _action('submit-payment', body: {
                           'paymentAmount': isFree
                               ? 0
-                              : (int.tryParse(_payAmountCtrl.text) ?? 0),
+                              : _parseCostField(_payAmountCtrl),
                           'paymentMethod': _payMethod,
                           if (_payNoteCtrl.text.trim().isNotEmpty)
                             'paymentNote': _payNoteCtrl.text.trim(),
@@ -2206,7 +2370,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                             final ok = await _action('submit-payment', body: {
                               'paymentAmount': isFree
                                   ? 0
-                                  : (int.tryParse(_payAmountCtrl.text) ?? 0),
+                                  : _parseCostField(_payAmountCtrl),
                               'paymentMethod': _payMethod,
                               if (_payNoteCtrl.text.trim().isNotEmpty)
                                 'paymentNote': _payNoteCtrl.text.trim(),
