@@ -42,9 +42,15 @@ class ServiceTicketBrief {
     this.deliveryEta,
     this.feeAmount = 0,
     this.isFree = true,
+    this.costMode,
+    this.paymentMethod,
+    this.paymentAmount,
+    this.partCost,
+    this.laborCost,
     this.appointmentDate,
     this.appointmentSlot,
     this.deadlineAt,
+    this.contactFailedCount = 0,
     this.isOverdue = false,
     this.statusChangedAt,
     this.createdAt,
@@ -66,15 +72,47 @@ class ServiceTicketBrief {
   final String? deliveryEta;
   final int feeAmount;
   final bool isFree;
+  /// `free` | `paid` | null (chưa chọn trên phiếu HTN).
+  final String? costMode;
+  final String? paymentMethod;
+  final int? paymentAmount;
+  final int? partCost;
+  final int? laborCost;
   final String? appointmentDate;
   final String? appointmentSlot;
   final String? deadlineAt;
+  final int contactFailedCount;
   final bool isOverdue;
   final String? statusChangedAt;
   final String? createdAt;
 
   String get displayCode =>
       code ?? (id.length >= 8 ? id.substring(0, 8).toUpperCase() : id);
+
+  /// `free` | `paid` — ưu tiên costMode; fallback isFree.
+  String get costDisplayMode {
+    final mode = costMode ?? (isFree ? 'free' : 'paid');
+    return mode;
+  }
+
+  /// Số tiền hiển thị list: SC ưu tiên paymentAmount → part+labor → feeAmount.
+  int get listMoneyAmount {
+    if (type == 'repair') {
+      if (paymentAmount != null) return paymentAmount!;
+      final parts = (partCost ?? 0) + (laborCost ?? 0);
+      if (parts > 0) return parts;
+    }
+    return feeAmount;
+  }
+
+  bool get listMoneyIsFree {
+    if (type == 'repair') {
+      final method = (paymentMethod ?? '').trim();
+      if (method == 'free') return true;
+      if (paymentAmount != null) return paymentAmount == 0 && method == 'free';
+    }
+    return costDisplayMode == 'free';
+  }
 
   factory ServiceTicketBrief.fromJson(Map<String, dynamic> json) {
     return ServiceTicketBrief(
@@ -92,9 +130,15 @@ class ServiceTicketBrief {
       deliveryEta: json['deliveryEta'] as String?,
       feeAmount: (json['feeAmount'] as num?)?.toInt() ?? 0,
       isFree: json['isFree'] as bool? ?? true,
+      costMode: json['costMode'] as String?,
+      paymentMethod: json['paymentMethod'] as String?,
+      paymentAmount: (json['paymentAmount'] as num?)?.toInt(),
+      partCost: (json['partCost'] as num?)?.toInt(),
+      laborCost: (json['laborCost'] as num?)?.toInt(),
       appointmentDate: json['appointmentDate'] as String?,
       appointmentSlot: json['appointmentSlot'] as String?,
       deadlineAt: json['deadlineAt'] as String?,
+      contactFailedCount: (json['contactFailedCount'] as num?)?.toInt() ?? 0,
       isOverdue: json['isOverdue'] as bool? ?? false,
       statusChangedAt: json['statusChangedAt'] as String?,
       createdAt: json['createdAt'] as String?,
@@ -537,6 +581,22 @@ class TicketSignaturePublic {
   }
 }
 
+class TicketCostItem {
+  const TicketCostItem({required this.content, required this.amount});
+
+  final String content;
+  final int amount;
+
+  factory TicketCostItem.fromJson(Map<String, dynamic> json) {
+    return TicketCostItem(
+      content: json['content'] as String? ?? '',
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'content': content, 'amount': amount};
+}
+
 class ServiceTicketPublic {
   const ServiceTicketPublic({
     required this.id,
@@ -548,11 +608,18 @@ class ServiceTicketPublic {
     this.staffName,
     this.feeAmount = 0,
     this.isFree = true,
+    this.costMode,
+    this.freeReason,
+    this.paymentMethod,
+    this.costNote,
+    this.costItems = const [],
     this.appointmentDate,
     this.appointmentSlot,
     this.note,
     required this.status,
     this.deadlineAt,
+    this.contactFailedCount = 0,
+    this.lastContactAttemptAt,
     this.isOverdue = false,
     this.guideContent,
     this.resultNote,
@@ -580,11 +647,18 @@ class ServiceTicketPublic {
   final String? staffName;
   final int feeAmount;
   final bool isFree;
+  final String? costMode;
+  final String? freeReason;
+  final String? paymentMethod;
+  final String? costNote;
+  final List<TicketCostItem> costItems;
   final String? appointmentDate;
   final String? appointmentSlot;
   final String? note;
   final String status;
   final String? deadlineAt;
+  final int contactFailedCount;
+  final String? lastContactAttemptAt;
   final bool isOverdue;
   final String? guideContent;
   final String? resultNote;
@@ -613,6 +687,7 @@ class ServiceTicketPublic {
     final evRaw = json['evidences'];
     final logRaw = json['logs'];
     final sigRaw = json['signatures'];
+    final itemsRaw = json['costItems'];
     return ServiceTicketPublic(
       id: json['id'] as String,
       code: json['code'] as String?,
@@ -623,11 +698,23 @@ class ServiceTicketPublic {
       staffName: json['staffName'] as String?,
       feeAmount: (json['feeAmount'] as num?)?.toInt() ?? 0,
       isFree: json['isFree'] as bool? ?? true,
+      costMode: json['costMode'] as String?,
+      freeReason: json['freeReason'] as String?,
+      paymentMethod: json['paymentMethod'] as String?,
+      costNote: json['costNote'] as String?,
+      costItems: itemsRaw is List
+          ? [
+              for (final e in itemsRaw)
+                if (e is Map<String, dynamic>) TicketCostItem.fromJson(e),
+            ]
+          : const [],
       appointmentDate: json['appointmentDate'] as String?,
       appointmentSlot: json['appointmentSlot'] as String?,
       note: json['note'] as String?,
       status: json['status'] as String? ?? 'processing',
       deadlineAt: json['deadlineAt'] as String?,
+      contactFailedCount: (json['contactFailedCount'] as num?)?.toInt() ?? 0,
+      lastContactAttemptAt: json['lastContactAttemptAt'] as String?,
       isOverdue: json['isOverdue'] as bool? ?? false,
       guideContent: json['guideContent'] as String?,
       resultNote: json['resultNote'] as String?,

@@ -360,7 +360,8 @@ class _ServiceRequestDetailScreenState
                                             '${t.displayCode} · ${ticketTypeLabel(t.type)}',
                                           ),
                                           subtitle: Text(
-                                            '${t.staffName ?? '—'} · ${t.appointmentDate ?? ''}',
+                                            'KTV phụ trách: ${t.staffName ?? '—'}'
+                                            '${t.appointmentDate != null && t.appointmentDate!.isNotEmpty ? ' · ${t.appointmentDate}' : ''}',
                                           ),
                                           trailing: StatusBadge(
                                             label: ticketStatusLabel(

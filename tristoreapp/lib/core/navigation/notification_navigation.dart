@@ -10,6 +10,7 @@ import '../../screens/preparation/preparation_detail_screen.dart';
 import '../utils/uuid_util.dart';
 import '../widgets/app_messenger.dart';
 import 'app_navigator.dart';
+import 'service_ticket_open_screen.dart';
 
 /// Điều hướng từ push notification hoặc tab Thông báo.
 class NotificationNavigation {
@@ -20,13 +21,19 @@ class NotificationNavigation {
     AppNotification notification,
   ) {
     final entityId = notification.entityId;
-    if (!_canNavigate(entityId)) {
+    final category = _resolveCategory(
+      notification.category,
+      isTicketPayload: notification.ticketType?.isNotEmpty == true,
+    );
+    if (!_canNavigate(entityId) ||
+        category == AppNotificationCategory.system) {
       _showInvalidTargetMessage(context);
       return false;
     }
     return _open(
-      category: notification.category,
+      category: category,
       entityId: entityId!.trim(),
+      ticketType: notification.ticketType,
     );
   }
 
@@ -50,18 +57,42 @@ class NotificationNavigation {
 
   static void openFromDataMap(Map<String, dynamic> data) {
     final screen = data['screen'] as String?;
-    final entityId =
-        (data['entityId'] as String? ?? data['orderId'] as String?)?.trim();
+    final ticketId = (data['ticketId'] as String?)?.trim();
+    final entityId = (data['entityId'] as String? ??
+            data['orderId'] as String? ??
+            ticketId)
+        ?.trim();
+    final ticketType = (data['ticketType'] as String?)?.trim();
     final ctx = rootNavigatorKey.currentContext;
-    if (!_canNavigate(entityId)) {
+
+    final category = _resolveCategory(
+      AppNotification.categoryFromScreen(screen),
+      isTicketPayload:
+          ticketType?.isNotEmpty == true || ticketId?.isNotEmpty == true,
+    );
+    if (!_canNavigate(entityId) ||
+        category == AppNotificationCategory.system) {
       if (ctx != null) _showInvalidTargetMessage(ctx);
       return;
     }
 
     _open(
-      category: AppNotification.categoryFromScreen(screen),
+      category: category,
       entityId: entityId!,
+      ticketType:
+          ticketType != null && ticketType.isNotEmpty ? ticketType : null,
     );
+  }
+
+  /// Payload cũ chỉ có `ticketId` (chưa có `screen`) vẫn mở được phiếu.
+  static AppNotificationCategory _resolveCategory(
+    AppNotificationCategory category, {
+    required bool isTicketPayload,
+  }) {
+    if (category != AppNotificationCategory.system) return category;
+    return isTicketPayload
+        ? AppNotificationCategory.serviceTicket
+        : category;
   }
 
   static bool _canNavigate(String? entityId) => isUuidV4Like(entityId);
@@ -76,6 +107,7 @@ class NotificationNavigation {
   static bool _open({
     required AppNotificationCategory category,
     required String entityId,
+    String? ticketType,
   }) {
     final navigator = rootNavigatorKey.currentState;
     if (navigator == null) return false;
@@ -89,6 +121,11 @@ class NotificationNavigation {
             return PreparationDetailScreen(preparationId: entityId);
           case AppNotificationCategory.delivery:
             return DeliveryDetailScreen(deliveryId: entityId);
+          case AppNotificationCategory.serviceTicket:
+            return ServiceTicketOpenScreen(
+              ticketId: entityId,
+              ticketType: ticketType,
+            );
           case AppNotificationCategory.system:
             return const SizedBox.shrink();
         }

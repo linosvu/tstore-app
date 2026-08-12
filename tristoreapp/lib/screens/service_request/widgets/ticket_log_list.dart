@@ -35,11 +35,18 @@ class TicketLogList extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              if (log.reason != null && log.reason!.isNotEmpty)
-                                Text('Lý do: ${log.reason}'),
-                              if (log.newValue != null &&
+                              if (log.field != null &&
+                                  log.field!.trim().isNotEmpty &&
+                                  ((log.oldValue ?? '').isNotEmpty ||
+                                      (log.newValue ?? '').isNotEmpty))
+                                Text(
+                                  '${log.field}: ${log.oldValue ?? '—'} → ${log.newValue ?? '—'}',
+                                )
+                              else if (log.newValue != null &&
                                   log.newValue!.isNotEmpty)
                                 Text(log.newValue!),
+                              if (log.reason != null && log.reason!.isNotEmpty)
+                                Text('Lý do: ${log.reason}'),
                               Text(
                                 '${log.actorName ?? '—'} · ${formatServiceTime(log.createdAt)}',
                                 style: const TextStyle(

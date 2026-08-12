@@ -7,7 +7,6 @@ import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/empty_state.dart';
 import 'package:tstore/widgets/ui/error_banner.dart';
-import 'package:tstore/widgets/ui/status_badge.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 import 'create_service_request_screen.dart';
@@ -17,6 +16,7 @@ import 'other_ticket_screen.dart';
 import 'repair_ticket_screen.dart';
 import 'service_request_detail_screen.dart';
 import 'service_ui.dart';
+import 'widgets/service_request_list_card.dart';
 
 class ServiceRequestListScreen extends StatefulWidget {
   const ServiceRequestListScreen({
@@ -176,26 +176,67 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                 ),
                 child: _loadingUsers
                     ? const LinearProgressIndicator()
-                    : TsDropdownFieldNullable<String>(
-                        value: prov.supportStaffUserId,
-                        labelText: widget.tab == 'repair'
-                            ? l10n.serviceFilterRepairStaff
-                            : l10n.serviceFilterSupportStaff,
-                        items: [
-                          null,
-                          ..._users.map((u) => u.$1),
+                    : Column(
+                        children: [
+                          TsDropdownFieldNullable<String>(
+                            value: prov.supportStaffUserId,
+                            labelText: widget.tab == 'repair'
+                                ? l10n.serviceFilterRepairStaff
+                                : l10n.serviceFilterSupportStaff,
+                            items: [
+                              null,
+                              ..._users.map((u) => u.$1),
+                            ],
+                            itemLabel: (id) {
+                              if (id == null) return 'Tất cả';
+                              for (final u in _users) {
+                                if (u.$1 == id) return u.$2;
+                              }
+                              return id;
+                            },
+                            onChanged: (v) {
+                              prov.setSupportStaffUserId(v);
+                              prov.load(reset: true);
+                            },
+                          ),
+                          if (widget.tab == 'support') ...[
+                            const SizedBox(height: 8),
+                            TsDropdownFieldNullable<String>(
+                              value: prov.ticketStaffUserId,
+                              labelText: 'NV phụ trách',
+                              items: [
+                                null,
+                                ..._users.map((u) => u.$1),
+                              ],
+                              itemLabel: (id) {
+                                if (id == null) return 'Tất cả';
+                                for (final u in _users) {
+                                  if (u.$1 == id) return u.$2;
+                                }
+                                return id;
+                              },
+                              onChanged: (v) {
+                                prov.setTicketStaffUserId(v);
+                                prov.load(reset: true);
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            TsDropdownFieldNullable<String>(
+                              value: prov.ticketCostMode,
+                              labelText: 'Chi phí',
+                              items: const [null, 'free', 'paid'],
+                              itemLabel: (id) {
+                                if (id == null) return 'Tất cả';
+                                if (id == 'free') return 'Miễn phí';
+                                return 'Có tính phí';
+                              },
+                              onChanged: (v) {
+                                prov.setTicketCostMode(v);
+                                prov.load(reset: true);
+                              },
+                            ),
+                          ],
                         ],
-                        itemLabel: (id) {
-                          if (id == null) return 'Tất cả';
-                          for (final u in _users) {
-                            if (u.$1 == id) return u.$2;
-                          }
-                          return id;
-                        },
-                        onChanged: (v) {
-                          prov.setSupportStaffUserId(v);
-                          prov.load(reset: true);
-                        },
                       ),
               ),
               _filterChips(prov),
@@ -233,6 +274,14 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
   }
 
   Widget _filterChips(ServiceRequestsProvider prov) {
+    final supportTicketFilters = <(String, String)>[
+      ('processing', 'Đang xử lý'),
+      ('contact_failed', 'Không liên lạc/gặp được'),
+      ('done', 'Hoàn thành'),
+      ('failed', 'Không xử lý được'),
+      ('cancelled', 'Hủy'),
+    ];
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -240,24 +289,41 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
         children: [
           FilterChip(
             label: const Text('Tất cả'),
-            selected: prov.statusFilter == null && !prov.overdueOnly,
+            selected: prov.statusFilter == null &&
+                prov.ticketStatus == null &&
+                !prov.overdueOnly,
             onSelected: (_) {
+              prov.setTicketStatus(null);
               prov.setStatusFilter(null);
               prov.setOverdueOnly(false);
               prov.load(reset: true);
             },
           ),
           const SizedBox(width: 6),
-          for (final s in serviceRequestStatuses) ...[
-            FilterChip(
-              label: Text(requestStatusLabel(s)),
-              selected: prov.statusFilter == s,
-              onSelected: (_) {
-                prov.setStatusFilter(s);
-                prov.load(reset: true);
-              },
-            ),
-            const SizedBox(width: 6),
+          if (widget.tab == 'support') ...[
+            for (final f in supportTicketFilters) ...[
+              FilterChip(
+                label: Text(f.$2),
+                selected: prov.ticketStatus == f.$1,
+                onSelected: (_) {
+                  prov.setTicketStatus(f.$1);
+                  prov.load(reset: true);
+                },
+              ),
+              const SizedBox(width: 6),
+            ],
+          ] else ...[
+            for (final s in serviceRequestStatuses) ...[
+              FilterChip(
+                label: Text(requestStatusLabel(s)),
+                selected: prov.statusFilter == s,
+                onSelected: (_) {
+                  prov.setStatusFilter(s);
+                  prov.load(reset: true);
+                },
+              ),
+              const SizedBox(width: 6),
+            ],
           ],
           FilterChip(
             label: const Text('Quá hạn'),
@@ -313,7 +379,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-            return _RequestCard(
+            return ServiceRequestListCard(
               request: prov.items[i],
               onOpen: () => _openRequest(prov.items[i]),
               onOpenTicket: _openTicket,
@@ -321,552 +387,6 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
           },
         ),
       ),
-    );
-  }
-}
-
-class _RequestCard extends StatelessWidget {
-  const _RequestCard({
-    required this.request,
-    required this.onOpen,
-    required this.onOpenTicket,
-  });
-
-  final ServiceRequestPublic request;
-  final VoidCallback onOpen;
-  final void Function(ServiceTicketBrief) onOpenTicket;
-
-  String _deadlineRemaining(String? iso, {bool markOverdue = false}) {
-    if (iso == null || iso.isEmpty) return '';
-    final deadline = DateTime.tryParse(iso);
-    if (deadline == null) return '';
-    final now = DateTime.now();
-    final overdue = markOverdue || deadline.isBefore(now);
-    if (overdue) {
-      final late = now.difference(deadline);
-      return 'Quá hạn ${late.inHours}h ${late.inMinutes.remainder(60)}p';
-    }
-    final diff = deadline.difference(now);
-    if (diff.inDays >= 1) {
-      return 'Còn ${diff.inDays} ngày ${diff.inHours.remainder(24)}h';
-    }
-    return 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
-  }
-
-  String? _etaDateLabel(String? etaDate) {
-    final raw = (etaDate ?? '').trim();
-    if (raw.isEmpty) return null;
-    String displayDate = raw;
-    final parsed = DateTime.tryParse(raw);
-    if (parsed != null) {
-      displayDate =
-          '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
-    }
-    return 'ETA · $displayDate';
-  }
-
-  /// Thời gian góc phải theo bước SC hiện tại (không dùng lịch tạo YC / hẹn gọi cũ).
-  ({String? label, bool overdue, bool showScheduleIcon}) _repairSecondarySchedule(
-    ServiceTicketBrief ticket,
-  ) {
-    final step = repairStepIndex(ticket.status);
-    if (step >= 5) {
-      return (label: null, overdue: false, showScheduleIcon: false);
-    }
-
-    String? labeledCountdown(String? iso, {required String prefix}) {
-      final rem = _deadlineRemaining(iso);
-      if (rem.isNotEmpty) return '$prefix · $rem';
-      if (iso != null && iso.trim().isNotEmpty) {
-        return '$prefix · ${formatServiceTime(iso)}';
-      }
-      return null;
-    }
-
-    bool isPast(String? iso) {
-      if (iso == null || iso.trim().isEmpty) return false;
-      final dt = DateTime.tryParse(iso);
-      return dt != null && dt.isBefore(DateTime.now());
-    }
-
-    switch (step) {
-      case 0: {
-        final iso = ticket.contactDeadlineAt;
-        final label = labeledCountdown(iso, prefix: 'Hẹn gọi');
-        return (
-          label: label,
-          overdue: isPast(iso),
-          showScheduleIcon: label != null,
-        );
-      }
-      case 1: {
-        final iso = ticket.deadlineAt;
-        final rem = _deadlineRemaining(iso, markOverdue: ticket.isOverdue);
-        return (
-          label: rem.isEmpty ? null : rem,
-          overdue: ticket.isOverdue || isPast(iso),
-          showScheduleIcon: false,
-        );
-      }
-      case 2: {
-        final eta = _etaDateLabel(ticket.etaDate);
-        if (eta != null) {
-          final etaIso = (ticket.etaDate ?? '').trim();
-          final endOfDay = DateTime.tryParse(etaIso.length == 10
-              ? '${etaIso}T23:59:59'
-              : etaIso);
-          return (
-            label: eta,
-            overdue: endOfDay != null && endOfDay.isBefore(DateTime.now()),
-            showScheduleIcon: true,
-          );
-        }
-        final iso = ticket.deadlineAt;
-        final rem = _deadlineRemaining(iso, markOverdue: ticket.isOverdue);
-        return (
-          label: rem.isEmpty ? null : 'ETA · $rem',
-          overdue: ticket.isOverdue || isPast(iso),
-          showScheduleIcon: rem.isNotEmpty,
-        );
-      }
-      case 3: {
-        final iso = (ticket.deliveryEta ?? '').trim().isNotEmpty
-            ? ticket.deliveryEta
-            : ticket.deadlineAt;
-        final label = labeledCountdown(iso, prefix: 'Hẹn giao');
-        return (
-          label: label,
-          overdue: isPast(iso),
-          showScheduleIcon: label != null,
-        );
-      }
-      case 4: {
-        final iso = ticket.deadlineAt;
-        final rem = _deadlineRemaining(iso, markOverdue: ticket.isOverdue);
-        return (
-          label: rem.isEmpty ? null : rem,
-          overdue: ticket.isOverdue || isPast(iso),
-          showScheduleIcon: false,
-        );
-      }
-      default:
-        return (label: null, overdue: false, showScheduleIcon: false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final latest = request.latestTicket;
-    final isRepair = request.isRepairDirection || latest?.type == 'repair';
-    final creator = (request.createdByName ?? '').trim();
-    final manager = (request.managerName ?? '').trim();
-    final elapsed = formatRepairElapsed(
-      latest?.repairStartedAt,
-      fallbackIso: latest?.createdAt ?? request.createdAt,
-    );
-
-    String? secondaryLabel;
-    var secondaryOverdue = false;
-    var showScheduleIcon = false;
-    if (isRepair && latest != null) {
-      final schedule = _repairSecondarySchedule(latest);
-      secondaryLabel = schedule.label;
-      secondaryOverdue = schedule.overdue;
-      showScheduleIcon = schedule.showScheduleIcon;
-    } else if (latest != null) {
-      final rem = _deadlineRemaining(
-        latest.deadlineAt,
-        markOverdue: latest.isOverdue,
-      );
-      secondaryLabel = rem.isEmpty ? null : rem;
-      secondaryOverdue = latest.isOverdue;
-    }
-
-    return Material(
-      color: scheme.surface,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 1,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          request.displayCode,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        StatusBadge(
-                          label: requestStatusLabel(request.status),
-                          tone: requestStatusTone(request.status),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (elapsed != '—')
-                        Text(
-                          elapsed,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onSurfaceVariant,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      if (secondaryLabel != null) ...[
-                        const SizedBox(height: 2),
-                        if (showScheduleIcon)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.schedule_rounded,
-                                size: 13,
-                                color: secondaryOverdue
-                                    ? Colors.red
-                                    : scheme.primary,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                secondaryLabel,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: secondaryOverdue
-                                      ? Colors.red
-                                      : scheme.primary,
-                                ),
-                              ),
-                            ],
-                          )
-                        else
-                          Text(
-                            secondaryLabel,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: secondaryOverdue
-                                  ? Colors.red
-                                  : (isRepair
-                                      ? scheme.primary
-                                      : const Color(0xFF92400E)),
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${request.customerName} · ${request.customerPhone}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                request.productName,
-                style: const TextStyle(color: Colors.grey),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (request.issueDescription.trim().isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  'Lỗi: ${request.issueDescription.trim()}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-              if (creator.isNotEmpty || manager.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                if (creator.isNotEmpty)
-                  Text(
-                    'Người tạo: $creator',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                if (manager.isNotEmpty)
-                  Text(
-                    'NV quản lý: $manager',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-              if (isRepair && latest != null && latest.type == 'repair') ...[
-                const SizedBox(height: 8),
-                _RepairProgressBar(
-                  status: latest.status,
-                  receiveStaffName: latest.receiveStaffName,
-                  techStaffName: latest.staffName,
-                  deliveryStaffName: latest.deliveryStaffName,
-                  managerName: request.managerName,
-                ),
-              ],
-              if (latest != null) ...[
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () => onOpenTicket(latest),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest
-                          .withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          latest.type == 'repair'
-                              ? Icons.build_outlined
-                              : latest.type == 'onsite'
-                                  ? Icons.home_repair_service_outlined
-                                  : Icons.headset_mic_outlined,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${latest.displayCode} · ${ticketTypeLabel(latest.type)}',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                        StatusBadge(
-                          label: ticketStatusLabel(latest.type, latest.status),
-                          tone: ticketStatusTone(latest.status),
-                        ),
-                        if (latest.isOverdue) ...[
-                          const SizedBox(width: 4),
-                          const Icon(
-                            Icons.warning_amber,
-                            size: 16,
-                            color: Colors.red,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-enum _RepairFlowStepState { pending, active, done, failed }
-
-class _RepairProgressBar extends StatelessWidget {
-  const _RepairProgressBar({
-    required this.status,
-    this.receiveStaffName,
-    this.techStaffName,
-    this.deliveryStaffName,
-    this.managerName,
-  });
-
-  final String status;
-  final String? receiveStaffName;
-  final String? techStaffName;
-  final String? deliveryStaffName;
-  final String? managerName;
-
-  static const _labels = [
-    'Tiếp nhận',
-    'Kiểm tra',
-    'Sửa chữa',
-    'Bàn giao',
-    'Thanh toán',
-  ];
-
-  _RepairFlowStepState _stateFor(int i, int activeIndex, bool failed) {
-    if (failed) {
-      if (i < activeIndex) return _RepairFlowStepState.done;
-      if (i == activeIndex) return _RepairFlowStepState.failed;
-      return _RepairFlowStepState.pending;
-    }
-    // activeIndex == length → hoàn thành (tất cả done)
-    if (activeIndex >= _labels.length) return _RepairFlowStepState.done;
-    if (i < activeIndex) return _RepairFlowStepState.done;
-    if (i == activeIndex) return _RepairFlowStepState.active;
-    return _RepairFlowStepState.pending;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final failed = status == 'cancelled' || status == 'customer_rejected';
-    final rawIndex = repairStepIndex(status);
-    // 0..4 = bước đang làm; >=5 = Xong. Khi failed ở Xong → đánh dấu bước cuối.
-    final int activeIndex;
-    if (failed) {
-      activeIndex = rawIndex >= _labels.length
-          ? _labels.length - 1
-          : rawIndex.clamp(0, _labels.length - 1);
-    } else if (rawIndex >= _labels.length) {
-      activeIndex = _labels.length; // all done
-    } else {
-      activeIndex = rawIndex;
-    }
-
-    final steps = List.generate(
-      _labels.length,
-      (i) => (_labels[i], _stateFor(i, activeIndex, failed)),
-    );
-
-    Color colorOf(_RepairFlowStepState state) {
-      switch (state) {
-        case _RepairFlowStepState.done:
-          return const Color(0xFF22C55E);
-        case _RepairFlowStepState.active:
-          return const Color(0xFF5C60E6);
-        case _RepairFlowStepState.failed:
-          return scheme.error;
-        case _RepairFlowStepState.pending:
-          return scheme.outlineVariant;
-      }
-    }
-
-    final connectorColor = (steps[0].$2 == _RepairFlowStepState.pending)
-        ? scheme.outlineVariant
-        : const Color(0xFF5C60E6);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 26,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final count = steps.length;
-              final stepWidth = constraints.maxWidth / count;
-              return Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  Positioned(
-                    left: stepWidth / 2,
-                    right: stepWidth / 2,
-                    top: 11,
-                    child: Container(height: 2, color: connectorColor),
-                  ),
-                  Row(
-                    children: List.generate(count, (i) {
-                      final state = steps[i].$2;
-                      final color = colorOf(state);
-                      return Expanded(
-                        child: Center(
-                          child: Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: state == _RepairFlowStepState.pending
-                                  ? Colors.transparent
-                                  : color,
-                              border: Border.all(color: color, width: 2),
-                            ),
-                            child: Center(
-                              child: state == _RepairFlowStepState.done
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      size: 14,
-                                      color: Colors.white,
-                                    )
-                                  : Text(
-                                      '${i + 1}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: state ==
-                                                    _RepairFlowStepState
-                                                        .pending
-                                                ? color
-                                                : Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: steps.asMap().entries.map((entry) {
-            final i = entry.key;
-            final s = entry.value;
-            final assignedName = switch (i) {
-              0 => receiveStaffName?.trim(),
-              1 || 2 => techStaffName?.trim(),
-              3 => deliveryStaffName?.trim(),
-              4 => managerName?.trim(),
-              _ => null,
-            };
-            return Expanded(
-              child: Column(
-                children: [
-                  Text(
-                    s.$1,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 9,
-                        ),
-                  ),
-                  if (assignedName != null && assignedName.isNotEmpty) ...[
-                    const SizedBox(height: 1),
-                    Text(
-                      assignedName,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: scheme.primary,
-                            fontSize: 9,
-                          ),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 }

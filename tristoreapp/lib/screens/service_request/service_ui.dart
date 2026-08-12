@@ -34,6 +34,21 @@ const repairTicketStatuses = [
   'cancelled',
 ];
 
+bool isTicketClosed(String type, String status) {
+  if (type == 'online' || type == 'other') {
+    return status == 'done' || status == 'failed' || status == 'cancelled';
+  }
+  if (type == 'onsite') {
+    return status == 'done' ||
+        status == 'failed' ||
+        status == 'taken' ||
+        status == 'cancelled';
+  }
+  return status == 'completed' ||
+      status == 'customer_rejected' ||
+      status == 'cancelled';
+}
+
 String channelLabel(String c) {
   switch (c) {
     case 'zalo':
@@ -97,13 +112,19 @@ String ticketStatusLabel(String type, String s) {
     case 'processing':
       return 'Đang xử lý';
     case 'done':
-      return 'Xong';
+      return 'Hoàn thành';
     case 'failed':
-      return 'Thất bại';
+      return type == 'online' || type == 'onsite'
+          ? 'Không xử lý được'
+          : 'Thất bại';
     case 'taken':
       return 'Đã nhận máy';
     case 'cancelled':
-      return 'Đã hủy';
+      return 'Hủy';
+    case 'contact_failed':
+      return type == 'onsite'
+          ? 'Không gặp được khách'
+          : 'Không liên lạc được';
     case 'received':
       return 'Tiếp nhận';
     case 'inspecting':
@@ -133,14 +154,17 @@ StatusBadgeTone ticketStatusTone(String s) {
     case 'completed':
       return StatusBadgeTone.success;
     case 'failed':
-    case 'cancelled':
     case 'customer_rejected':
       return StatusBadgeTone.error;
+    case 'cancelled':
+      return StatusBadgeTone.neutral;
     case 'approving':
     case 'paying':
     case 'notifying':
+    case 'contact_failed':
       return StatusBadgeTone.warning;
     case 'taken':
+    case 'processing':
       return StatusBadgeTone.info;
     default:
       return StatusBadgeTone.info;
@@ -195,6 +219,82 @@ const repairStepLabels = [
   'Thanh toán & Duyệt',
   'Xong',
 ];
+
+const supportFlowStepLabels = [
+  'Tiếp nhận',
+  'Hỗ trợ',
+  'Thanh toán',
+];
+
+/// 0 = Tiếp nhận, 1 = Hỗ trợ, 2 = Thanh toán; >=3 = tất cả xong.
+/// Tiếp nhận xong khi phiếu đã tạo; Hỗ trợ xong khi done; Thanh toán xong khi
+/// miễn phí hoặc đã thu (không phải unpaid).
+int supportStepIndex({
+  required String status,
+  required bool isFree,
+  String? costMode,
+  String? paymentMethod,
+  int feeAmount = 0,
+}) {
+  final free = costMode == 'free' || (costMode == null && isFree);
+  final method = (paymentMethod ?? '').trim();
+
+  switch (status) {
+    case 'processing':
+    case 'contact_failed':
+      return 1;
+    case 'failed':
+    case 'cancelled':
+    case 'taken':
+      return 1;
+    case 'done':
+      if (free) return 3;
+      // Chưa thu → còn bước Thanh toán; còn lại (đã thu / HTO không có HTTT) = xong.
+      if (method == 'unpaid') return 2;
+      return 3;
+    default:
+      return 1;
+  }
+}
+
+bool supportStepFailed(String status) =>
+    status == 'failed' || status == 'cancelled';
+
+String deadlineRemainingLabel(String? iso, {bool markOverdue = false}) {
+  if (iso == null || iso.isEmpty) return '';
+  final deadline = DateTime.tryParse(iso);
+  if (deadline == null) return '';
+  final now = DateTime.now();
+  final overdue = markOverdue || deadline.isBefore(now);
+  if (overdue) {
+    final late = now.difference(deadline);
+    return 'Quá hạn ${late.inHours}h ${late.inMinutes.remainder(60)}p';
+  }
+  final diff = deadline.difference(now);
+  if (diff.inDays >= 1) {
+    return 'Còn ${diff.inDays} ngày ${diff.inHours.remainder(24)}h';
+  }
+  return 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
+}
+
+/// «Hẹn 11/08 17:00» từ appointmentDate + slot.
+String appointmentHintLabel(String? date, String? slot) {
+  final d = (date ?? '').trim();
+  if (d.isEmpty) return '';
+  String ddMm = d;
+  final parsed = DateTime.tryParse(d.length == 10 ? '${d}T00:00:00' : d);
+  if (parsed != null) {
+    ddMm =
+        '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
+  }
+  final s = (slot ?? '').trim();
+  String time = '';
+  if (s.isNotEmpty) {
+    final m = RegExp(r'(\d{1,2}:\d{2})').firstMatch(s);
+    time = m?.group(1) ?? s;
+  }
+  return time.isEmpty ? 'Hẹn $ddMm' : 'Hẹn $ddMm $time';
+}
 
 /// Thời gian đã sửa: từ [isoStart] đến hiện tại (ngày + giờ + phút).
 String formatRepairElapsed(String? isoStart, {String? fallbackIso}) {

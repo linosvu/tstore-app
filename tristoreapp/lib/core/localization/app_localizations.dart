@@ -140,6 +140,7 @@ class AppLocalizations {
   String get notificationsCategoryOrder => 'Đơn hàng';
   String get notificationsCategoryPreparation => 'Chuẩn bị';
   String get notificationsCategoryDelivery => 'Giao hàng';
+  String get notificationsCategoryServiceTicket => 'Hỗ trợ / SC';
   String get notificationsCategorySystem => 'Hệ thống';
 
   // Products (tab trước đây là Nhật ký)

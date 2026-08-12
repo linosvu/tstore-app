@@ -39,7 +39,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   final _productCtrl = TextEditingController();
   final _serialCtrl = TextEditingController();
   final _issueCtrl = TextEditingController();
-  final _noteCtrl = TextEditingController();
   final _slotCtrl = TextEditingController(text: '09:00-11:00');
 
   late String _ticketType;
@@ -86,7 +85,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
     _productCtrl.dispose();
     _serialCtrl.dispose();
     _issueCtrl.dispose();
-    _noteCtrl.dispose();
     _slotCtrl.dispose();
     super.dispose();
   }
@@ -196,7 +194,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
             ? '09:00-11:00'
             : _slotCtrl.text.trim(),
         // NV hỗ trợ / NV sửa chữa — mặc định người tạo (API).
-        if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
       };
       final created =
           await context.read<ServiceRequestsProvider>().createRequest(body);
@@ -462,15 +459,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SectionCard(
-            title: l10n.repairNotes,
-            child: TextField(
-              controller: _noteCtrl,
-              decoration: InputDecoration(labelText: l10n.repairNotes),
-              maxLines: 3,
             ),
           ),
           const SizedBox(height: 20),

@@ -13,10 +13,14 @@ class LockedRequestInfoCard extends StatefulWidget {
     super.key,
     required this.request,
     this.onEdit,
+    this.appointmentDate,
+    this.appointmentSlot,
   });
 
   final ServiceRequestBrief request;
   final VoidCallback? onEdit;
+  final String? appointmentDate;
+  final String? appointmentSlot;
 
   @override
   State<LockedRequestInfoCard> createState() => _LockedRequestInfoCardState();
@@ -64,6 +68,20 @@ class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
               request.productSerial!.isNotEmpty)
             _row('Serial', request.productSerial!),
           _row('Lỗi', request.issueDescription),
+          if (request.customerNote != null &&
+              request.customerNote!.trim().isNotEmpty)
+            _row('Ghi chú', request.customerNote!.trim()),
+          if ((widget.appointmentDate ?? '').trim().isNotEmpty ||
+              (widget.appointmentSlot ?? '').trim().isNotEmpty)
+            _row(
+              'Thời gian hẹn',
+              [
+                if ((widget.appointmentDate ?? '').trim().isNotEmpty)
+                  widget.appointmentDate!.trim(),
+                if ((widget.appointmentSlot ?? '').trim().isNotEmpty)
+                  widget.appointmentSlot!.trim(),
+              ].join(' '),
+            ),
           if (request.attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Đính kèm', style: text.labelMedium),

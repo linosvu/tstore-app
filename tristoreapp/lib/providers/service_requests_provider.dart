@@ -18,6 +18,9 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String _tab = 'support';
   String? _statusFilter;
   String? _supportStaffUserId;
+  String? _ticketStaffUserId;
+  String? _ticketCostMode;
+  String? _ticketStatus;
   bool _overdueOnly = false;
   String _search = '';
 
@@ -34,6 +37,9 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String get tab => _tab;
   String? get statusFilter => _statusFilter;
   String? get supportStaffUserId => _supportStaffUserId;
+  String? get ticketStaffUserId => _ticketStaffUserId;
+  String? get ticketCostMode => _ticketCostMode;
+  String? get ticketStatus => _ticketStatus;
   bool get overdueOnly => _overdueOnly;
   String get search => _search;
 
@@ -45,6 +51,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
 
   void setStatusFilter(String? status) {
     _statusFilter = status;
+    _ticketStatus = null;
     _overdueOnly = false;
     notifyListeners();
   }
@@ -54,9 +61,29 @@ class ServiceRequestsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTicketStaffUserId(String? userId) {
+    _ticketStaffUserId = userId;
+    notifyListeners();
+  }
+
+  void setTicketCostMode(String? mode) {
+    _ticketCostMode = mode;
+    notifyListeners();
+  }
+
+  void setTicketStatus(String? status) {
+    _ticketStatus = status;
+    _statusFilter = null;
+    _overdueOnly = false;
+    notifyListeners();
+  }
+
   void setOverdueOnly(bool value) {
     _overdueOnly = value;
-    if (value) _statusFilter = null;
+    if (value) {
+      _statusFilter = null;
+      _ticketStatus = null;
+    }
     notifyListeners();
   }
 
@@ -92,6 +119,15 @@ class ServiceRequestsProvider extends ChangeNotifier {
     }
     if (_supportStaffUserId != null && _supportStaffUserId!.isNotEmpty) {
       q['supportStaffUserId'] = _supportStaffUserId;
+    }
+    if (_ticketStaffUserId != null && _ticketStaffUserId!.isNotEmpty) {
+      q['ticketStaffUserId'] = _ticketStaffUserId;
+    }
+    if (_ticketCostMode != null && _ticketCostMode!.isNotEmpty) {
+      q['ticketCostMode'] = _ticketCostMode;
+    }
+    if (_ticketStatus != null && _ticketStatus!.isNotEmpty) {
+      q['ticketStatus'] = _ticketStatus;
     }
     final st = _search.trim();
     if (st.isNotEmpty) q['search'] = st;
@@ -195,6 +231,75 @@ class ServiceRequestsProvider extends ChangeNotifier {
   ) async {
     final res = await _api.patch<Map<String, dynamic>>(
       '/admin/service-tickets/$ticketId/fee-appointment',
+      data: body,
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> patchTicketRequestInfo(
+    String ticketId,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/request-info',
+      data: body,
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> patchTicketAssignee(
+    String ticketId,
+    String staffUserId,
+  ) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/assignee',
+      data: {'staffUserId': staffUserId},
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> patchTicketAppointment(
+    String ticketId, {
+    required String appointmentDate,
+    required String appointmentSlot,
+  }) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/appointment',
+      data: {
+        'appointmentDate': appointmentDate,
+        'appointmentSlot': appointmentSlot,
+      },
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> patchTicketHandlingNote(
+    String ticketId,
+    String? note,
+  ) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/handling-note',
+      data: {'note': note},
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> patchTicketCost(
+    String ticketId,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/cost',
       data: body,
     );
     final data = res.data;

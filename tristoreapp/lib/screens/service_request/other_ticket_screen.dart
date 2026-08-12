@@ -8,6 +8,7 @@ import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
 import 'service_ui.dart';
+import 'widgets/edit_request_info_sheet.dart';
 import 'widgets/evidence_section.dart';
 import 'widgets/locked_request_info_card.dart';
 import 'widgets/ticket_log_list.dart';
@@ -115,7 +116,25 @@ class _OtherTicketScreenState extends State<OtherTicketScreen> {
                 ),
                 const SizedBox(height: 12),
                 if (t.request != null)
-                  LockedRequestInfoCard(request: t.request!),
+                  LockedRequestInfoCard(
+                    request: t.request!,
+                    appointmentDate: t.appointmentDate,
+                    appointmentSlot: t.appointmentSlot,
+                    onEdit: !open ||
+                            _busy ||
+                            !canEditTicketRequestInfoFromContext(context, t)
+                        ? null
+                        : () async {
+                            final updated = await showEditRequestInfoSheet(
+                              context: context,
+                              ticket: t,
+                            );
+                            if (updated != null && mounted) {
+                              setState(() => _ticket = updated);
+                              await _load();
+                            }
+                          },
+                  ),
                 const SizedBox(height: 12),
                 EvidenceSection(
                   ticketId: t.id,

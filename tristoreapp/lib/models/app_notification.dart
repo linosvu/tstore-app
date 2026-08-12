@@ -3,6 +3,7 @@ enum AppNotificationCategory {
   order,
   preparation,
   delivery,
+  serviceTicket,
 }
 
 class AppNotification {
@@ -14,6 +15,7 @@ class AppNotification {
     required this.createdAt,
     this.entityId,
     this.orderCode,
+    this.ticketType,
     this.readAt,
   });
 
@@ -23,6 +25,8 @@ class AppNotification {
   final AppNotificationCategory category;
   final String? entityId;
   final String? orderCode;
+  /// online | onsite | other | repair — dùng deep-link phiếu hỗ trợ/SC.
+  final String? ticketType;
   final DateTime? readAt;
   final DateTime createdAt;
 
@@ -35,6 +39,7 @@ class AppNotification {
     AppNotificationCategory? category,
     String? entityId,
     String? orderCode,
+    String? ticketType,
     DateTime? readAt,
     bool clearReadAt = false,
     bool clearEntityId = false,
@@ -47,6 +52,7 @@ class AppNotification {
       category: category ?? this.category,
       entityId: clearEntityId ? null : (entityId ?? this.entityId),
       orderCode: orderCode ?? this.orderCode,
+      ticketType: ticketType ?? this.ticketType,
       readAt: clearReadAt ? null : (readAt ?? this.readAt),
       createdAt: createdAt ?? this.createdAt,
     );
@@ -59,6 +65,7 @@ class AppNotification {
         'category': category.name,
         if (entityId != null) 'entityId': entityId,
         if (orderCode != null) 'orderCode': orderCode,
+        if (ticketType != null) 'ticketType': ticketType,
         if (readAt != null) 'readAt': readAt!.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
       };
@@ -74,6 +81,7 @@ class AppNotification {
       ),
       entityId: json['entityId'] as String?,
       orderCode: json['orderCode'] as String?,
+      ticketType: json['ticketType'] as String?,
       readAt: json['readAt'] != null
           ? DateTime.tryParse(json['readAt'] as String)
           : null,
@@ -90,6 +98,8 @@ class AppNotification {
         return AppNotificationCategory.preparation;
       case 'delivery':
         return AppNotificationCategory.delivery;
+      case 'service_ticket':
+        return AppNotificationCategory.serviceTicket;
       default:
         return AppNotificationCategory.system;
     }

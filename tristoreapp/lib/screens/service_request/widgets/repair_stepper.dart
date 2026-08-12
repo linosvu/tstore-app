@@ -7,13 +7,17 @@ class RepairStepper extends StatelessWidget {
     super.key,
     required this.status,
     this.customerRejectPending = false,
-    this.editable = false,
+    this.browsable = false,
+    this.previewIndex,
     this.onStepTap,
   });
 
   final String status;
   final bool customerRejectPending;
-  final bool editable;
+  /// Cho phép bấm các bước đã qua / hiện tại để xem lại (không rewind).
+  final bool browsable;
+  /// Bước đang xem lại (null = đang ở bước thật theo status).
+  final int? previewIndex;
   final void Function(int index)? onStepTap;
 
   @override
@@ -22,6 +26,7 @@ class RepairStepper extends StatelessWidget {
       status,
       customerRejectPending: customerRejectPending,
     );
+    final focus = previewIndex ?? idx;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -35,7 +40,7 @@ class RepairStepper extends StatelessWidget {
                     ? Theme.of(context).colorScheme.primary
                     : Colors.grey.shade300,
               ),
-            if (onStepTap != null && editable && i < idx)
+            if (onStepTap != null && browsable && i <= idx && i < 5)
               InkWell(
                 onTap: () => onStepTap!.call(i),
                 borderRadius: BorderRadius.circular(14),
@@ -43,12 +48,19 @@ class RepairStepper extends StatelessWidget {
                   context,
                   i,
                   idx,
+                  focus,
                   repairStepLabels[i],
                   tappable: true,
                 ),
               )
             else
-              _stepContent(context, i, idx, repairStepLabels[i]),
+              _stepContent(
+                context,
+                i,
+                idx,
+                focus,
+                repairStepLabels[i],
+              ),
           ],
         ],
       ),
@@ -58,22 +70,25 @@ class RepairStepper extends StatelessWidget {
   Widget _stepContent(
     BuildContext context,
     int i,
-    int idx,
+    int currentIdx,
+    int focusIdx,
     String label, {
     bool tappable = false,
   }) {
+    final done = i <= currentIdx;
+    final focused = i == focusIdx;
     return Column(
       children: [
         CircleAvatar(
           radius: 12,
-          backgroundColor: i <= idx
+          backgroundColor: done
               ? Theme.of(context).colorScheme.primary
               : Colors.grey.shade300,
           child: Text(
             '${i + 1}',
             style: TextStyle(
               fontSize: 11,
-              color: i <= idx ? Colors.white : Colors.black54,
+              color: done ? Colors.white : Colors.black54,
             ),
           ),
         ),
@@ -82,8 +97,11 @@ class RepairStepper extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 10,
-            fontWeight: i == idx ? FontWeight.w700 : FontWeight.w400,
+            fontWeight: focused ? FontWeight.w700 : FontWeight.w400,
             decoration: tappable ? TextDecoration.underline : null,
+            color: focused && previewIndex != null && i < currentIdx
+                ? Theme.of(context).colorScheme.tertiary
+                : null,
           ),
         ),
       ],

@@ -28,17 +28,39 @@ class NotificationStorage {
     return '$prefix:${sha1.convert(utf8.encode(source))}';
   }
 
+  static bool _isNotBlank(String? value) => value != null && value.isNotEmpty;
+
+  /// `ticketId`/`ticketType` trong payload đủ để biết đây là phiếu hỗ trợ/SC
+  /// kể cả khi thiếu `screen` (payload phát hành trước bản deep-link).
+  static AppNotificationCategory _categoryFor(
+    String? screen, {
+    required bool isTicketPayload,
+  }) {
+    final fromScreen = AppNotification.categoryFromScreen(screen);
+    if (fromScreen != AppNotificationCategory.system) return fromScreen;
+    return isTicketPayload
+        ? AppNotificationCategory.serviceTicket
+        : fromScreen;
+  }
+
   static AppNotificationCategory _categoryFromText(
     String? screen,
     String title,
-    String body,
-  ) {
-    final fromScreen = AppNotification.categoryFromScreen(screen);
-    if (fromScreen != AppNotificationCategory.system) return fromScreen;
+    String body, {
+    required bool isTicketPayload,
+  }) {
+    final fromData = _categoryFor(screen, isTicketPayload: isTicketPayload);
+    if (fromData != AppNotificationCategory.system) return fromData;
 
     final text = '$title $body'.toLowerCase();
     if (text.contains('giao hàng')) return AppNotificationCategory.delivery;
     if (text.contains('chuẩn bị')) return AppNotificationCategory.preparation;
+    if (text.contains('hỗ trợ') ||
+        text.contains('sửa chữa') ||
+        text.contains('thanh toán sc') ||
+        text.contains('phiếu sc')) {
+      return AppNotificationCategory.serviceTicket;
+    }
     if (text.contains('đơn') ||
         text.contains('kiotviet') ||
         text.contains('thanh toán')) {
@@ -64,16 +86,23 @@ class NotificationStorage {
     final title = notification?.title ?? data['title'] ?? 'Thông báo';
     final body = notification?.body ?? data['body'] ?? '';
     final screen = data['screen'];
-    final entityId = (data['entityId'] ?? data['orderId'])?.trim();
-    final orderCode = data['orderCode']?.trim();
+    final ticketId = data['ticketId']?.trim();
+    final entityId = (data['entityId'] ?? data['orderId'] ?? ticketId)?.trim();
+    final orderCode = (data['orderCode'] ?? data['ticketCode'])?.trim();
+    final ticketType = data['ticketType']?.trim();
 
     return AppNotification(
       id: idForRemoteMessage(message),
       title: title,
       body: body,
-      category: AppNotification.categoryFromScreen(screen),
+      category: _categoryFor(
+        screen,
+        isTicketPayload: _isNotBlank(ticketId) || _isNotBlank(ticketType),
+      ),
       entityId: entityId != null && entityId.isNotEmpty ? entityId : null,
       orderCode: orderCode != null && orderCode.isNotEmpty ? orderCode : null,
+      ticketType:
+          ticketType != null && ticketType.isNotEmpty ? ticketType : null,
       createdAt: DateTime.now(),
     );
   }
@@ -88,9 +117,15 @@ class NotificationStorage {
     if (title.trim().isEmpty && body.trim().isEmpty) return null;
 
     final screen = data['screen'] as String?;
-    final entityId =
-        (data['entityId'] as String? ?? data['orderId'] as String?)?.trim();
-    final orderCode = data['orderCode'] as String?;
+    final ticketId = (data['ticketId'] as String?)?.trim();
+    final entityId = (data['entityId'] as String? ??
+            data['orderId'] as String? ??
+            ticketId)
+        ?.trim();
+    final orderCode = (data['orderCode'] as String? ??
+            data['ticketCode'] as String?)
+        ?.trim();
+    final ticketType = (data['ticketType'] as String?)?.trim();
     final fcmMessageId = data['fcmMessageId'] as String?;
     final id = fcmMessageId != null && fcmMessageId.isNotEmpty
         ? fcmMessageId
@@ -110,9 +145,16 @@ class NotificationStorage {
       id: id,
       title: title,
       body: body,
-      category: _categoryFromText(screen, title, body),
+      category: _categoryFromText(
+        screen,
+        title,
+        body,
+        isTicketPayload: _isNotBlank(ticketId) || _isNotBlank(ticketType),
+      ),
       entityId: entityId != null && entityId.isNotEmpty ? entityId : null,
       orderCode: orderCode != null && orderCode.isNotEmpty ? orderCode : null,
+      ticketType:
+          ticketType != null && ticketType.isNotEmpty ? ticketType : null,
       createdAt: DateTime.now(),
     );
   }
@@ -121,17 +163,28 @@ class NotificationStorage {
     final title = data['title'] as String? ?? 'Thông báo';
     final body = data['body'] as String? ?? '';
     final screen = data['screen'] as String?;
-    final entityId =
-        (data['entityId'] as String? ?? data['orderId'] as String?)?.trim();
-    final orderCode = data['orderCode'] as String?;
+    final ticketId = (data['ticketId'] as String?)?.trim();
+    final entityId = (data['entityId'] as String? ??
+            data['orderId'] as String? ??
+            ticketId)
+        ?.trim();
+    final orderCode = (data['orderCode'] as String? ??
+            data['ticketCode'] as String?)
+        ?.trim();
+    final ticketType = (data['ticketType'] as String?)?.trim();
 
     return AppNotification(
       id: const Uuid().v4(),
       title: title,
       body: body,
-      category: AppNotification.categoryFromScreen(screen),
+      category: _categoryFor(
+        screen,
+        isTicketPayload: _isNotBlank(ticketId) || _isNotBlank(ticketType),
+      ),
       entityId: entityId != null && entityId.isNotEmpty ? entityId : null,
       orderCode: orderCode != null && orderCode.isNotEmpty ? orderCode : null,
+      ticketType:
+          ticketType != null && ticketType.isNotEmpty ? ticketType : null,
       createdAt: DateTime.now(),
     );
   }

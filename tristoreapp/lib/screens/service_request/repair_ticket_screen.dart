@@ -19,10 +19,12 @@ import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 import 'service_ui.dart';
 import 'widgets/countdown_banner.dart';
+import 'widgets/edit_request_info_sheet.dart';
 import 'widgets/evidence_section.dart';
 import 'widgets/locked_request_info_card.dart';
 import 'widgets/repair_stepper.dart';
 import 'widgets/signature_pad.dart';
+import 'widgets/signature_thumb.dart';
 import 'widgets/ticket_log_list.dart';
 
 class RepairTicketScreen extends StatefulWidget {
@@ -41,6 +43,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   bool _loading = true;
   bool _busy = false;
   List<(String, String)> _users = [];
+
+  /// Đang xem lại bước đã qua (không đổi status / không xóa data bước sau).
+  int? _previewStepIndex;
 
   // Handoff / inspect
   String? _techUserId;
@@ -97,6 +102,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   final _reqProductNameCtrl = TextEditingController();
   final _reqProductSerialCtrl = TextEditingController();
   final _reqIssueCtrl = TextEditingController();
+  final _reqSlotCtrl = TextEditingController();
+  DateTime _reqAppointmentDate = DateTime.now().add(const Duration(days: 1));
   List<Map<String, String>> _reqAttachments = [];
 
   @override
@@ -123,6 +130,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     _reqProductNameCtrl.dispose();
     _reqProductSerialCtrl.dispose();
     _reqIssueCtrl.dispose();
+    _reqSlotCtrl.dispose();
     _contactNoteCtrl.dispose();
     _solutionCtrl.dispose();
     _partCostCtrl.dispose();
@@ -217,10 +225,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         // Chỉ seed khi form chưa dirty — tránh hồi sinh ghi chú sau khi user xóa
         // rồi upload bằng chứng (_load lại với ô trống).
         if (!_inspectFormDirty) {
-          final ticketNote = (t?.note ?? '').trim();
-          final createNote = (req?.customerNote ?? '').trim();
-          _receiveNoteCtrl.text =
-              ticketNote.isNotEmpty ? ticketNote : createNote;
+          _receiveNoteCtrl.text = (t?.note ?? '').trim();
         }
 
         final contactNote = detail?.contactNote ?? '';
@@ -307,6 +312,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           _repairFormDirty = false;
           _deliveryFormDirty = false;
           _payFormDirty = false;
+          _previewStepIndex = null;
         });
         AppMessenger.showSnackBar(
           context,
@@ -463,6 +469,34 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return t.createdByUserId == uid || t.staffUserId == uid;
   }
 
+  int _currentStepIndex(ServiceTicketPublic t, RepairDetailPublic? d) {
+    return repairStepIndex(
+      t.status,
+      customerRejectPending: d?.customerRejectPending ?? false,
+    );
+  }
+
+  bool get _historyView {
+    final t = _ticket;
+    if (t == null || _previewStepIndex == null) return false;
+    return _previewStepIndex! < _currentStepIndex(t, t.repairDetail);
+  }
+
+  String _statusForStepIndex(int i) => _targetStatusFromStepIndex(i);
+
+  void _onStepperTap(int stepIndex, ServiceTicketPublic t, RepairDetailPublic? d) {
+    final cur = _currentStepIndex(t, d);
+    if (stepIndex > cur || stepIndex >= 5) return;
+    setState(() {
+      // Bấm bước hiện tại → thoát chế độ xem lại.
+      if (stepIndex == cur) {
+        _previewStepIndex = null;
+      } else {
+        _previewStepIndex = stepIndex;
+      }
+    });
+  }
+
   String _targetStatusFromStepIndex(int i) {
     switch (i) {
       case 0:
@@ -486,14 +520,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     RepairDetailPublic? d,
   ) async {
     if (_busy) return;
-    final currentIdx = repairStepIndex(
-      t.status,
-      customerRejectPending: d?.customerRejectPending ?? false,
-    );
+    final currentIdx = _currentStepIndex(t, d);
     if (stepIndex >= currentIdx) return;
 
     final targetStatus = _targetStatusFromStepIndex(stepIndex);
-    final title = 'Quay lại: ${repairStepLabels[stepIndex]}';
+    final title = 'Làm lại từ: ${repairStepLabels[stepIndex]}';
 
     final go = await showDialog<bool>(
       context: context,
@@ -501,7 +532,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         title: Text(title),
         content: const Text(
           'Phiếu sẽ lùi về bước này để chỉnh sửa. Bằng chứng và chữ ký của '
-          'bước này cùng các bước sau sẽ hết hiệu lực — cần chụp và ký lại.',
+          'bước này cùng các bước sau sẽ hết hiệu lực — cần chụp và ký lại. '
+          'Dữ liệu các bước sau sẽ bị ảnh hưởng.',
         ),
         actions: [
           TextButton(
@@ -510,12 +542,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Quay lại'),
+            child: const Text('Làm lại'),
           ),
         ],
       ),
     );
     if (go != true || !mounted) return;
+    setState(() => _previewStepIndex = null);
     await _action(
       'rewind-repair',
       body: {'targetStatus': targetStatus},
@@ -523,11 +556,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   }
 
   bool _canEditRequest(ServiceTicketPublic t, RepairDetailPublic? d) {
-    final req = t.request;
-    if (req == null) return false;
-    if (!_canRewindRepair(t, d)) return false;
-    // patchRequest chặn nếu request đã closed.
-    return req.status != 'completed' && req.status != 'cancelled';
+    return canEditTicketRequestInfoFromContext(context, t);
   }
 
   Future<void> _copyText(String text, String snackMessage) async {
@@ -538,7 +567,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     AppMessenger.showSnackBar(context, SnackBar(content: Text(snackMessage)));
   }
 
-  void _resetRequestEditorFromRequest(ServiceRequestBrief req) {
+  void _resetRequestEditorFromRequest(
+    ServiceRequestBrief req, {
+    ServiceTicketPublic? ticket,
+  }) {
     _reqAttachments = req.attachments
         .map(
           (a) => {'url': a.url, 'mediaType': (a.mediaType ?? 'image')},
@@ -554,6 +586,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     _reqProductNameCtrl.text = req.productName;
     _reqProductSerialCtrl.text = req.productSerial ?? '';
     _reqIssueCtrl.text = req.issueDescription;
+    final t = ticket ?? _ticket;
+    final parsed = DateTime.tryParse(t?.appointmentDate ?? '');
+    _reqAppointmentDate =
+        parsed ?? DateTime.now().add(const Duration(days: 1));
+    final slot = (t?.appointmentSlot ?? '').trim();
+    _reqSlotCtrl.text = slot.isEmpty ? '09:00-11:00' : slot;
   }
 
   Future<void> _pickRequestAttachments() async {
@@ -606,14 +644,34 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
     setState(() => _busy = true);
     try {
-      final body = <String, dynamic>{
+      final infoBody = <String, dynamic>{
         'customerName': _reqNameCtrl.text.trim(),
         'customerPhone': _reqPhoneCtrl.text.trim(),
-        'customerAddress':
-            _reqAddressCtrl.text.trim().isEmpty ? null : _reqAddressCtrl.text.trim(),
+        'productName': _reqProductNameCtrl.text.trim(),
+        'issueDescription': _reqIssueCtrl.text.trim(),
         'customerNote': _reqCustomerNoteCtrl.text.trim().isEmpty
             ? null
             : _reqCustomerNoteCtrl.text.trim(),
+        'appointmentDate': yyyyMmDd(_reqAppointmentDate),
+        'appointmentSlot': _reqSlotCtrl.text.trim().isEmpty
+            ? '09:00-11:00'
+            : _reqSlotCtrl.text.trim(),
+      };
+      final ticketUpdated = await context
+          .read<ServiceRequestsProvider>()
+          .patchTicketRequestInfo(widget.ticketId, infoBody);
+      if (!mounted) return;
+      if (ticketUpdated == null) {
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Không thể lưu thông tin yêu cầu.')),
+        );
+        return;
+      }
+
+      final extraBody = <String, dynamic>{
+        'customerAddress':
+            _reqAddressCtrl.text.trim().isEmpty ? null : _reqAddressCtrl.text.trim(),
         'buyerName': _reqBuyerNameCtrl.text.trim().isEmpty
             ? null
             : _reqBuyerNameCtrl.text.trim(),
@@ -623,27 +681,16 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         'buyerAddress': _reqBuyerAddressCtrl.text.trim().isEmpty
             ? null
             : _reqBuyerAddressCtrl.text.trim(),
-        'productName': _reqProductNameCtrl.text.trim(),
         'productSerial':
             _reqProductSerialCtrl.text.trim().isEmpty ? null : _reqProductSerialCtrl.text.trim(),
-        'issueDescription': _reqIssueCtrl.text.trim(),
         'attachments': _reqAttachments,
       };
-
-      final updated =
-          await context.read<ServiceRequestsProvider>().patchRequest(
-                req.id,
-                body,
-              );
+      await context.read<ServiceRequestsProvider>().patchRequest(
+            req.id,
+            extraBody,
+          );
 
       if (!mounted) return;
-      if (updated == null) {
-        AppMessenger.showSnackBar(
-          context,
-          const SnackBar(content: Text('Không thể lưu thông tin yêu cầu.')),
-        );
-        return;
-      }
 
       setState(() => _editingRequest = false);
       await _load();
@@ -674,12 +721,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (!_editingRequest) {
       return LockedRequestInfoCard(
         request: req,
+        appointmentDate: t.appointmentDate,
+        appointmentSlot: t.appointmentSlot,
         onEdit: !canEdit || _busy
             ? null
             : () {
                 setState(() {
                   _editingRequest = true;
-                  _resetRequestEditorFromRequest(req);
+                  _resetRequestEditorFromRequest(req, ticket: t);
                 });
               },
       );
@@ -693,7 +742,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ? null
             : () => setState(() {
                   _editingRequest = false;
-                  _resetRequestEditorFromRequest(req);
+                  _resetRequestEditorFromRequest(req, ticket: t);
                 }),
         icon: const Icon(Icons.close),
       ),
@@ -777,6 +826,32 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             decoration: const InputDecoration(labelText: 'Lỗi'),
             minLines: 2,
             maxLines: 4,
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Ngày hẹn'),
+            subtitle: Text(yyyyMmDd(_reqAppointmentDate)),
+            trailing: const Icon(Icons.calendar_today),
+            onTap: _busy
+                ? null
+                : () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _reqAppointmentDate,
+                      firstDate:
+                          DateTime.now().subtract(const Duration(days: 30)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setState(() => _reqAppointmentDate = picked);
+                    }
+                  },
+          ),
+          TextField(
+            controller: _reqSlotCtrl,
+            decoration: const InputDecoration(labelText: 'Khung giờ hẹn'),
+            enabled: !_busy,
           ),
           const SizedBox(height: 12),
           Text(
@@ -975,9 +1050,58 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 RepairStepper(
                   status: t.status,
                   customerRejectPending: d?.customerRejectPending ?? false,
-                  editable: _canRewindRepair(t, d),
-                  onStepTap: (i) => _rewindToStep(i, t, d),
+                  browsable: !t.isDeleted,
+                  previewIndex: _previewStepIndex,
+                  onStepTap: (i) => _onStepperTap(i, t, d),
                 ),
+                if (_historyView) ...[
+                  const SizedBox(height: 10),
+                  Material(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer
+                        .withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Đang xem lại: ${repairStepLabels[_previewStepIndex!]}. '
+                            'Dữ liệu các bước sau vẫn được giữ — không chỉnh sửa tại đây.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.tonal(
+                                onPressed: () =>
+                                    setState(() => _previewStepIndex = null),
+                                child: Text(
+                                  'Về ${repairStepLabels[_currentStepIndex(t, d)]}',
+                                ),
+                              ),
+                              if (_canRewindRepair(t, d))
+                                TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _rewindToStep(
+                                            _previewStepIndex!,
+                                            t,
+                                            d,
+                                          ),
+                                  child: const Text('Làm lại từ bước này…'),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 CountdownBanner(
                   deadlineAt: t.deadlineAt,
@@ -1052,7 +1176,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     Map<String, String> nameOf,
     AppLocalizations l10n,
   ) {
-    switch (t.status) {
+    final status = _historyView
+        ? _statusForStepIndex(_previewStepIndex!)
+        : t.status;
+    switch (status) {
       case 'received':
         return _receivedStep(t, userIds, nameOf);
       case 'inspecting':
@@ -1113,10 +1240,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               if (id == null) return '— Chọn nhân viên —';
               return nameOf[id] ?? id;
             },
-            onChanged: (v) => setState(() {
-                  _receiveStaffUserId = v;
-                  _inspectFormDirty = true;
-                }),
+            onChanged: _historyView
+                ? null
+                : (v) => setState(() {
+                      _receiveStaffUserId = v;
+                      _inspectFormDirty = true;
+                    }),
           ),
         ),
       ],
@@ -1127,9 +1256,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       stage: 'receive',
       evidences: t.evidences,
       onChanged: _load,
+      readOnly: _historyView,
       title: 'Bằng chứng tiếp nhận *',
       noteField: TextField(
         controller: _receiveNoteCtrl,
+        readOnly: _historyView,
         decoration: const InputDecoration(
           labelText: 'Ghi chú bằng chứng tiếp nhận',
         ),
@@ -1138,7 +1269,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       ),
     );
 
-    final ctas = Column(
+    final ctas = _historyView
+        ? const SizedBox.shrink()
+        : Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_handoffBlockReason(t) != null)
@@ -1182,38 +1315,46 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _signatureThumb(
+                    child: SignatureThumb(
                       label: 'NV tiếp nhận',
                       url: staffSigs.last.imageUrl,
+                      subtitle: staffSigs.last.signedAt == null
+                          ? null
+                          : formatServiceTime(staffSigs.last.signedAt),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _signatureThumb(
+                    child: SignatureThumb(
                       label: 'Khách',
                       url: customerSigs.last.imageUrl,
+                      subtitle: customerSigs.last.signedAt == null
+                          ? null
+                          : formatServiceTime(customerSigs.last.signedAt),
                     ),
                   ),
                 ],
               ),
               Row(
                 children: [
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _resignReceiveStaff = true),
-                    child: const Text('Ký lại NV'),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _resignReceiveCustomer = true),
-                    child: const Text('Ký lại khách'),
-                  ),
+                  if (!_historyView) ...[
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _resignReceiveStaff = true),
+                      child: const Text('Ký lại NV'),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _resignReceiveCustomer = true),
+                      child: const Text('Ký lại khách'),
+                    ),
+                  ],
                 ],
               ),
             ],
           ),
         ),
-        if (_resignReceiveStaff) ...[
+        if (!_historyView && _resignReceiveStaff) ...[
           const SizedBox(height: 8),
           SignaturePadSection(
             key: ValueKey('sig-${t.id}-receive-staff-resign'),
@@ -1225,10 +1366,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               setState(() => _resignReceiveStaff = false);
               _load();
             },
+            readOnly: false,
             title: 'Ký lại — nhân viên',
           ),
         ],
-        if (_resignReceiveCustomer) ...[
+        if (!_historyView && _resignReceiveCustomer) ...[
           const SizedBox(height: 8),
           SignaturePadSection(
             key: ValueKey('sig-${t.id}-receive-customer-resign'),
@@ -1240,6 +1382,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               setState(() => _resignReceiveCustomer = false);
               _load();
             },
+            readOnly: false,
             title: 'Ký lại — khách',
           ),
         ],
@@ -1258,6 +1401,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         signer: 'staff',
         signatures: t.signatures,
         onChanged: _load,
+        readOnly: _historyView,
         title: 'Chữ ký nhân viên tiếp nhận *',
         header: receiveStaffRow,
       ),
@@ -1269,54 +1413,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         signer: 'customer',
         signatures: t.signatures,
         onChanged: _load,
+        readOnly: _historyView,
         title: 'Chữ ký khách *',
       ),
       const SizedBox(height: 12),
       ctas,
     ];
-  }
-
-  Widget _signatureThumb({required String label, required String url}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 4),
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () {
-                Navigator.push<void>(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => MediaViewerPage(
-                      items: [MediaViewerItem(url: url, mediaType: 'image')],
-                      initialIndex: 0,
-                    ),
-                  ),
-                );
-              },
-              child: Container(
-                foregroundDecoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Image.network(
-                  resolveMediaUrl(url),
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) =>
-                      const Center(child: Icon(Icons.draw_outlined)),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   List<Widget> _inspectingStep(
@@ -1356,7 +1458,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   (_techUserId ?? t.staffUserId),
               ],
               itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
-              onChanged: !canAssign
+              onChanged: !canAssign || _historyView
                   ? null
                   : (v) => setState(() {
                         _techUserId = v;
@@ -1376,7 +1478,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                     _contactDeadline.toLocal().toString(),
               ),
               trailing: const Icon(Icons.schedule),
-              onTap: !canAssign
+              onTap: !canAssign || _historyView
                   ? null
                   : () async {
                       final d0 = await showDatePicker(
@@ -1403,7 +1505,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       });
                     },
             ),
-            if (canAssign) ...[
+            if (canAssign && !_historyView) ...[
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: _busy ? null : () => _assignTech(t),
@@ -1427,6 +1529,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         title: 'Đánh giá ban đầu *',
         child: TextField(
           controller: _initialCtrl,
+          readOnly: _historyView,
           decoration: const InputDecoration(
             labelText: 'Nhận định / đánh giá ban đầu',
           ),
@@ -1440,10 +1543,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         stage: 'contact',
         evidences: t.evidences,
         onChanged: _load,
+        readOnly: _historyView,
         title: 'Bằng chứng gọi khách *',
       ),
       const SizedBox(height: 12),
-      if (!contacted)
+      if (!contacted && !_historyView)
         SectionCard(
           title: 'Xác nhận đã liên hệ',
           child: Column(
@@ -1466,11 +1570,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ],
           ),
         )
-      else
+      else if (contacted)
         const Text(
           'Đã xác nhận liên hệ khách.',
           style: TextStyle(color: Colors.green),
-        ),
+        )
+      else if (_historyView && (d?.contactNote ?? '').trim().isNotEmpty)
+        Text('Ghi chú liên hệ: ${d!.contactNote}'),
       const SizedBox(height: 12),
       SectionCard(
         title: 'Hình thức sửa chữa *',
@@ -1485,10 +1591,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   ChoiceChip(
                     label: Text(repairMethodLabel(m)),
                     selected: _repairMethod == m,
-                    onSelected: (_) => setState(() {
-                      _repairMethod = m;
-                      _inspectFormDirty = true;
-                    }),
+                    onSelected: _historyView
+                        ? null
+                        : (_) => setState(() {
+                              _repairMethod = m;
+                              _inspectFormDirty = true;
+                            }),
                   ),
               ],
             ),
@@ -1498,9 +1606,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               stage: 'repair_method',
               evidences: t.evidences,
               onChanged: _load,
+              readOnly: _historyView,
               title: 'Ảnh/video bàn giao *',
               noteField: TextField(
                 controller: _methodNoteCtrl,
+                readOnly: _historyView,
                 decoration: const InputDecoration(labelText: 'Ghi chú'),
                 maxLines: 2,
                 onChanged: (_) => _inspectFormDirty = true,
@@ -1509,32 +1619,34 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           ],
         ),
       ),
-      const SizedBox(height: 12),
-      if (_startRepairBlockReason(t, d) != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            _startRepairBlockReason(t, d)!,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
-              fontSize: 13,
+      if (!_historyView) ...[
+        const SizedBox(height: 12),
+        if (_startRepairBlockReason(t, d) != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              _startRepairBlockReason(t, d)!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
             ),
           ),
+        FilledButton(
+          onPressed: _busy || _startRepairBlockReason(t, d) != null
+              ? null
+              : () => _startRepair(t, d),
+          child: const Text('Chuyển sang Sửa chữa'),
         ),
-      FilledButton(
-        onPressed: _busy || _startRepairBlockReason(t, d) != null
-            ? null
-            : () => _startRepair(t, d),
-        child: const Text('Chuyển sang Sửa chữa'),
-      ),
-      const SizedBox(height: 8),
-      OutlinedButton(
-        onPressed: _busy ? null : () => _cancelRequest(t),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Theme.of(context).colorScheme.error,
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _busy ? null : () => _cancelRequest(t),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('Hủy yêu cầu'),
         ),
-        child: const Text('Hủy yêu cầu'),
-      ),
+      ],
     ];
   }
 
@@ -1675,6 +1787,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           children: [
             TextField(
               controller: _solutionCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(
                 labelText: 'Nội dung sửa chữa *',
               ),
@@ -1684,6 +1797,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _partCostCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
               keyboardType: integerThousandsKeyboardType(_thousandsSep),
               inputFormatters: [
@@ -1694,6 +1808,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _laborCostCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(labelText: 'Tiền công'),
               keyboardType: integerThousandsKeyboardType(_thousandsSep),
               inputFormatters: [
@@ -1704,6 +1819,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _warrantyCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(
                 labelText: 'Bảo hành (tháng) *',
               ),
@@ -1720,9 +1836,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         stage: 'repair_contact',
         evidences: t.evidences,
         onChanged: () => _load(),
+        readOnly: _historyView,
         title: 'Bằng chứng liên hệ khách *',
         noteField: TextField(
           controller: _repairContactNoteCtrl,
+          readOnly: _historyView,
           decoration: const InputDecoration(labelText: 'Ghi chú liên hệ'),
           maxLines: 2,
           onChanged: (_) => setState(() => _repairFormDirty = true),
@@ -1735,9 +1853,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           stage: 'receive_back',
           evidences: t.evidences,
           onChanged: () => _load(),
+          readOnly: _historyView,
           title: 'Nhận lại sản phẩm *',
           noteField: TextField(
             controller: _receiveBackNoteCtrl,
+            readOnly: _historyView,
             decoration: const InputDecoration(labelText: 'Ghi chú nhận lại'),
             maxLines: 2,
             onChanged: (_) => setState(() => _repairFormDirty = true),
@@ -1750,6 +1870,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         stage: 'repair_result',
         evidences: t.evidences,
         onChanged: () => _load(),
+        readOnly: _historyView,
         title: 'Bằng chứng kết quả sửa *',
       ),
       const SizedBox(height: 12),
@@ -1757,37 +1878,40 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         title: 'Kết quả sửa chữa',
         child: TextField(
           controller: _resultCtrl,
+          readOnly: _historyView,
           decoration: const InputDecoration(labelText: 'Kết quả *'),
           maxLines: 3,
           onChanged: (_) => setState(() => _repairFormDirty = true),
         ),
       ),
-      const SizedBox(height: 12),
-      if (block != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            block,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
-              fontSize: 13,
+      if (!_historyView) ...[
+        const SizedBox(height: 12),
+        if (block != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              block,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
             ),
           ),
+        FilledButton(
+          onPressed: _busy || block != null
+              ? null
+              : () => _advanceDelivery(t, d),
+          child: const Text('Chuyển qua Bàn giao'),
         ),
-      FilledButton(
-        onPressed: _busy || block != null
-            ? null
-            : () => _advanceDelivery(t, d),
-        child: const Text('Chuyển qua Bàn giao'),
-      ),
-      const SizedBox(height: 8),
-      OutlinedButton(
-        onPressed: _busy ? null : _abortToPayment,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Theme.of(context).colorScheme.error,
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _busy ? null : _abortToPayment,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('Hủy'),
         ),
-        child: const Text('Hủy'),
-      ),
+      ],
     ];
   }
 
@@ -1857,10 +1981,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 _deliveryStaffUserId!,
             ],
             itemLabel: (id) => id == null ? '— Chọn nhân viên —' : (nameOf[id] ?? id),
-            onChanged: (v) => setState(() {
-              _deliveryStaffUserId = v;
-              _deliveryFormDirty = true;
-            }),
+            onChanged: _historyView
+                ? null
+                : (v) => setState(() {
+                      _deliveryStaffUserId = v;
+                      _deliveryFormDirty = true;
+                    }),
           ),
         ),
       ],
@@ -1871,9 +1997,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       stage: 'delivery',
       evidences: t.evidences,
       onChanged: () => _load(),
+      readOnly: _historyView,
       title: 'Bằng chứng bàn giao *',
       noteField: TextField(
         controller: _deliveryNoteCtrl,
+        readOnly: _historyView,
         decoration: const InputDecoration(
           labelText: 'Ghi chú bằng chứng bàn giao',
         ),
@@ -1899,14 +2027,16 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   return 'Nhận tại cửa hàng';
               }
             },
-            onChanged: (v) {
-              if (v != null) {
-                setState(() {
-                  _deliveryMethod = v;
-                  _deliveryFormDirty = true;
-                });
-              }
-            },
+            onChanged: _historyView
+                ? null
+                : (v) {
+                    if (v != null) {
+                      setState(() {
+                        _deliveryMethod = v;
+                        _deliveryFormDirty = true;
+                      });
+                    }
+                  },
           ),
           if (_deliveryMethod == 'home')
             ListTile(
@@ -1915,34 +2045,37 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               subtitle: Text(
                 _deliveryEta?.toLocal().toString() ?? 'Chọn thời gian',
               ),
-              onTap: () async {
-                final day = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 60)),
-                );
-                if (day == null || !mounted) return;
-                final tm = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (tm == null) return;
-                setState(() {
-                  _deliveryEta = DateTime(
-                    day.year,
-                    day.month,
-                    day.day,
-                    tm.hour,
-                    tm.minute,
-                  );
-                  _deliveryFormDirty = true;
-                });
-              },
+              onTap: _historyView
+                  ? null
+                  : () async {
+                      final day = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 60)),
+                      );
+                      if (day == null || !mounted) return;
+                      final tm = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (tm == null) return;
+                      setState(() {
+                        _deliveryEta = DateTime(
+                          day.year,
+                          day.month,
+                          day.day,
+                          tm.hour,
+                          tm.minute,
+                        );
+                        _deliveryFormDirty = true;
+                      });
+                    },
             ),
           if (_deliveryMethod == 'shipping')
             TextField(
               controller: _shippingPayerCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(
                 labelText: 'Người trả phí ship',
               ),
@@ -1952,7 +2085,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       ),
     );
 
-    final ctas = Column(
+    final ctas = _historyView
+        ? const SizedBox.shrink()
+        : Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (block != null)
@@ -2009,38 +2144,46 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _signatureThumb(
+                    child: SignatureThumb(
                       label: 'NV bàn giao',
                       url: staffSigs.last.imageUrl,
+                      subtitle: staffSigs.last.signedAt == null
+                          ? null
+                          : formatServiceTime(staffSigs.last.signedAt),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _signatureThumb(
+                    child: SignatureThumb(
                       label: 'Khách',
                       url: customerSigs.last.imageUrl,
+                      subtitle: customerSigs.last.signedAt == null
+                          ? null
+                          : formatServiceTime(customerSigs.last.signedAt),
                     ),
                   ),
                 ],
               ),
               Row(
                 children: [
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _resignDeliveryStaff = true),
-                    child: const Text('Ký lại NV'),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _resignDeliveryCustomer = true),
-                    child: const Text('Ký lại khách'),
-                  ),
+                  if (!_historyView) ...[
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _resignDeliveryStaff = true),
+                      child: const Text('Ký lại NV'),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _resignDeliveryCustomer = true),
+                      child: const Text('Ký lại khách'),
+                    ),
+                  ],
                 ],
               ),
             ],
           ),
         ),
-        if (_resignDeliveryStaff) ...[
+        if (!_historyView && _resignDeliveryStaff) ...[
           const SizedBox(height: 8),
           SignaturePadSection(
             key: ValueKey('sig-${t.id}-delivery-staff-resign'),
@@ -2055,7 +2198,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             title: 'Ký lại — NV bàn giao',
           ),
         ],
-        if (_resignDeliveryCustomer) ...[
+        if (!_historyView && _resignDeliveryCustomer) ...[
           const SizedBox(height: 8),
           SignaturePadSection(
             key: ValueKey('sig-${t.id}-delivery-customer-resign'),
@@ -2086,6 +2229,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 signer: 'staff',
                 signatures: t.signatures,
                 onChanged: () => _load(),
+                readOnly: _historyView,
                 title: 'NV bàn giao *',
               ),
             ),
@@ -2098,6 +2242,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 signer: 'customer',
                 signatures: t.signatures,
                 onChanged: () => _load(),
+                readOnly: _historyView,
                 title: 'Khách *',
               ),
             ),
@@ -2114,6 +2259,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           children: [
             TextField(
               controller: _partCostCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
               keyboardType: integerThousandsKeyboardType(_thousandsSep),
               inputFormatters: [
@@ -2124,6 +2270,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _laborCostCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(labelText: 'Tiền công'),
               keyboardType: integerThousandsKeyboardType(_thousandsSep),
               inputFormatters: [
@@ -2139,6 +2286,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _warrantyCtrl,
+              readOnly: _historyView,
               decoration: const InputDecoration(
                 labelText: 'Bảo hành (tháng)',
               ),

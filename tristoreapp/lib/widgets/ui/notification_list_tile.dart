@@ -23,6 +23,8 @@ IconData notificationCategoryIcon(AppNotificationCategory category) {
       return Icons.inventory_2_outlined;
     case AppNotificationCategory.delivery:
       return Icons.local_shipping_outlined;
+    case AppNotificationCategory.serviceTicket:
+      return Icons.support_agent_outlined;
     case AppNotificationCategory.system:
       return Icons.notifications_outlined;
   }
@@ -36,6 +38,8 @@ Color notificationCategoryColor(AppNotificationCategory category) {
       return AppColors.secondary;
     case AppNotificationCategory.delivery:
       return const Color(0xFF2E7D32);
+    case AppNotificationCategory.serviceTicket:
+      return const Color(0xFF1565C0);
     case AppNotificationCategory.system:
       return AppColors.onSurfaceVariant;
   }
@@ -52,6 +56,8 @@ String notificationCategoryLabel(
       return l10n.notificationsCategoryPreparation;
     case AppNotificationCategory.delivery:
       return l10n.notificationsCategoryDelivery;
+    case AppNotificationCategory.serviceTicket:
+      return l10n.notificationsCategoryServiceTicket;
     case AppNotificationCategory.system:
       return l10n.notificationsCategorySystem;
   }
@@ -199,6 +205,9 @@ class NotificationListTile extends StatelessWidget {
 AppNotificationCategory _displayCategory(AppNotification notification) {
   if (notification.category != AppNotificationCategory.system) {
     return notification.category;
+  }
+  if (notification.ticketType != null && notification.ticketType!.isNotEmpty) {
+    return AppNotificationCategory.serviceTicket;
   }
   if (notification.orderCode != null && notification.orderCode!.isNotEmpty) {
     return AppNotificationCategory.order;
