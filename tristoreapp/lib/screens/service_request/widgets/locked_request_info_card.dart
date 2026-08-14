@@ -154,18 +154,44 @@ class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
             ],
           ],
           if (request.customerNote != null &&
-              request.customerNote!.trim().isNotEmpty)
-            _row(
-              'Ghi chú',
-              request.customerNote!.trim(),
-              bold: true,
+              request.customerNote!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.space1),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(
+                    width: 88,
+                    child: Text(
+                      'Ghi chú',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      request.customerNote!.trim(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _row(String label, String value, {bool bold = false}) {
+  Widget _row(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.space1),
       child: Row(
@@ -175,21 +201,10 @@ class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
             width: 88,
             child: Text(
               label,
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 13,
-                fontWeight: bold ? FontWeight.w700 : null,
-              ),
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: bold
-                  ? const TextStyle(fontWeight: FontWeight.w700)
-                  : null,
-            ),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );
