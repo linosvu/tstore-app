@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tstore/core/constants/app_colors.dart';
 import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
@@ -19,21 +20,21 @@ class ServiceRequestListCard extends StatelessWidget {
   final VoidCallback onOpen;
   final void Function(ServiceTicketBrief) onOpenTicket;
 
-  ({String? label, bool overdue, bool showScheduleIcon}) _repairSecondarySchedule(
-    ServiceTicketBrief ticket,
-  ) {
+  ({String? label, bool overdue, bool showScheduleIcon, bool isExpected})
+      _repairSecondarySchedule(ServiceTicketBrief ticket) {
     final step = repairStepIndex(ticket.status);
     if (step >= 5) {
-      return (label: null, overdue: false, showScheduleIcon: false);
+      return (
+        label: null,
+        overdue: false,
+        showScheduleIcon: false,
+        isExpected: false,
+      );
     }
 
-    String? labeledCountdown(String? iso, {required String prefix}) {
-      final rem = deadlineRemainingLabel(iso);
-      if (rem.isNotEmpty) return '$prefix · $rem';
-      if (iso != null && iso.trim().isNotEmpty) {
-        return '$prefix · ${formatServiceTime(iso)}';
-      }
-      return null;
+    String? absoluteTime(String? iso) {
+      final t = formatServiceTime(iso);
+      return t == '—' ? null : t;
     }
 
     bool isPast(String? iso) {
@@ -45,32 +46,33 @@ class ServiceRequestListCard extends StatelessWidget {
     String? etaDateLabel(String? etaDate) {
       final raw = (etaDate ?? '').trim();
       if (raw.isEmpty) return null;
-      String displayDate = raw;
       final parsed = DateTime.tryParse(raw);
       if (parsed != null) {
-        displayDate =
-            '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
+        return '${parsed.day.toString().padLeft(2, '0')}/'
+            '${parsed.month.toString().padLeft(2, '0')}';
       }
-      return 'ETA · $displayDate';
+      return raw;
     }
 
     switch (step) {
       case 0: {
         final iso = ticket.contactDeadlineAt;
-        final label = labeledCountdown(iso, prefix: 'Hẹn gọi');
+        final label = absoluteTime(iso);
         return (
           label: label,
           overdue: isPast(iso),
           showScheduleIcon: label != null,
+          isExpected: label != null,
         );
       }
       case 1: {
         final iso = ticket.deadlineAt;
-        final rem = deadlineRemainingLabel(iso, markOverdue: ticket.isOverdue);
+        final label = absoluteTime(iso);
         return (
-          label: rem.isEmpty ? null : rem,
+          label: label,
           overdue: ticket.isOverdue || isPast(iso),
-          showScheduleIcon: false,
+          showScheduleIcon: label != null,
+          isExpected: label != null,
         );
       }
       case 2: {
@@ -84,66 +86,85 @@ class ServiceRequestListCard extends StatelessWidget {
             label: eta,
             overdue: endOfDay != null && endOfDay.isBefore(DateTime.now()),
             showScheduleIcon: true,
+            isExpected: true,
           );
         }
         final iso = ticket.deadlineAt;
-        final rem = deadlineRemainingLabel(iso, markOverdue: ticket.isOverdue);
+        final t = absoluteTime(iso);
         return (
-          label: rem.isEmpty ? null : 'ETA · $rem',
+          label: t,
           overdue: ticket.isOverdue || isPast(iso),
-          showScheduleIcon: rem.isNotEmpty,
+          showScheduleIcon: t != null,
+          isExpected: t != null,
         );
       }
       case 3: {
         final iso = (ticket.deliveryEta ?? '').trim().isNotEmpty
             ? ticket.deliveryEta
             : ticket.deadlineAt;
-        final label = labeledCountdown(iso, prefix: 'Hẹn giao');
+        final label = absoluteTime(iso);
         return (
           label: label,
           overdue: isPast(iso),
           showScheduleIcon: label != null,
+          isExpected: label != null,
         );
       }
       case 4: {
         final iso = ticket.deadlineAt;
-        final rem = deadlineRemainingLabel(iso, markOverdue: ticket.isOverdue);
+        final label = absoluteTime(iso);
         return (
-          label: rem.isEmpty ? null : rem,
+          label: label,
           overdue: ticket.isOverdue || isPast(iso),
-          showScheduleIcon: false,
+          showScheduleIcon: label != null,
+          isExpected: label != null,
         );
       }
       default:
-        return (label: null, overdue: false, showScheduleIcon: false);
+        return (
+          label: null,
+          overdue: false,
+          showScheduleIcon: false,
+          isExpected: false,
+        );
     }
   }
 
-  ({String? label, bool overdue}) _supportTime(ServiceTicketBrief ticket) {
+  ({String? label, bool overdue, bool isExpected}) _supportTime(
+    ServiceTicketBrief ticket,
+  ) {
     final closed = ticket.status == 'done' ||
         ticket.status == 'failed' ||
         ticket.status == 'cancelled' ||
         ticket.status == 'taken';
     if (ticket.status == 'contact_failed') {
-      final hint = appointmentHintLabel(
-        ticket.appointmentDate,
-        ticket.appointmentSlot,
-      );
-      return (label: hint.isEmpty ? null : hint, overdue: false);
+      final d = (ticket.appointmentDate ?? '').trim();
+      if (d.isEmpty) return (label: null, overdue: false, isExpected: false);
+      String ddMm = d;
+      final parsed = DateTime.tryParse(d.length == 10 ? '${d}T00:00:00' : d);
+      if (parsed != null) {
+        ddMm =
+            '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
+      }
+      final time = normalizeAppointmentTimeLabel(ticket.appointmentSlot);
+      final label = time.isEmpty ? ddMm : '$ddMm $time';
+      return (label: label, overdue: false, isExpected: true);
     }
     if (closed) {
       final doneAt = formatServiceTime(
         ticket.statusChangedAt ?? ticket.createdAt,
       );
-      return (label: doneAt == '—' ? null : doneAt, overdue: false);
+      return (
+        label: doneAt == '—' ? null : doneAt,
+        overdue: false,
+        isExpected: false,
+      );
     }
-    final rem = deadlineRemainingLabel(
-      ticket.deadlineAt,
-      markOverdue: ticket.isOverdue,
-    );
+    final deadline = formatServiceTime(ticket.deadlineAt);
     return (
-      label: rem.isEmpty ? null : rem,
+      label: deadline == '—' ? null : deadline,
       overdue: ticket.isOverdue,
+      isExpected: deadline != '—',
     );
   }
 
@@ -183,16 +204,17 @@ class ServiceRequestListCard extends StatelessWidget {
     final latest = request.latestTicket;
     final isRepair = request.isRepairDirection || latest?.type == 'repair';
     final creator = (request.createdByName ?? '').trim();
-    final manager = (request.managerName ?? '').trim();
 
     String? timeLabel;
     var timeOverdue = false;
     var showScheduleIcon = false;
+    var timeIsExpected = false;
     if (isRepair && latest != null) {
       final schedule = _repairSecondarySchedule(latest);
       timeLabel = schedule.label;
       timeOverdue = schedule.overdue;
       showScheduleIcon = schedule.showScheduleIcon;
+      timeIsExpected = schedule.isExpected;
       if (repairStepIndex(latest.status) >= 5) {
         final doneAt = formatServiceTime(
           latest.statusChangedAt ?? latest.createdAt,
@@ -200,12 +222,21 @@ class ServiceRequestListCard extends StatelessWidget {
         timeLabel = doneAt == '—' ? timeLabel : doneAt;
         timeOverdue = false;
         showScheduleIcon = false;
+        timeIsExpected = false;
       }
     } else if (latest != null) {
       final t = _supportTime(latest);
       timeLabel = t.label;
       timeOverdue = t.overdue;
+      timeIsExpected = t.isExpected;
+      showScheduleIcon = t.isExpected;
     }
+
+    final createdRaw = formatServiceTime(request.createdAt);
+    final createdLabel = createdRaw == '—' ? null : createdRaw;
+    final expectedDisplay = timeLabel == null
+        ? null
+        : (timeIsExpected ? 'DK: $timeLabel' : timeLabel);
 
     return Material(
       color: scheme.surface,
@@ -254,35 +285,10 @@ class ServiceRequestListCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
-                        if (creator.isNotEmpty || manager.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          if (creator.isNotEmpty)
-                            Text(
-                              'Người tạo: $creator',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          if (manager.isNotEmpty)
-                            Text(
-                              'NV quản lý: $manager',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                        if (latest != null) ...[
+                        if (creator.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            isRepair
-                                ? 'KTV: ${(latest.staffName ?? '').trim().isNotEmpty ? latest.staffName!.trim() : '—'}'
-                                : '${latest.type == 'onsite' ? 'NV hỗ trợ' : 'KTV'}: ${(latest.staffName ?? '').trim().isNotEmpty ? latest.staffName!.trim() : '—'}',
+                            'Người tạo: $creator',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.grey,
@@ -303,9 +309,21 @@ class ServiceRequestListCard extends StatelessWidget {
                           label: ticketStatusLabel(latest.type, latest.status),
                           tone: ticketStatusTone(latest.status),
                         ),
-                        if (timeLabel != null) ...[
+                        if (createdLabel != null) ...[
                           const SizedBox(height: 6),
-                          if (showScheduleIcon)
+                          Text(
+                            createdLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ],
+                        if (expectedDisplay != null) ...[
+                          const SizedBox(height: 4),
+                          if (showScheduleIcon || timeIsExpected)
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -314,24 +332,24 @@ class ServiceRequestListCard extends StatelessWidget {
                                   size: 13,
                                   color: timeOverdue
                                       ? Colors.red
-                                      : scheme.primary,
+                                      : AppColors.success,
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  timeLabel,
+                                  expectedDisplay,
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     color: timeOverdue
                                         ? Colors.red
-                                        : scheme.primary,
+                                        : AppColors.success,
                                   ),
                                 ),
                               ],
                             )
                           else
                             Text(
-                              timeLabel,
+                              expectedDisplay,
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -356,12 +374,52 @@ class ServiceRequestListCard extends StatelessWidget {
                     ),
                 ],
               ),
+              if ((request.customerNote ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 16,
+                        color: AppColors.warning,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          request.customerNote!.trim(),
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 13,
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (latest != null) ...[
                 const SizedBox(height: 10),
                 if (isRepair && latest.type == 'repair')
                   TicketFlowProgressBar(
                     labels: const [
-                      'Tiếp nhận',
+                      'Quản lý',
                       'Kiểm tra',
                       'Sửa chữa',
                       'Bàn giao',
@@ -379,7 +437,7 @@ class ServiceRequestListCard extends StatelessWidget {
                     failed: latest.status == 'cancelled' ||
                         latest.status == 'customer_rejected',
                     stepSubtitles: [
-                      latest.receiveStaffName,
+                      request.managerName,
                       latest.staffName,
                       latest.staffName,
                       latest.deliveryStaffName,
@@ -397,6 +455,8 @@ class ServiceRequestListCard extends StatelessWidget {
                         costMode: latest.costMode,
                         paymentMethod: latest.paymentMethod,
                         feeAmount: latest.feeAmount,
+                        paymentCollected:
+                            latest.hasConfirmedCollectingPayment,
                       );
                       if (failed) {
                         return raw.clamp(0, supportFlowStepLabels.length - 1);
@@ -405,7 +465,7 @@ class ServiceRequestListCard extends StatelessWidget {
                     }(),
                     failed: supportStepFailed(latest.status),
                     stepSubtitles: [
-                      request.createdByName,
+                      request.managerName,
                       latest.staffName,
                       request.managerName,
                     ],

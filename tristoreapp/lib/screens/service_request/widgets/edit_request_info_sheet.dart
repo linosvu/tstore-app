@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tstore/core/utils/keyboard_utils.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 
 import '../service_ui.dart';
+import 'fee_field.dart';
 
 bool canEditTicketRequestInfo(ServiceTicketPublic ticket, String? role, String? userId) {
-  if (isTicketClosed(ticket.type, ticket.status)) return false;
+  final closed = isTicketClosed(ticket.type, ticket.status);
+  if (closed && !isOnsiteDone(ticket.type, ticket.status)) return false;
   if (role == 'admin' || role == 'manager') return true;
   if (userId == null || userId.isEmpty) return false;
   return ticket.staffUserId == userId;
 }
 
-/// Form sửa Tên / SĐT / SP / Lỗi / Ghi chú / Thời gian hẹn.
+/// Form sửa Tên / SĐT / SP / Lỗi / Phí / Thời gian hẹn / Ghi chú.
 Future<ServiceTicketPublic?> showEditRequestInfoSheet({
   required BuildContext context,
   required ServiceTicketPublic ticket,
@@ -49,9 +52,14 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
   late final TextEditingController _productCtrl;
   late final TextEditingController _issueCtrl;
   late final TextEditingController _noteCtrl;
-  late final TextEditingController _slotCtrl;
   late DateTime _appointmentDate;
+  late String _appointmentTime;
+  late bool _isFree;
+  late int _feeAmount;
   bool _saving = false;
+
+  bool get _showFee =>
+      widget.ticket.type == 'online' || widget.ticket.type == 'onsite';
 
   @override
   void initState() {
@@ -63,13 +71,13 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
     _productCtrl = TextEditingController(text: req.productName);
     _issueCtrl = TextEditingController(text: req.issueDescription);
     _noteCtrl = TextEditingController(text: req.customerNote ?? '');
-    _slotCtrl = TextEditingController(
-      text: (t.appointmentSlot ?? '').trim().isEmpty
-          ? '09:00-11:00'
-          : t.appointmentSlot!,
-    );
+    final slot = normalizeAppointmentTimeLabel(t.appointmentSlot);
+    _appointmentTime =
+        slot.isEmpty ? formatAppointmentTimeOfDay(defaultAppointmentTime) : slot;
     final parsed = DateTime.tryParse(t.appointmentDate ?? '');
     _appointmentDate = parsed ?? DateTime.now().add(const Duration(days: 1));
+    _isFree = t.isCostFree;
+    _feeAmount = _isFree ? 0 : t.feeAmount;
   }
 
   @override
@@ -79,7 +87,6 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
     _productCtrl.dispose();
     _issueCtrl.dispose();
     _noteCtrl.dispose();
-    _slotCtrl.dispose();
     super.dispose();
   }
 
@@ -93,6 +100,16 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
     if (picked != null) setState(() => _appointmentDate = picked);
   }
 
+  Future<void> _pickTime() async {
+    final picked = await pickAppointmentTimeOfDay(
+      context,
+      initial: parseAppointmentTimeOfDay(_appointmentTime),
+    );
+    if (picked != null) {
+      setState(() => _appointmentTime = formatAppointmentTimeOfDay(picked));
+    }
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     if (_nameCtrl.text.trim().isEmpty ||
@@ -102,6 +119,13 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
       AppMessenger.showSnackBar(
         context,
         const SnackBar(content: Text('Nhập đủ tên khách, SĐT, sản phẩm và lỗi.')),
+      );
+      return;
+    }
+    if (_showFee && !_isFree && _feeAmount <= 0) {
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Nhập phí hỗ trợ hoặc chọn miễn phí.')),
       );
       return;
     }
@@ -117,9 +141,11 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
             ? null
             : _noteCtrl.text.trim(),
         'appointmentDate': yyyyMmDd(_appointmentDate),
-        'appointmentSlot': _slotCtrl.text.trim().isEmpty
-            ? '09:00-11:00'
-            : _slotCtrl.text.trim(),
+        'appointmentSlot': _appointmentTime,
+        if (_showFee) ...{
+          'isFree': _isFree,
+          'feeAmount': _isFree ? 0 : _feeAmount,
+        },
       };
       final updated = await context
           .read<ServiceRequestsProvider>()
@@ -150,6 +176,7 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -196,13 +223,18 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
               maxLines: 4,
               enabled: !_saving,
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _noteCtrl,
-              decoration: const InputDecoration(labelText: 'Ghi chú'),
-              maxLines: 2,
-              enabled: !_saving,
-            ),
+            if (_showFee) ...[
+              const SizedBox(height: 8),
+              FeeField(
+                isFree: _isFree,
+                feeAmount: _feeAmount,
+                onFreeChanged: (v) => setState(() {
+                  _isFree = v;
+                  if (v) _feeAmount = 0;
+                }),
+                onFeeChanged: (v) => setState(() => _feeAmount = v),
+              ),
+            ],
             const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -212,9 +244,22 @@ class _EditRequestInfoSheetState extends State<_EditRequestInfoSheet> {
               enabled: !_saving,
               onTap: _saving ? null : _pickDate,
             ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Giờ hẹn'),
+              subtitle: Text(_appointmentTime),
+              trailing: const Icon(Icons.access_time),
+              enabled: !_saving,
+              onTap: _saving ? null : _pickTime,
+            ),
+            const SizedBox(height: 8),
             TextField(
-              controller: _slotCtrl,
-              decoration: const InputDecoration(labelText: 'Khung giờ hẹn'),
+              controller: _noteCtrl,
+              decoration: const InputDecoration(labelText: 'Ghi chú'),
+              maxLines: 2,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              onTapOutside: dismissKeyboardOnTapOutside,
               enabled: !_saving,
             ),
             const SizedBox(height: 16),

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/theme/app_text_styles.dart';
+import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
+import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
@@ -10,10 +13,10 @@ import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
 import 'contact_fail_reasons.dart';
+import 'record_onsite_payment_screen.dart';
 import 'service_ui.dart';
 import 'widgets/edit_request_info_sheet.dart';
 import 'widgets/evidence_section.dart';
-import 'widgets/onsite_cost_section.dart';
 import 'widgets/searchable_user_dropdown.dart';
 import 'widgets/signature_pad.dart';
 import 'widgets/signature_thumb.dart';
@@ -35,8 +38,9 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
   bool _busy = false;
   final _conditionCtrl = TextEditingController();
   final _workCtrl = TextEditingController();
-  final _handlingNoteCtrl = TextEditingController();
-  final _rescheduleSlotCtrl = TextEditingController(text: '09:00-11:00');
+  final _rescheduleSlotCtrl = TextEditingController(
+    text: formatAppointmentTimeOfDay(defaultAppointmentTime),
+  );
   final _rescheduleNoteCtrl = TextEditingController();
   DateTime _rescheduleDate = DateTime.now().add(const Duration(days: 1));
   List<(String, String)> _users = [];
@@ -56,7 +60,6 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
   void dispose() {
     _conditionCtrl.dispose();
     _workCtrl.dispose();
-    _handlingNoteCtrl.dispose();
     _rescheduleSlotCtrl.dispose();
     _rescheduleNoteCtrl.dispose();
     super.dispose();
@@ -101,10 +104,9 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
           _conditionCtrl.text = t!.productCondition!;
         }
         if (t?.workDone != null) _workCtrl.text = t!.workDone!;
-        _handlingNoteCtrl.text = t?.note ?? '';
         final parsed = DateTime.tryParse(t?.appointmentDate ?? '');
         if (parsed != null) _rescheduleDate = parsed;
-        final slot = (t?.appointmentSlot ?? '').trim();
+        final slot = normalizeAppointmentTimeLabel(t?.appointmentSlot);
         if (slot.isNotEmpty) _rescheduleSlotCtrl.text = slot;
         _loading = false;
       });
@@ -166,29 +168,92 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
     }
   }
 
-  Future<void> _saveHandlingNote() async {
+  String _money(int v) =>
+      '${formatIntegerWithSeparator(v, kAppDefaultThousandsSeparator)} đ';
+
+  String _paymentMethodLabel(
+    ServiceTicketPaymentPublic p,
+    AppLocalizations l10n,
+  ) {
+    final labeled = (p.methodLabel ?? '').trim();
+    if (labeled.isNotEmpty) return labeled;
+    switch (p.method) {
+      case 'bank_transfer':
+        return l10n.saleOrderRecordPaymentMethodTransfer;
+      case 'unpaid':
+        return l10n.saleOrderRecordPaymentSchedule;
+      default:
+        return l10n.saleOrderRecordPaymentMethodCash;
+    }
+  }
+
+  String? _formatDateLabel(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return null;
+    final parsed = DateTime.tryParse(s);
+    if (parsed == null) {
+      if (s.length >= 10) {
+        final y = s.substring(0, 4);
+        final m = s.substring(5, 7);
+        final d = s.substring(8, 10);
+        if (RegExp(r'^\d{4}$').hasMatch(y)) return '$d/$m/$y';
+      }
+      return s;
+    }
+    return '${parsed.day.toString().padLeft(2, '0')}/'
+        '${parsed.month.toString().padLeft(2, '0')}/'
+        '${parsed.year}';
+  }
+
+  bool _showOnsitePaymentCard(ServiceTicketPublic t) {
+    if (t.status == 'cancelled' ||
+        t.status == 'failed' ||
+        t.status == 'taken') {
+      return false;
+    }
+    return !t.isCostFree || t.payments.isNotEmpty;
+  }
+
+  void _openPaymentProofs(List<String> urls, {int initialIndex = 0}) {
+    if (urls.isEmpty) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerPage(
+          items: [for (final u in urls) MediaViewerItem(url: u)],
+          initialIndex: initialIndex.clamp(0, urls.length - 1),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRecordOnsitePayment() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => RecordOnsitePaymentScreen(ticketId: widget.ticketId),
+      ),
+    );
+    if (!mounted) return;
+    await _load();
+  }
+
+  Future<void> _confirmOnsitePayment(String proposalId) async {
     if (_busy) return;
-    final t = _ticket;
-    if (t == null) return;
-    final next = _handlingNoteCtrl.text.trim();
-    final prev = (t.note ?? '').trim();
-    if (next == prev) return;
     setState(() => _busy = true);
     try {
       final updated = await context
           .read<ServiceRequestsProvider>()
-          .patchTicketHandlingNote(
-            widget.ticketId,
-            next.isEmpty ? null : next,
-          );
+          .confirmOnsitePaymentProposal(proposalId);
       if (!mounted) return;
       if (updated != null) {
         setState(() => _ticket = updated);
         AppMessenger.showSnackBar(
           context,
-          const SnackBar(content: Text('Đã lưu ghi chú.')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).saleOrderRecordPaymentConfirmSuccess,
+            ),
+          ),
         );
-        await _load();
       }
     } catch (e) {
       if (!mounted) return;
@@ -201,8 +266,204 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
     }
   }
 
-  Future<void> _action(String action, {Map<String, dynamic>? body}) async {
-    if (_busy) return;
+  Widget _onsitePaymentCard(
+    BuildContext context,
+    AppLocalizations l10n,
+    ServiceTicketPublic t,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final remaining = t.displayAmountDue;
+    final paymentDone = t.isPaidCollecting;
+    const strike = TextDecoration.lineThrough;
+    final labelStyle = Theme.of(context).textTheme.bodyMedium;
+    final amtStyle = AppTextStyles.amount(context);
+    final canRecord = t.canRecordOnsitePayment && _canChangeAssignee(t);
+
+    return SectionCard(
+      title: l10n.saleOrderRecordPaymentTitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.ordersAmountDue,
+                  style: labelStyle?.copyWith(
+                    decoration: paymentDone ? strike : null,
+                    decorationColor: labelStyle.color,
+                  ),
+                ),
+              ),
+              if (remaining > 0)
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFE082),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      _money(remaining),
+                      style: amtStyle.copyWith(
+                        decoration: paymentDone ? strike : null,
+                        decorationColor: amtStyle.color,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  _money(remaining),
+                  style: amtStyle.copyWith(
+                    decoration: paymentDone ? strike : null,
+                    decorationColor: amtStyle.color,
+                  ),
+                ),
+            ],
+          ),
+          if (t.payments.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...List.generate(t.payments.length, (i) {
+              final p = t.payments[i];
+              final methodLabel = _paymentMethodLabel(p, l10n);
+              final schedLabel = _formatDateLabel(p.scheduledPaymentDate);
+              final dateLabel = _formatDateLabel(p.transDate);
+              final desc = (p.description ?? '').trim();
+              final proofUrls = p.proofImageUrls;
+              final statusLabel = (p.statusLabel ?? '').trim();
+              String title;
+              if (p.isPending) {
+                title =
+                    '$methodLabel · ${l10n.saleOrderRecordPaymentPendingShort}';
+              } else if (p.isUnpaid && (schedLabel ?? '').isNotEmpty) {
+                title = '$methodLabel · $schedLabel';
+              } else {
+                title = methodLabel;
+              }
+              return Container(
+                margin: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '#${i + 1}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.primary,
+                              ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Text(_money(p.amount), style: amtStyle),
+                      ],
+                    ),
+                    if (_isManager && p.isPending) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed: _busy
+                              ? null
+                              : () => _confirmOnsitePayment(p.id),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(88, 36),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                          ),
+                          child: Text(l10n.saleOrderConfirmPaymentProposal),
+                        ),
+                      ),
+                    ],
+                    if (dateLabel != null || statusLabel.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (dateLabel != null) dateLabel,
+                          if (statusLabel.isNotEmpty) statusLabel,
+                        ].join(' · '),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        desc,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                      ),
+                    ],
+                    if (proofUrls.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _openPaymentProofs(proofUrls),
+                          icon: const Icon(Icons.image_outlined, size: 18),
+                          label: Text(
+                            l10n.saleOrderRecordPaymentTransferProofView,
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+          ],
+          if (canRecord) ...[
+            const SizedBox(height: AppSpacing.space2),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _busy ? null : _openRecordOnsitePayment,
+                child: Text(l10n.saleOrderRecordPaymentButton),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _action(String action, {Map<String, dynamic>? body}) async {    if (_busy) return;
     setState(() => _busy = true);
     try {
       final updated = await context
@@ -232,7 +493,7 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
     final t = _ticket;
     if (t == null) return null;
     final hasCondition = t.evidences.any((e) => e.stage == 'condition');
-    if (!hasCondition) return 'Cần bằng chứng tình trạng sản phẩm.';
+    if (!hasCondition) return 'Cần tình trạng sản phẩm.';
     if (_conditionCtrl.text.trim().isEmpty) {
       return 'Nhập tình trạng sản phẩm.';
     }
@@ -251,17 +512,11 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
   String? _costBlockError() {
     final t = _ticket;
     if (t == null) return null;
-    if (t.costMode != 'free' && t.costMode != 'paid') {
-      return 'Chọn và lưu chi phí (Miễn phí / Có tính phí).';
-    }
-    if (t.costMode == 'free' && (t.freeReason ?? '').isEmpty) {
-      return 'Chọn lý do miễn phí.';
-    }
-    if (t.costMode == 'paid' && t.feeAmount <= 0) {
-      return 'Tổng chi phí phải lớn hơn 0.';
-    }
-    if (t.costMode == 'paid' && (t.paymentMethod ?? '').isEmpty) {
-      return 'Chọn hình thức thanh toán.';
+    final free =
+        t.costMode == 'free' || (t.costMode == null && t.isFree);
+    if (free) return null;
+    if (t.feeAmount <= 0) {
+      return 'Nhập phí hỗ trợ (hoặc chọn miễn phí) trong Sửa thông tin yêu cầu.';
     }
     return null;
   }
@@ -401,12 +656,12 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
   }
 
   Future<void> _reschedule() async {
-    final slot = _rescheduleSlotCtrl.text.trim();
+    final slot = normalizeAppointmentTimeLabel(_rescheduleSlotCtrl.text);
     final note = _rescheduleNoteCtrl.text.trim();
     if (slot.isEmpty) {
       AppMessenger.showSnackBar(
         context,
-        const SnackBar(content: Text('Nhập khung giờ hẹn.')),
+        const SnackBar(content: Text('Chọn giờ hẹn.')),
       );
       return;
     }
@@ -650,7 +905,6 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
     final open = t?.status == 'processing';
     final paused = t?.status == 'contact_failed';
     final canAssign = t != null && open && _canChangeAssignee(t) && !_busy;
-    final canEditNote = t != null && open && _canChangeAssignee(t) && !_busy;
     final canContactFailed =
         t != null && open && _canChangeAssignee(t) && !_busy;
     final canReschedule =
@@ -710,7 +964,7 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                 const SizedBox(height: 12),
                 SharedRequestInfoSection(
                   ticket: t,
-                  canEdit: open && !_busy,
+                  canEdit: (open || t.status == 'done') && !_busy,
                   onUpdated: (updated) {
                     setState(() => _ticket = updated);
                     _load();
@@ -719,56 +973,23 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'Nhân viên hỗ trợ',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      canAssign
-                          ? SearchableUserDropdown(
-                              labelText: 'NV hỗ trợ *',
-                              value: t.staffUserId.trim().isEmpty
-                                  ? null
-                                  : t.staffUserId,
-                              users: usersForPicker,
-                              onChanged: _changeAssignee,
-                            )
-                          : Text(
-                              _staffLabel(t),
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _handlingNoteCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Ghi chú của NV hỗ trợ',
+                  child: canAssign
+                      ? SearchableUserDropdown(
+                          labelText: 'NV hỗ trợ *',
+                          value: t.staffUserId.trim().isEmpty
+                              ? null
+                              : t.staffUserId,
+                          users: usersForPicker,
+                          onChanged: _changeAssignee,
+                        )
+                      : Text(
+                          _staffLabel(t),
+                          style: Theme.of(context).textTheme.bodyLarge,
                         ),
-                        enabled: canEditNote,
-                        maxLines: 3,
-                        onEditingComplete:
-                            canEditNote ? _saveHandlingNote : null,
-                      ),
-                      if (canEditNote) ...[
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _busy ? null : _saveHandlingNote,
-                            child: const Text('Lưu ghi chú'),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
                 ),
-                if (open || paused) ...[
+                if (_showOnsitePaymentCard(t)) ...[
                   const SizedBox(height: 12),
-                  EvidenceSection(
-                    ticketId: t.id,
-                    stage: 'contact',
-                    evidences: t.evidences,
-                    onChanged: _load,
-                    readOnly: !open,
-                    title: 'Bằng chứng không gặp được',
-                  ),
+                  _onsitePaymentCard(context, l10n, t),
                 ],
                 if (open) ...[
                   const SizedBox(height: 12),
@@ -778,7 +999,7 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                     evidences: t.evidences,
                     onChanged: _load,
                     readOnly: !open,
-                    title: 'Bằng chứng tình trạng SP *',
+                    title: 'Tình trạng SP *',
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -798,7 +1019,7 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                     evidences: t.evidences,
                     onChanged: _load,
                     readOnly: !open,
-                    title: 'Bằng chứng công việc *',
+                    title: 'Kết quả công việc *',
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -812,18 +1033,12 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                   ),
                   _inlineError(context, workErr),
                   const SizedBox(height: 12),
-                  OnsiteCostSection(
-                    ticket: t,
-                    readOnly: !open,
-                    onUpdated: (updated) {
-                      setState(() => _ticket = updated);
-                      _load();
-                    },
-                  ),
-                  _inlineError(context, costErr),
-                  const SizedBox(height: 12),
                   ..._signatureBlock(t, open: open),
                   _inlineError(context, sigErr),
+                  if (costErr != null) ...[
+                    const SizedBox(height: 8),
+                    _inlineError(context, costErr),
+                  ],
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed:
@@ -845,6 +1060,15 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  EvidenceSection(
+                    ticketId: t.id,
+                    stage: 'contact',
+                    evidences: t.evidences,
+                    onChanged: _load,
+                    readOnly: !open,
+                    title: 'Bằng chứng không gặp được',
+                  ),
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed:
@@ -854,15 +1078,18 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                 ],
                 if (!open && !paused) ...[
                   const SizedBox(height: 12),
-                  OnsiteCostSection(
-                    ticket: t,
-                    readOnly: true,
-                    onUpdated: (_) {},
-                  ),
-                  const SizedBox(height: 12),
                   ..._signatureBlock(t, open: false),
                 ],
                 if (paused) ...[
+                  const SizedBox(height: 12),
+                  EvidenceSection(
+                    ticketId: t.id,
+                    stage: 'contact',
+                    evidences: t.evidences,
+                    onChanged: _load,
+                    readOnly: true,
+                    title: 'Bằng chứng không gặp được',
+                  ),
                   const SizedBox(height: 16),
                   SectionCard(
                     title: 'Chọn lịch hẹn mới',
@@ -889,12 +1116,38 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                                   }
                                 },
                         ),
-                        TextField(
-                          controller: _rescheduleSlotCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Khung giờ hẹn *',
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Giờ hẹn *'),
+                          subtitle: Text(
+                            normalizeAppointmentTimeLabel(
+                                  _rescheduleSlotCtrl.text,
+                                ).isEmpty
+                                ? formatAppointmentTimeOfDay(
+                                    defaultAppointmentTime,
+                                  )
+                                : normalizeAppointmentTimeLabel(
+                                    _rescheduleSlotCtrl.text,
+                                  ),
                           ),
+                          trailing: const Icon(Icons.access_time),
                           enabled: canReschedule,
+                          onTap: !canReschedule
+                              ? null
+                              : () async {
+                                  final picked = await pickAppointmentTimeOfDay(
+                                    context,
+                                    initial: parseAppointmentTimeOfDay(
+                                      _rescheduleSlotCtrl.text,
+                                    ),
+                                  );
+                                  if (picked != null) {
+                                    setState(() {
+                                      _rescheduleSlotCtrl.text =
+                                          formatAppointmentTimeOfDay(picked);
+                                    });
+                                  }
+                                },
                         ),
                         const SizedBox(height: 8),
                         TextField(

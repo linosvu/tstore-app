@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
+import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
@@ -13,14 +14,14 @@ class LockedRequestInfoCard extends StatefulWidget {
     super.key,
     required this.request,
     this.onEdit,
-    this.appointmentDate,
-    this.appointmentSlot,
+    this.isFree,
+    this.feeAmount,
   });
 
   final ServiceRequestBrief request;
   final VoidCallback? onEdit;
-  final String? appointmentDate;
-  final String? appointmentSlot;
+  final bool? isFree;
+  final int? feeAmount;
 
   @override
   State<LockedRequestInfoCard> createState() => _LockedRequestInfoCardState();
@@ -68,19 +69,12 @@ class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
               request.productSerial!.isNotEmpty)
             _row('Serial', request.productSerial!),
           _row('Lỗi', request.issueDescription),
-          if (request.customerNote != null &&
-              request.customerNote!.trim().isNotEmpty)
-            _row('Ghi chú', request.customerNote!.trim()),
-          if ((widget.appointmentDate ?? '').trim().isNotEmpty ||
-              (widget.appointmentSlot ?? '').trim().isNotEmpty)
+          if (widget.isFree != null)
             _row(
-              'Thời gian hẹn',
-              [
-                if ((widget.appointmentDate ?? '').trim().isNotEmpty)
-                  widget.appointmentDate!.trim(),
-                if ((widget.appointmentSlot ?? '').trim().isNotEmpty)
-                  widget.appointmentSlot!.trim(),
-              ].join(' '),
+              'Phí',
+              widget.isFree!
+                  ? 'Miễn phí'
+                  : '${formatIntegerWithSeparator(widget.feeAmount ?? 0, kAppDefaultThousandsSeparator)} đ',
             ),
           if (request.attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -159,12 +153,19 @@ class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
                 _row('Địa chỉ mua', request.buyerAddress!),
             ],
           ],
+          if (request.customerNote != null &&
+              request.customerNote!.trim().isNotEmpty)
+            _row(
+              'Ghi chú',
+              request.customerNote!.trim(),
+              bold: true,
+            ),
         ],
       ),
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {bool bold = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.space1),
       child: Row(
@@ -174,10 +175,21 @@ class _LockedRequestInfoCardState extends State<LockedRequestInfoCard> {
             width: 88,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.w700 : null,
+              ),
             ),
           ),
-          Expanded(child: Text(value)),
+          Expanded(
+            child: Text(
+              value,
+              style: bold
+                  ? const TextStyle(fontWeight: FontWeight.w700)
+                  : null,
+            ),
+          ),
         ],
       ),
     );

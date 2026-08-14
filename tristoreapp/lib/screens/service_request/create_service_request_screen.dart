@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/utils/keyboard_utils.dart';
 import 'package:tstore/core/utils/media_upload_flow.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/widgets/media_picker_sheet.dart';
@@ -39,7 +40,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
   final _productCtrl = TextEditingController();
   final _serialCtrl = TextEditingController();
   final _issueCtrl = TextEditingController();
-  final _slotCtrl = TextEditingController(text: '09:00-11:00');
+  String _appointmentTime = formatAppointmentTimeOfDay(defaultAppointmentTime);
 
   late String _ticketType;
   bool _isFree = true;
@@ -85,7 +86,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
     _productCtrl.dispose();
     _serialCtrl.dispose();
     _issueCtrl.dispose();
-    _slotCtrl.dispose();
     super.dispose();
   }
 
@@ -190,9 +190,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         'isFree': _isFree,
         'feeAmount': _isFree ? 0 : _feeAmount,
         'appointmentDate': yyyyMmDd(_appointmentDate),
-        'appointmentSlot': _slotCtrl.text.trim().isEmpty
-            ? '09:00-11:00'
-            : _slotCtrl.text.trim(),
+        'appointmentSlot': _appointmentTime,
         // NV hỗ trợ / NV sửa chữa — mặc định người tạo (API).
       };
       final created =
@@ -239,6 +237,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
     return Scaffold(
       appBar: AppBar(title: Text(l10n.serviceRequestCreate)),
       body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
         children: [
           SectionCard(
@@ -289,12 +288,6 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
                 TextField(
                   controller: _addressCtrl,
                   decoration: InputDecoration(labelText: l10n.serviceAddress),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _customerNoteCtrl,
-                  decoration: const InputDecoration(labelText: 'Ghi chú'),
                   maxLines: 2,
                 ),
               ],
@@ -363,6 +356,27 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'Ghi chú',
+            titleTrailing: IconButton(
+              tooltip: 'Ẩn bàn phím',
+              visualDensity: VisualDensity.compact,
+              onPressed: dismissAppKeyboard,
+              icon: const Icon(Icons.keyboard_hide_outlined, size: 20),
+            ),
+            child: TextField(
+              controller: _customerNoteCtrl,
+              decoration: const InputDecoration(
+                hintText: 'Ghi chú nội bộ — hiện trên danh sách phiếu',
+              ),
+              minLines: 2,
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              onTapOutside: dismissKeyboardOnTapOutside,
             ),
           ),
           const SizedBox(height: 12),
@@ -452,11 +466,23 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
                   trailing: const Icon(Icons.calendar_today),
                   onTap: _pickDate,
                 ),
-                TextField(
-                  controller: _slotCtrl,
-                  decoration: InputDecoration(
-                    labelText: l10n.serviceAppointmentSlot,
-                  ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.serviceAppointmentSlot),
+                  subtitle: Text(_appointmentTime),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: () async {
+                    final picked = await pickAppointmentTimeOfDay(
+                      context,
+                      initial: parseAppointmentTimeOfDay(_appointmentTime),
+                    );
+                    if (picked != null) {
+                      setState(
+                        () => _appointmentTime =
+                            formatAppointmentTimeOfDay(picked),
+                      );
+                    }
+                  },
                 ),
               ],
             ),

@@ -118,8 +118,6 @@ class _OtherTicketScreenState extends State<OtherTicketScreen> {
                 if (t.request != null)
                   LockedRequestInfoCard(
                     request: t.request!,
-                    appointmentDate: t.appointmentDate,
-                    appointmentSlot: t.appointmentSlot,
                     onEdit: !open ||
                             _busy ||
                             !canEditTicketRequestInfoFromContext(context, t)

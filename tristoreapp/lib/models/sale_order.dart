@@ -296,6 +296,7 @@ class SaleOrderPublic {
     required this.subtotal,
     required this.linesPrepaidTotal,
     required this.amountDue,
+    this.outstandingDue,
     this.linkedPreparationStatus,
     this.linkedDeliveryStatus,
     this.linkedPreparationAssignedName,
@@ -342,6 +343,9 @@ class SaleOrderPublic {
   final int subtotal;
   final int linesPrepaidTotal;
   final int amountDue;
+
+  /// Còn phải thu sau khi trừ ghi nhận chờ duyệt (API `outstandingDue`).
+  final int? outstandingDue;
 
   /// Trạng thái chuẩn bị mới nhất (chỉ có ở API danh sách đơn bán).
   final String? linkedPreparationStatus;
@@ -428,6 +432,13 @@ class SaleOrderPublic {
     return rem < 0 ? 0 : rem;
   }
 
+  /// Số còn phải thu để hiển thị (đã trừ ghi nhận chờ duyệt).
+  int get displayAmountDue {
+    final v = outstandingDue;
+    if (v != null) return v < 0 ? 0 : v;
+    return availableToRecordPayment;
+  }
+
   bool get isPaymentCollectedForFinish =>
       isPaymentStepDone && !hasPendingPaymentToConfirm;
 
@@ -501,6 +512,7 @@ class SaleOrderPublic {
       subtotal: (json['subtotal'] as num?)?.toInt() ?? 0,
       linesPrepaidTotal: (json['linesPrepaidTotal'] as num?)?.toInt() ?? 0,
       amountDue: (json['amountDue'] as num?)?.toInt() ?? 0,
+      outstandingDue: (json['outstandingDue'] as num?)?.toInt(),
       linkedPreparationStatus: json['linkedPreparationStatus'] as String?,
       linkedDeliveryStatus: json['linkedDeliveryStatus'] as String?,
       linkedPreparationAssignedName:

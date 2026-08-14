@@ -626,7 +626,7 @@ class AppLocalizations {
   String get ordersListSearchEmpty => 'Không tìm thấy đơn phù hợp.';
   String get ordersSearchHint => 'Mã đơn, tên khách, tên sản phẩm trong đơn…';
   String get ordersFilterAll => 'Tất cả';
-  String get ordersFilterPaymentUnpaid => 'Chưa TT Xong';
+  String get ordersFilterPaymentUnpaid => 'Công nợ';
   String get ordersFilterShowMore => 'Xem thêm';
   String get ordersFilterShowLess => 'Thu gọn';
   String get ordersOrderShort => 'Đơn';
@@ -822,7 +822,7 @@ class AppLocalizations {
   String get serviceDirection => 'Hướng xử lý';
   String get serviceFeeAppointment => 'Phí & lịch hẹn';
   String get serviceAppointmentDate => 'Ngày hẹn';
-  String get serviceAppointmentSlot => 'Khung giờ';
+  String get serviceAppointmentSlot => 'Giờ hẹn';
   String get serviceStaff => 'Nhân viên xử lý';
   String get serviceFilterSupportStaff => 'NV hỗ trợ';
   String get serviceFilterRepairStaff => 'Nhân viên sửa chữa';

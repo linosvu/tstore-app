@@ -13,6 +13,7 @@ import 'core/services/api_client.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/themes/app_theme.dart';
+import 'core/utils/keyboard_utils.dart';
 import 'providers/address_catalog_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/delivery_provider.dart';
@@ -174,6 +175,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
+        builder: (context, child) {
+          return GestureDetector(
+            onTap: dismissAppKeyboard,
+            behavior: HitTestBehavior.translucent,
+            child: child,
+          );
+        },
         home: const SplashScreen(),
         routes: AppRoutes.routes,
       ),

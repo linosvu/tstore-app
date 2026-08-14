@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:tstore/core/utils/amount_input.dart';
+import 'package:tstore/widgets/integer_thousands_input_formatter.dart';
+
+const _thousandsSep = kAppDefaultThousandsSeparator;
 
 /// Toggle miễn phí + nhập số tiền phí.
 class FeeField extends StatefulWidget {
@@ -23,20 +26,23 @@ class FeeField extends StatefulWidget {
 class _FeeFieldState extends State<FeeField> {
   late final TextEditingController _ctrl;
 
+  String _format(int v) =>
+      v > 0 ? formatIntegerWithSeparator(v, _thousandsSep) : '';
+
+  int _parse(String raw) => parseIntegerLoose(raw, _thousandsSep) ?? 0;
+
   @override
   void initState() {
     super.initState();
-    _ctrl = TextEditingController(
-      text: widget.feeAmount > 0 ? '${widget.feeAmount}' : '',
-    );
+    _ctrl = TextEditingController(text: _format(widget.feeAmount));
   }
 
   @override
   void didUpdateWidget(covariant FeeField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.feeAmount != widget.feeAmount &&
-        (int.tryParse(_ctrl.text) ?? 0) != widget.feeAmount) {
-      _ctrl.text = widget.feeAmount > 0 ? '${widget.feeAmount}' : '';
+        _parse(_ctrl.text) != widget.feeAmount) {
+      _ctrl.text = _format(widget.feeAmount);
     }
   }
 
@@ -64,9 +70,11 @@ class _FeeFieldState extends State<FeeField> {
               labelText: 'Phí hỗ trợ (đ)',
               border: OutlineInputBorder(),
             ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (v) => widget.onFeeChanged(int.tryParse(v) ?? 0),
+            keyboardType: integerThousandsKeyboardType(_thousandsSep),
+            inputFormatters: [
+              IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+            ],
+            onChanged: (v) => widget.onFeeChanged(_parse(v)),
           ),
       ],
     );

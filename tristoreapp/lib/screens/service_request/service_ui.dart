@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
 const serviceRequestChannels = [
@@ -48,6 +49,10 @@ bool isTicketClosed(String type, String status) {
       status == 'customer_rejected' ||
       status == 'cancelled';
 }
+
+/// HTN đã hoàn thành vẫn cho sửa phí rồi ghi nhận thanh toán.
+bool isOnsiteDone(String type, String status) =>
+    type == 'onsite' && status == 'done';
 
 String channelLabel(String c) {
   switch (c) {
@@ -182,6 +187,29 @@ String formatServiceTime(String? iso) {
       '${local.minute.toString().padLeft(2, '0')}';
 }
 
+/// Số tiền VNĐ có dấu chấm hàng nghìn (giống Đơn hàng).
+String formatServiceMoney(int v) =>
+    formatIntegerWithSeparator(v, ThousandsGroupSeparatorKey.dot);
+
+/// Format giá trị nhật ký có thể chứa số tiền (`1500000`, `cash:1500000`).
+String formatTicketLogMoneyValue(String? raw) {
+  final t = (raw ?? '').trim();
+  if (t.isEmpty) return '—';
+  if (t == 'free') return t;
+  if (t.startsWith('free:')) return t;
+  final methodAmount = RegExp(r'^([a-z_]+):(\d+)$').firstMatch(t);
+  if (methodAmount != null) {
+    final n = int.tryParse(methodAmount.group(2)!);
+    if (n == null) return t;
+    return '${methodAmount.group(1)}:${formatServiceMoney(n)}';
+  }
+  if (RegExp(r'^\d+$').hasMatch(t)) {
+    final n = int.tryParse(t);
+    if (n != null) return formatServiceMoney(n);
+  }
+  return t;
+}
+
 String yyyyMmDd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-'
     '${d.month.toString().padLeft(2, '0')}-'
@@ -221,13 +249,13 @@ const repairStepLabels = [
 ];
 
 const supportFlowStepLabels = [
-  'Tiếp nhận',
+  'Quản lý',
   'Hỗ trợ',
   'Thanh toán',
 ];
 
-/// 0 = Tiếp nhận, 1 = Hỗ trợ, 2 = Thanh toán; >=3 = tất cả xong.
-/// Tiếp nhận xong khi phiếu đã tạo; Hỗ trợ xong khi done; Thanh toán xong khi
+/// 0 = Quản lý, 1 = Hỗ trợ, 2 = Thanh toán; >=3 = tất cả xong.
+/// Quản lý xong khi phiếu đã tạo; Hỗ trợ xong khi done; Thanh toán xong khi
 /// miễn phí hoặc đã thu (không phải unpaid).
 int supportStepIndex({
   required String status,
@@ -235,9 +263,9 @@ int supportStepIndex({
   String? costMode,
   String? paymentMethod,
   int feeAmount = 0,
+  bool paymentCollected = false,
 }) {
-  final free = costMode == 'free' || (costMode == null && isFree);
-  final method = (paymentMethod ?? '').trim();
+  final free = feeAmount <= 0 || costMode == 'free';
 
   switch (status) {
     case 'processing':
@@ -248,10 +276,8 @@ int supportStepIndex({
     case 'taken':
       return 1;
     case 'done':
-      if (free) return 3;
-      // Chưa thu → còn bước Thanh toán; còn lại (đã thu / HTO không có HTTT) = xong.
-      if (method == 'unpaid') return 2;
-      return 3;
+      if (free || paymentCollected) return 3;
+      return 2;
     default:
       return 1;
   }
@@ -277,7 +303,7 @@ String deadlineRemainingLabel(String? iso, {bool markOverdue = false}) {
   return 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
 }
 
-/// «Hẹn 11/08 17:00» từ appointmentDate + slot.
+/// «Hẹn 11/08 17:00» từ appointmentDate + giờ cụ thể.
 String appointmentHintLabel(String? date, String? slot) {
   final d = (date ?? '').trim();
   if (d.isEmpty) return '';
@@ -287,13 +313,44 @@ String appointmentHintLabel(String? date, String? slot) {
     ddMm =
         '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}';
   }
-  final s = (slot ?? '').trim();
-  String time = '';
-  if (s.isNotEmpty) {
-    final m = RegExp(r'(\d{1,2}:\d{2})').firstMatch(s);
-    time = m?.group(1) ?? s;
-  }
+  final time = normalizeAppointmentTimeLabel(slot);
   return time.isEmpty ? 'Hẹn $ddMm' : 'Hẹn $ddMm $time';
+}
+
+const defaultAppointmentTime = TimeOfDay(hour: 9, minute: 0);
+
+String formatAppointmentTimeOfDay(TimeOfDay t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+/// Chuẩn hoá «09:00» hoặc legacy «09:00-11:00» → «09:00».
+String normalizeAppointmentTimeLabel(String? raw) {
+  final m = RegExp(r'(\d{1,2}):(\d{2})').firstMatch((raw ?? '').trim());
+  if (m == null) return '';
+  final h = int.tryParse(m.group(1)!);
+  final min = int.tryParse(m.group(2)!);
+  if (h == null || min == null) return '';
+  return '${h.clamp(0, 23).toString().padLeft(2, '0')}:'
+      '${min.clamp(0, 59).toString().padLeft(2, '0')}';
+}
+
+TimeOfDay parseAppointmentTimeOfDay(
+  String? raw, {
+  TimeOfDay fallback = defaultAppointmentTime,
+}) {
+  final label = normalizeAppointmentTimeLabel(raw);
+  if (label.isEmpty) return fallback;
+  final parts = label.split(':');
+  return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+}
+
+Future<TimeOfDay?> pickAppointmentTimeOfDay(
+  BuildContext context, {
+  TimeOfDay? initial,
+}) {
+  return showTimePicker(
+    context: context,
+    initialTime: initial ?? defaultAppointmentTime,
+  );
 }
 
 /// Thời gian đã sửa: từ [isoStart] đến hiện tại (ngày + giờ + phút).

@@ -780,7 +780,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             child: _OrderRowCard(
               order: o,
               amountText: _formatMoney(o.subtotal),
-              amountDueText: o.amountDue > 0 ? _formatMoney(o.amountDue) : null,
+              amountDueText:
+                  o.displayAmountDue > 0 ? _formatMoney(o.displayAmountDue) : null,
               subtitle: (o.orderSource == 'kiotviet' &&
                       o.kiotVietPurchaseDate != null)
                   ? _shortDate(o.kiotVietPurchaseDate!)
@@ -894,7 +895,7 @@ class _OrderRowCard extends StatelessWidget {
                                     behavior: HitTestBehavior.opaque,
                                     onTap: () async {
                                       await Clipboard.setData(
-                                        ClipboardData(text: order.id),
+                                        ClipboardData(text: order.displayCode),
                                       );
                                       if (!context.mounted) return;
                                       AppMessenger.showSnackBar(

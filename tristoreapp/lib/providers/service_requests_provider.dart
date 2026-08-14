@@ -22,11 +22,17 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? _ticketCostMode;
   String? _ticketStatus;
   bool _overdueOnly = false;
+  bool _dueSoonOnly = false;
   String _search = '';
 
   List<ServiceRequestPublic> get items {
-    if (!_overdueOnly) return _items;
-    return _items.where((r) => r.hasOverdueTicket).toList();
+    if (_overdueOnly) {
+      return _items.where((r) => r.hasOverdueTicket).toList();
+    }
+    if (_dueSoonOnly) {
+      return _items.where((r) => r.hasDueSoonTicket).toList();
+    }
+    return _items;
   }
 
   int get page => _page;
@@ -41,6 +47,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? get ticketCostMode => _ticketCostMode;
   String? get ticketStatus => _ticketStatus;
   bool get overdueOnly => _overdueOnly;
+  bool get dueSoonOnly => _dueSoonOnly;
   String get search => _search;
 
   void setTab(String tab) {
@@ -53,6 +60,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
     _statusFilter = status;
     _ticketStatus = null;
     _overdueOnly = false;
+    _dueSoonOnly = false;
     notifyListeners();
   }
 
@@ -75,6 +83,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
     _ticketStatus = status;
     _statusFilter = null;
     _overdueOnly = false;
+    _dueSoonOnly = false;
     notifyListeners();
   }
 
@@ -83,6 +92,17 @@ class ServiceRequestsProvider extends ChangeNotifier {
     if (value) {
       _statusFilter = null;
       _ticketStatus = null;
+      _dueSoonOnly = false;
+    }
+    notifyListeners();
+  }
+
+  void setDueSoonOnly(bool value) {
+    _dueSoonOnly = value;
+    if (value) {
+      _statusFilter = null;
+      _ticketStatus = null;
+      _overdueOnly = false;
     }
     notifyListeners();
   }
@@ -357,6 +377,30 @@ class ServiceRequestsProvider extends ChangeNotifier {
   Future<ServiceTicketPublic?> restoreTicket(String ticketId) async {
     final res = await _api.post<Map<String, dynamic>>(
       '/admin/service-tickets/$ticketId/restore',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> createOnsitePaymentProposal(
+    String ticketId,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/payment-proposals',
+      data: body,
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<ServiceTicketPublic?> confirmOnsitePaymentProposal(
+    String proposalId,
+  ) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      '/admin/service-tickets/payment-proposals/$proposalId/confirm',
     );
     final data = res.data;
     if (data == null) return null;

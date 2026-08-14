@@ -12,6 +12,7 @@ import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/theme/app_ui_extension.dart';
 import 'package:tstore/core/utils/amount_input.dart';
+import 'package:tstore/core/utils/keyboard_utils.dart';
 import 'package:tstore/models/product.dart';
 import 'package:tstore/models/sale_order.dart';
 import 'package:tstore/providers/address_catalog_provider.dart';
@@ -805,10 +806,9 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
     }
   }
 
-  bool _isKiotVietEdit(SaleOrderDraftProvider p) =>
-      p.orderSource == 'kiotviet' && p.orderStatus != 'draft';
+  bool _isPostDraftEdit(SaleOrderDraftProvider p) => p.orderStatus != 'draft';
 
-  Future<void> _saveKiotVietOrder() async {
+  Future<void> _saveExistingOrder() async {
     final l10n = AppLocalizations.of(context);
     final p = context.read<SaleOrderDraftProvider>();
     _syncNotesToDraft(p);
@@ -964,7 +964,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          _isKiotVietEdit(draft)
+          _isPostDraftEdit(draft)
               ? l10n.saleOrderDetailEditOrder
               : l10n.saleOrderFlowTitle,
         ),
@@ -1045,7 +1045,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                           label: Text(l10n.saleOrderNext),
                         ),
                       ),
-                    if (_step == 3 && _isKiotVietEdit(draft)) ...[
+                    if (_step == 3 && _isPostDraftEdit(draft)) ...[
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(0, AppSpacing.controlMinHeight),
@@ -1060,7 +1060,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                       Expanded(
                         child: FilledButton.icon(
                           onPressed:
-                              draft.saving ? null : _saveKiotVietOrder,
+                              draft.saving ? null : _saveExistingOrder,
                           icon: draft.saving
                               ? const SizedBox(
                                   width: 18,
@@ -1075,7 +1075,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
                         ),
                       ),
                     ],
-                    if (_step == 3 && !_isKiotVietEdit(draft))
+                    if (_step == 3 && !_isPostDraftEdit(draft))
                       Expanded(
                         child: FilledButton.icon(
                           onPressed: draft.saving ? null : _confirm,
@@ -1616,7 +1616,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
             },
           ),
         ],
-        if (!_isKiotVietEdit(p)) ...[
+        if (!_isPostDraftEdit(p)) ...[
         const Divider(height: 28),
         Row(
           children: [
@@ -1733,6 +1733,7 @@ class _SaleOrderFlowScaffoldState extends State<_SaleOrderFlowScaffold> {
             hintText: l10n.saleOrderNotesHint,
             alignLabelWithHint: true,
           ),
+          onTapOutside: dismissKeyboardOnTapOutside,
           onChanged: (_) => _syncNotesToDraft(p),
         ),
       ],

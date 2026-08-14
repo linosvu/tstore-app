@@ -24,7 +24,7 @@ class TicketAppointmentSlaHeader extends StatelessWidget {
 
   String get _apptLabel {
     final d = (ticket.appointmentDate ?? '').trim();
-    final s = (ticket.appointmentSlot ?? '').trim();
+    final s = normalizeAppointmentTimeLabel(ticket.appointmentSlot);
     if (d.isEmpty && s.isEmpty) return '—';
     return [if (d.isNotEmpty) d, if (s.isNotEmpty) s].join(' ');
   }
@@ -32,11 +32,10 @@ class TicketAppointmentSlaHeader extends StatelessWidget {
   Future<void> _editAppointment(BuildContext context) async {
     var date = DateTime.tryParse(ticket.appointmentDate ?? '') ??
         DateTime.now().add(const Duration(days: 1));
-    final slotCtrl = TextEditingController(
-      text: (ticket.appointmentSlot ?? '').trim().isEmpty
-          ? '09:00-11:00'
-          : ticket.appointmentSlot!,
-    );
+    var timeLabel = normalizeAppointmentTimeLabel(ticket.appointmentSlot);
+    if (timeLabel.isEmpty) {
+      timeLabel = formatAppointmentTimeOfDay(defaultAppointmentTime);
+    }
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -63,11 +62,22 @@ class TicketAppointmentSlaHeader extends StatelessWidget {
                       if (picked != null) setLocal(() => date = picked);
                     },
                   ),
-                  TextField(
-                    controller: slotCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Khung giờ hẹn',
-                    ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Giờ hẹn'),
+                    subtitle: Text(timeLabel),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: () async {
+                      final picked = await pickAppointmentTimeOfDay(
+                        ctx,
+                        initial: parseAppointmentTimeOfDay(timeLabel),
+                      );
+                      if (picked != null) {
+                        setLocal(
+                          () => timeLabel = formatAppointmentTimeOfDay(picked),
+                        );
+                      }
+                    },
                   ),
                 ],
               ),
@@ -86,13 +96,11 @@ class TicketAppointmentSlaHeader extends StatelessWidget {
         );
       },
     );
-    final slot = slotCtrl.text.trim();
-    slotCtrl.dispose();
     if (go != true || !context.mounted) return;
-    if (slot.isEmpty) {
+    if (timeLabel.isEmpty) {
       AppMessenger.showSnackBar(
         context,
-        const SnackBar(content: Text('Nhập khung giờ hẹn.')),
+        const SnackBar(content: Text('Chọn giờ hẹn.')),
       );
       return;
     }
@@ -101,7 +109,7 @@ class TicketAppointmentSlaHeader extends StatelessWidget {
           await context.read<ServiceRequestsProvider>().patchTicketAppointment(
                 ticket.id,
                 appointmentDate: yyyyMmDd(date),
-                appointmentSlot: slot,
+                appointmentSlot: timeLabel,
               );
       if (!context.mounted) return;
       if (updated != null) {
@@ -210,8 +218,8 @@ class SharedRequestInfoSection extends StatelessWidget {
         canEdit && canEditTicketRequestInfoFromContext(context, ticket);
     return LockedRequestInfoCard(
       request: req,
-      appointmentDate: ticket.appointmentDate,
-      appointmentSlot: ticket.appointmentSlot,
+      isFree: ticket.isCostFree,
+      feeAmount: ticket.feeAmount,
       onEdit: !allowEdit
           ? null
           : () async {

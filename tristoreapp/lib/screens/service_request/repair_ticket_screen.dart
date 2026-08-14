@@ -590,8 +590,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     final parsed = DateTime.tryParse(t?.appointmentDate ?? '');
     _reqAppointmentDate =
         parsed ?? DateTime.now().add(const Duration(days: 1));
-    final slot = (t?.appointmentSlot ?? '').trim();
-    _reqSlotCtrl.text = slot.isEmpty ? '09:00-11:00' : slot;
+    final slot = normalizeAppointmentTimeLabel(t?.appointmentSlot);
+    _reqSlotCtrl.text = slot.isEmpty
+        ? formatAppointmentTimeOfDay(defaultAppointmentTime)
+        : slot;
   }
 
   Future<void> _pickRequestAttachments() async {
@@ -653,9 +655,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ? null
             : _reqCustomerNoteCtrl.text.trim(),
         'appointmentDate': yyyyMmDd(_reqAppointmentDate),
-        'appointmentSlot': _reqSlotCtrl.text.trim().isEmpty
-            ? '09:00-11:00'
-            : _reqSlotCtrl.text.trim(),
+        'appointmentSlot': normalizeAppointmentTimeLabel(_reqSlotCtrl.text)
+                .isEmpty
+            ? formatAppointmentTimeOfDay(defaultAppointmentTime)
+            : normalizeAppointmentTimeLabel(_reqSlotCtrl.text),
       };
       final ticketUpdated = await context
           .read<ServiceRequestsProvider>()
@@ -721,8 +724,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (!_editingRequest) {
       return LockedRequestInfoCard(
         request: req,
-        appointmentDate: t.appointmentDate,
-        appointmentSlot: t.appointmentSlot,
         onEdit: !canEdit || _busy
             ? null
             : () {
@@ -848,10 +849,29 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                     }
                   },
           ),
-          TextField(
-            controller: _reqSlotCtrl,
-            decoration: const InputDecoration(labelText: 'Khung giờ hẹn'),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Giờ hẹn'),
+            subtitle: Text(
+              normalizeAppointmentTimeLabel(_reqSlotCtrl.text).isEmpty
+                  ? formatAppointmentTimeOfDay(defaultAppointmentTime)
+                  : normalizeAppointmentTimeLabel(_reqSlotCtrl.text),
+            ),
+            trailing: const Icon(Icons.access_time),
             enabled: !_busy,
+            onTap: _busy
+                ? null
+                : () async {
+                    final picked = await pickAppointmentTimeOfDay(
+                      context,
+                      initial: parseAppointmentTimeOfDay(_reqSlotCtrl.text),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _reqSlotCtrl.text = formatAppointmentTimeOfDay(picked);
+                      });
+                    }
+                  },
           ),
           const SizedBox(height: 12),
           Text(
@@ -2537,7 +2557,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               Text(
                 isFree || (d?.paymentMethod == 'free')
                     ? 'Miễn phí'
-                    : 'Đã ghi nhận: ${d?.paymentAmount ?? 0} đ',
+                    : 'Đã ghi nhận: ${_money(d?.paymentAmount ?? 0)} đ',
               ),
               Text('PT: ${d?.paymentMethod ?? '—'}'),
               if ((d?.paymentNote ?? '').trim().isNotEmpty)

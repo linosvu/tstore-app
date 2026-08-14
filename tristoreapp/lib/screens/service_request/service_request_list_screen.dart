@@ -146,98 +146,68 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                   AppSpacing.screenHorizontal,
                   0,
                 ),
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: l10n.serviceSearchHint,
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        prov.setSearch('');
-                        prov.load(reset: true);
-                      },
-                    ),
-                  ),
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (v) {
-                    prov.setSearch(v);
-                    prov.load(reset: true);
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.screenHorizontal,
-                  8,
-                  AppSpacing.screenHorizontal,
-                  0,
-                ),
-                child: _loadingUsers
-                    ? const LinearProgressIndicator()
-                    : Column(
-                        children: [
-                          TsDropdownFieldNullable<String>(
-                            value: prov.supportStaffUserId,
-                            labelText: widget.tab == 'repair'
-                                ? l10n.serviceFilterRepairStaff
-                                : l10n.serviceFilterSupportStaff,
-                            items: [
-                              null,
-                              ..._users.map((u) => u.$1),
-                            ],
-                            itemLabel: (id) {
-                              if (id == null) return 'Tất cả';
-                              for (final u in _users) {
-                                if (u.$1 == id) return u.$2;
-                              }
-                              return id;
-                            },
-                            onChanged: (v) {
-                              prov.setSupportStaffUserId(v);
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: InputDecoration(
+                          hintText: l10n.serviceSearchHint,
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              prov.setSearch('');
                               prov.load(reset: true);
                             },
                           ),
-                          if (widget.tab == 'support') ...[
-                            const SizedBox(height: 8),
-                            TsDropdownFieldNullable<String>(
-                              value: prov.ticketStaffUserId,
-                              labelText: 'NV phụ trách',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (v) {
+                          prov.setSearch(v);
+                          prov.load(reset: true);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: _loadingUsers
+                          ? const SizedBox(
+                              height: 48,
+                              child: Center(
+                                child: LinearProgressIndicator(),
+                              ),
+                            )
+                          : TsDropdownFieldNullable<String>(
+                              value: prov.supportStaffUserId,
                               items: [
                                 null,
                                 ..._users.map((u) => u.$1),
                               ],
                               itemLabel: (id) {
-                                if (id == null) return 'Tất cả';
+                                if (id == null) return 'Tất cả NV';
                                 for (final u in _users) {
                                   if (u.$1 == id) return u.$2;
                                 }
                                 return id;
                               },
                               onChanged: (v) {
-                                prov.setTicketStaffUserId(v);
+                                prov.setSupportStaffUserId(v);
                                 prov.load(reset: true);
                               },
                             ),
-                            const SizedBox(height: 8),
-                            TsDropdownFieldNullable<String>(
-                              value: prov.ticketCostMode,
-                              labelText: 'Chi phí',
-                              items: const [null, 'free', 'paid'],
-                              itemLabel: (id) {
-                                if (id == null) return 'Tất cả';
-                                if (id == 'free') return 'Miễn phí';
-                                return 'Có tính phí';
-                              },
-                              onChanged: (v) {
-                                prov.setTicketCostMode(v);
-                                prov.load(reset: true);
-                              },
-                            ),
-                          ],
-                        ],
-                      ),
+                    ),
+                  ],
+                ),
               ),
               _filterChips(prov),
               Expanded(child: _buildBody(l10n, prov)),
@@ -291,11 +261,31 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
             label: const Text('Tất cả'),
             selected: prov.statusFilter == null &&
                 prov.ticketStatus == null &&
-                !prov.overdueOnly,
+                !prov.overdueOnly &&
+                !prov.dueSoonOnly,
             onSelected: (_) {
               prov.setTicketStatus(null);
               prov.setStatusFilter(null);
               prov.setOverdueOnly(false);
+              prov.setDueSoonOnly(false);
+              prov.load(reset: true);
+            },
+          ),
+          const SizedBox(width: 6),
+          FilterChip(
+            label: const Text('Cần xử lý 24h'),
+            selected: prov.dueSoonOnly,
+            onSelected: (_) {
+              prov.setDueSoonOnly(true);
+              prov.load(reset: true);
+            },
+          ),
+          const SizedBox(width: 6),
+          FilterChip(
+            label: const Text('Quá hạn'),
+            selected: prov.overdueOnly,
+            onSelected: (_) {
+              prov.setOverdueOnly(true);
               prov.load(reset: true);
             },
           ),
@@ -325,14 +315,6 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
               const SizedBox(width: 6),
             ],
           ],
-          FilterChip(
-            label: const Text('Quá hạn'),
-            selected: prov.overdueOnly,
-            onSelected: (_) {
-              prov.setOverdueOnly(true);
-              prov.load(reset: true);
-            },
-          ),
         ],
       ),
     );

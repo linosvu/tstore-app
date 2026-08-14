@@ -32,8 +32,9 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
   bool _busy = false;
   List<(String, String)> _users = [];
   final _guideCtrl = TextEditingController();
-  final _noteCtrl = TextEditingController();
-  final _rescheduleSlotCtrl = TextEditingController(text: '09:00-11:00');
+  final _rescheduleSlotCtrl = TextEditingController(
+    text: formatAppointmentTimeOfDay(defaultAppointmentTime),
+  );
   final _rescheduleNoteCtrl = TextEditingController();
   DateTime _rescheduleDate = DateTime.now().add(const Duration(days: 1));
 
@@ -49,7 +50,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
   @override
   void dispose() {
     _guideCtrl.dispose();
-    _noteCtrl.dispose();
     _rescheduleSlotCtrl.dispose();
     _rescheduleNoteCtrl.dispose();
     super.dispose();
@@ -93,10 +93,9 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
       setState(() {
         _ticket = t;
         if (t?.guideContent != null) _guideCtrl.text = t!.guideContent!;
-        if (t?.note != null) _noteCtrl.text = t!.note!;
         final parsed = DateTime.tryParse(t?.appointmentDate ?? '');
         if (parsed != null) _rescheduleDate = parsed;
-        final slot = (t?.appointmentSlot ?? '').trim();
+        final slot = normalizeAppointmentTimeLabel(t?.appointmentSlot);
         if (slot.isNotEmpty) _rescheduleSlotCtrl.text = slot;
         _loading = false;
       });
@@ -202,7 +201,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
     }
     await _action('complete-online', body: {
       'guideContent': _guideCtrl.text.trim(),
-      if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
     });
   }
 
@@ -214,7 +212,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
     }
     await _action('fail-online', body: {
       'guideContent': _guideCtrl.text.trim(),
-      if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
     });
   }
 
@@ -302,12 +299,12 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
   }
 
   Future<void> _reschedule() async {
-    final slot = _rescheduleSlotCtrl.text.trim();
+    final slot = normalizeAppointmentTimeLabel(_rescheduleSlotCtrl.text);
     final note = _rescheduleNoteCtrl.text.trim();
     if (slot.isEmpty) {
       AppMessenger.showSnackBar(
         context,
-        const SnackBar(content: Text('Nhập khung giờ hẹn.')),
+        const SnackBar(content: Text('Chọn giờ hẹn.')),
       );
       return;
     }
@@ -529,27 +526,15 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'Hướng dẫn / xử lý',
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _guideCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Nội dung hướng dẫn *',
-                        ),
-                        minLines: 3,
-                        maxLines: 6,
-                        enabled: open,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _noteCtrl,
-                        decoration:
-                            InputDecoration(labelText: l10n.repairNotes),
-                        maxLines: 2,
-                        enabled: open,
-                      ),
-                    ],
+                  child: TextField(
+                    controller: _guideCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nội dung hướng dẫn *',
+                    ),
+                    minLines: 3,
+                    maxLines: 6,
+                    enabled: open,
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
                 if (open) ...[
@@ -624,12 +609,38 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                                   }
                                 },
                         ),
-                        TextField(
-                          controller: _rescheduleSlotCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Khung giờ hẹn *',
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Giờ hẹn *'),
+                          subtitle: Text(
+                            normalizeAppointmentTimeLabel(
+                                  _rescheduleSlotCtrl.text,
+                                ).isEmpty
+                                ? formatAppointmentTimeOfDay(
+                                    defaultAppointmentTime,
+                                  )
+                                : normalizeAppointmentTimeLabel(
+                                    _rescheduleSlotCtrl.text,
+                                  ),
                           ),
+                          trailing: const Icon(Icons.access_time),
                           enabled: canReschedule,
+                          onTap: !canReschedule
+                              ? null
+                              : () async {
+                                  final picked = await pickAppointmentTimeOfDay(
+                                    context,
+                                    initial: parseAppointmentTimeOfDay(
+                                      _rescheduleSlotCtrl.text,
+                                    ),
+                                  );
+                                  if (picked != null) {
+                                    setState(() {
+                                      _rescheduleSlotCtrl.text =
+                                          formatAppointmentTimeOfDay(picked);
+                                    });
+                                  }
+                                },
                         ),
                         const SizedBox(height: 8),
                         TextField(

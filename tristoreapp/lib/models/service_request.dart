@@ -1,6 +1,24 @@
 /// Phiếu yêu cầu / phiếu con từ `/admin/service-requests` & `/admin/service-tickets`.
 library;
 
+import 'dart:convert';
+
+/// 23:59:59.999 ngày mai (giờ máy).
+DateTime endOfTomorrowLocal() {
+  final now = DateTime.now();
+  final tomorrow = DateTime(now.year, now.month, now.day)
+      .add(const Duration(days: 1));
+  return DateTime(
+    tomorrow.year,
+    tomorrow.month,
+    tomorrow.day,
+    23,
+    59,
+    59,
+    999,
+  );
+}
+
 class ServiceAttachment {
   const ServiceAttachment({
     required this.url,
@@ -47,6 +65,8 @@ class ServiceTicketBrief {
     this.paymentAmount,
     this.partCost,
     this.laborCost,
+    this.outstandingDue,
+    this.hasConfirmedCollectingPayment = false,
     this.appointmentDate,
     this.appointmentSlot,
     this.deadlineAt,
@@ -78,6 +98,8 @@ class ServiceTicketBrief {
   final int? paymentAmount;
   final int? partCost;
   final int? laborCost;
+  final int? outstandingDue;
+  final bool hasConfirmedCollectingPayment;
   final String? appointmentDate;
   final String? appointmentSlot;
   final String? deadlineAt;
@@ -111,7 +133,54 @@ class ServiceTicketBrief {
       if (method == 'free') return true;
       if (paymentAmount != null) return paymentAmount == 0 && method == 'free';
     }
-    return costDisplayMode == 'free';
+    return feeAmount <= 0;
+  }
+
+  /// Hạn liên quan cần xử lý (deadline / hẹn gọi / ETA / hẹn giao).
+  DateTime? get dueHandleAt {
+    DateTime? best;
+    void consider(DateTime? dt) {
+      if (dt == null) return;
+      if (best == null || dt.isBefore(best!)) best = dt;
+    }
+
+    consider(DateTime.tryParse(deadlineAt ?? ''));
+    consider(DateTime.tryParse(contactDeadlineAt ?? ''));
+    consider(DateTime.tryParse(deliveryEta ?? ''));
+    final eta = (etaDate ?? '').trim();
+    if (eta.isNotEmpty) {
+      consider(
+        DateTime.tryParse(eta.length == 10 ? '${eta}T23:59:59' : eta),
+      );
+    }
+    return best?.toLocal();
+  }
+
+  /// Có hạn xử lý ≤ 23:59 ngày mai (kèm quá hạn).
+  bool get isDueSoon {
+    if (isTicketClosedStatus) return false;
+    final due = dueHandleAt;
+    if (due == null) return false;
+    return !due.isAfter(endOfTomorrowLocal());
+  }
+
+  bool get isTicketClosedStatus {
+    switch (type) {
+      case 'online':
+      case 'other':
+        return status == 'done' ||
+            status == 'failed' ||
+            status == 'cancelled';
+      case 'onsite':
+        return status == 'done' ||
+            status == 'failed' ||
+            status == 'taken' ||
+            status == 'cancelled';
+      default:
+        return status == 'completed' ||
+            status == 'customer_rejected' ||
+            status == 'cancelled';
+    }
   }
 
   factory ServiceTicketBrief.fromJson(Map<String, dynamic> json) {
@@ -135,6 +204,9 @@ class ServiceTicketBrief {
       paymentAmount: (json['paymentAmount'] as num?)?.toInt(),
       partCost: (json['partCost'] as num?)?.toInt(),
       laborCost: (json['laborCost'] as num?)?.toInt(),
+      outstandingDue: (json['outstandingDue'] as num?)?.toInt(),
+      hasConfirmedCollectingPayment:
+          json['hasConfirmedCollectingPayment'] as bool? ?? false,
       appointmentDate: json['appointmentDate'] as String?,
       appointmentSlot: json['appointmentSlot'] as String?,
       deadlineAt: json['deadlineAt'] as String?,
@@ -217,6 +289,8 @@ class ServiceRequestPublic {
       tickets.isEmpty ? null : tickets.last;
 
   bool get hasOverdueTicket => tickets.any((t) => t.isOverdue);
+
+  bool get hasDueSoonTicket => tickets.any((t) => t.isDueSoon);
 
   bool get isRepairDirection => direction == 'repair';
 
@@ -597,6 +671,111 @@ class TicketCostItem {
   Map<String, dynamic> toJson() => {'content': content, 'amount': amount};
 }
 
+class TicketUserBrief {
+  const TicketUserBrief({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory TicketUserBrief.fromJson(Map<String, dynamic> json) {
+    return TicketUserBrief(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+    );
+  }
+}
+
+class ServiceTicketPaymentPublic {
+  const ServiceTicketPaymentPublic({
+    required this.id,
+    required this.method,
+    this.methodLabel,
+    required this.amount,
+    this.statusLabel,
+    this.transDate,
+    this.description,
+    this.transferProofUrl,
+    List<String>? transferProofUrlsCached,
+    this.recordStatus,
+    this.requestedBy,
+    this.confirmedBy,
+    this.confirmedAt,
+    this.scheduledPaymentDate,
+  }) : _transferProofUrlsCached = transferProofUrlsCached;
+
+  final String id;
+  final String method;
+  final String? methodLabel;
+  final int amount;
+  final String? statusLabel;
+  final String? transDate;
+  final String? description;
+  final String? transferProofUrl;
+  final String? recordStatus;
+  final TicketUserBrief? requestedBy;
+  final TicketUserBrief? confirmedBy;
+  final String? confirmedAt;
+  final String? scheduledPaymentDate;
+  final List<String>? _transferProofUrlsCached;
+
+  bool get isUnpaid => method == 'unpaid';
+  bool get isCollecting => method == 'cash' || method == 'bank_transfer';
+  bool get isPending => recordStatus == 'pending';
+  bool get isConfirmed => recordStatus == 'confirmed';
+
+  List<String> get proofImageUrls {
+    if (_transferProofUrlsCached != null) return _transferProofUrlsCached;
+    final t = (transferProofUrl ?? '').trim();
+    if (t.isEmpty) return const [];
+    if (t.startsWith('[')) {
+      try {
+        final parsed = jsonDecode(t);
+        if (parsed is List) {
+          return [
+            for (final e in parsed)
+              if (e is String && e.trim().isNotEmpty) e.trim(),
+          ];
+        }
+      } catch (_) {}
+      return const [];
+    }
+    return [t];
+  }
+
+  factory ServiceTicketPaymentPublic.fromJson(Map<String, dynamic> json) {
+    final urlsRaw = json['transferProofUrls'];
+    List<String>? urls;
+    if (urlsRaw is List) {
+      urls = [
+        for (final e in urlsRaw)
+          if (e is String && e.trim().isNotEmpty) e.trim(),
+      ];
+    }
+    final reqRaw = json['requestedBy'];
+    final confRaw = json['confirmedBy'];
+    return ServiceTicketPaymentPublic(
+      id: json['id'] as String,
+      method: json['method'] as String? ?? '',
+      methodLabel: json['methodLabel'] as String?,
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      statusLabel: json['statusLabel'] as String?,
+      transDate: json['transDate'] as String?,
+      description: json['description'] as String?,
+      transferProofUrl: json['transferProofUrl'] as String?,
+      transferProofUrlsCached: urls,
+      recordStatus: json['recordStatus'] as String?,
+      requestedBy: reqRaw is Map<String, dynamic>
+          ? TicketUserBrief.fromJson(reqRaw)
+          : null,
+      confirmedBy: confRaw is Map<String, dynamic>
+          ? TicketUserBrief.fromJson(confRaw)
+          : null,
+      confirmedAt: json['confirmedAt'] as String?,
+      scheduledPaymentDate: json['scheduledPaymentDate'] as String?,
+    );
+  }
+}
+
 class ServiceTicketPublic {
   const ServiceTicketPublic({
     required this.id,
@@ -613,6 +792,9 @@ class ServiceTicketPublic {
     this.paymentMethod,
     this.costNote,
     this.costItems = const [],
+    this.payments = const [],
+    this.outstandingDue,
+    this.hasConfirmedCollectingPayment = false,
     this.appointmentDate,
     this.appointmentSlot,
     this.note,
@@ -652,6 +834,9 @@ class ServiceTicketPublic {
   final String? paymentMethod;
   final String? costNote;
   final List<TicketCostItem> costItems;
+  final List<ServiceTicketPaymentPublic> payments;
+  final int? outstandingDue;
+  final bool hasConfirmedCollectingPayment;
   final String? appointmentDate;
   final String? appointmentSlot;
   final String? note;
@@ -681,6 +866,32 @@ class ServiceTicketPublic {
   String get displayCode =>
       code ?? (id.length >= 8 ? id.substring(0, 8).toUpperCase() : id);
 
+  bool get isPaidCollecting =>
+      hasConfirmedCollectingPayment ||
+      payments.any((p) => p.isCollecting && p.isConfirmed);
+
+  int get displayAmountDue {
+    if (outstandingDue != null) return outstandingDue! < 0 ? 0 : outstandingDue!;
+    final subtracted = payments
+        .where((p) => p.isCollecting)
+        .fold<int>(0, (s, p) => s + p.amount);
+    final rem = feeAmount - subtracted;
+    return rem < 0 ? 0 : rem;
+  }
+
+  bool get hasPendingPayment => payments.any((p) => p.isPending);
+
+  bool get isCostFree => costMode == 'free' || feeAmount <= 0;
+
+  bool get canRecordOnsitePayment {
+    if (isCostFree) return false;
+    if (status == 'cancelled' || status == 'failed' || status == 'taken') {
+      return false;
+    }
+    if (isPaidCollecting) return hasPendingPayment;
+    return true;
+  }
+
   factory ServiceTicketPublic.fromJson(Map<String, dynamic> json) {
     final reqRaw = json['request'];
     final detailRaw = json['repairDetail'];
@@ -688,6 +899,7 @@ class ServiceTicketPublic {
     final logRaw = json['logs'];
     final sigRaw = json['signatures'];
     final itemsRaw = json['costItems'];
+    final payRaw = json['payments'];
     return ServiceTicketPublic(
       id: json['id'] as String,
       code: json['code'] as String?,
@@ -708,6 +920,16 @@ class ServiceTicketPublic {
                 if (e is Map<String, dynamic>) TicketCostItem.fromJson(e),
             ]
           : const [],
+      payments: payRaw is List
+          ? [
+              for (final e in payRaw)
+                if (e is Map<String, dynamic>)
+                  ServiceTicketPaymentPublic.fromJson(e),
+            ]
+          : const [],
+      outstandingDue: (json['outstandingDue'] as num?)?.toInt(),
+      hasConfirmedCollectingPayment:
+          json['hasConfirmedCollectingPayment'] as bool? ?? false,
       appointmentDate: json['appointmentDate'] as String?,
       appointmentSlot: json['appointmentSlot'] as String?,
       note: json['note'] as String?,

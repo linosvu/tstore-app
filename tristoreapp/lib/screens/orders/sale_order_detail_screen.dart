@@ -13,6 +13,7 @@ import 'package:tstore/core/constants/app_spacing.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/app_date_time.dart';
 import 'package:tstore/core/utils/dio_error_message.dart';
+import 'package:tstore/core/utils/keyboard_utils.dart';
 import 'package:tstore/utils/order_address_display.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/core/utils/amount_input.dart';
@@ -60,9 +61,6 @@ List<(String, StatusBadgeTone)> _detailLineBadges(
 
 /// Dịch mã phương thức KiotViet (Cash/Card/Transfer/...) sang tiếng Việt.
 /// Nếu chuỗi đã ở dạng đã localize (vd "Tiền mặt") thì trả nguyên.
-bool _paymentCountsAsCollected(SaleOrderPaymentPublic p) =>
-    p.recordStatus != 'pending' && !p.isScheduleReminder;
-
 String _localizedPaymentMethod(String raw, AppLocalizations l10n) {
   final s = raw.trim();
   if (s.isEmpty) return '—';
@@ -239,10 +237,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
 
   bool _canEdit(SaleOrderPublic o) => o.status == 'draft';
 
-  bool _canEditKiotViet(SaleOrderPublic o) =>
-      o.orderSource == 'kiotviet' &&
-      o.status != 'cancelled' &&
-      o.status != 'refund';
+  bool _canEditOrderContent(SaleOrderPublic o) =>
+      o.status != 'cancelled' && o.status != 'refund';
 
   bool _canEditOrderNotes(SaleOrderPublic o) =>
       o.status != 'cancelled' && o.status != 'refund';
@@ -252,7 +248,8 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
       o.status != 'refund' &&
       o.status != 'completed';
 
-  bool _canOpenEdit(SaleOrderPublic o) => _canEdit(o) || _canEditKiotViet(o);
+  bool _canOpenEdit(SaleOrderPublic o) =>
+      _canEdit(o) || _canEditOrderContent(o);
 
   bool _canCancel(SaleOrderPublic o) =>
       !o.isDeleted && (o.status == 'draft' || o.status == 'confirmed');
@@ -2120,6 +2117,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 5),
                 child: Builder(
                   builder: (context) {
+                    final remaining = o.displayAmountDue;
                     final paymentDone = o.isPaymentStepDone;
                     const strike = TextDecoration.lineThrough;
                     final labelStyle = Theme.of(context).textTheme.bodyMedium;
@@ -2139,7 +2137,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                             ),
                           ),
                         ),
-                        if (o.amountDue > 0)
+                        if (remaining > 0)
                           DecoratedBox(
                             decoration: BoxDecoration(
                               color: const Color(0xFFFFE082),
@@ -2151,7 +2149,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                 vertical: 4,
                               ),
                               child: Text(
-                                _money(o.amountDue),
+                                _money(remaining),
                                 style: amtStyle.copyWith(
                                   decoration:
                                       paymentDone ? strike : null,
@@ -2162,7 +2160,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                           )
                         else
                           Text(
-                            _money(o.amountDue),
+                            _money(remaining),
                             style: amtStyle.copyWith(
                               decoration: paymentDone ? strike : null,
                               decorationColor: amtColor,
@@ -2190,7 +2188,7 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                     Text(
                       _money(
                         o.payments
-                            .where(_paymentCountsAsCollected)
+                            .where((p) => !p.isScheduleReminder)
                             .fold<int>(0, (s, e) => s + e.amount),
                       ),
                       style: AppTextStyles.amount(context),
@@ -2462,6 +2460,9 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                         minLines: 2,
                         maxLines: 5,
                         maxLength: 500,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        onTapOutside: dismissKeyboardOnTapOutside,
                         decoration: InputDecoration(
                           hintText: l10n.saleOrderNotesHint,
                           border: const OutlineInputBorder(),

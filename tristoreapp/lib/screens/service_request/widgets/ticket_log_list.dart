@@ -40,11 +40,11 @@ class TicketLogList extends StatelessWidget {
                                   ((log.oldValue ?? '').isNotEmpty ||
                                       (log.newValue ?? '').isNotEmpty))
                                 Text(
-                                  '${log.field}: ${log.oldValue ?? '—'} → ${log.newValue ?? '—'}',
+                                  '${log.field}: ${formatTicketLogMoneyValue(log.oldValue)} → ${formatTicketLogMoneyValue(log.newValue)}',
                                 )
                               else if (log.newValue != null &&
                                   log.newValue!.isNotEmpty)
-                                Text(log.newValue!),
+                                Text(formatTicketLogMoneyValue(log.newValue)),
                               if (log.reason != null && log.reason!.isNotEmpty)
                                 Text('Lý do: ${log.reason}'),
                               Text(
