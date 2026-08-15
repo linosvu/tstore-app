@@ -1,12 +1,13 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
 
 import '../services/api_client.dart';
+import 'dio_error_message.dart';
 
 class UploadConfig {
   const UploadConfig({
@@ -65,6 +66,15 @@ String _guessVideoMime(String path) {
       return 'video/webm';
     case '.avi':
       return 'video/x-msvideo';
+    case '.3gp':
+    case '.3gpp':
+      return 'video/3gpp';
+    case '.mkv':
+      return 'video/x-matroska';
+    case '.mpeg':
+    case '.mpg':
+      return 'video/mpeg';
+    case '.m4v':
     default:
       return 'video/mp4';
   }
@@ -144,15 +154,15 @@ Future<MediaUploadResult?> uploadVideoFromPath(
   if (!await file.exists()) return null;
 
   onProgress?.call(0);
-  final bytes = await file.readAsBytes();
-  if (bytes.isEmpty) return null;
-
   final mime = _guessVideoMime(path);
-  final filename = p.basename(path);
+  var filename = p.basename(path).trim();
+  if (filename.isEmpty || !filename.contains('.')) {
+    filename = 'video.mp4';
+  }
 
   final form = FormData.fromMap({
-    'file': MultipartFile.fromBytes(
-      bytes,
+    'file': await MultipartFile.fromFile(
+      path,
       filename: filename,
       contentType: DioMediaType.parse(mime),
     ),
@@ -162,6 +172,10 @@ Future<MediaUploadResult?> uploadVideoFromPath(
     final res = await api.post<Map<String, dynamic>>(
       '/admin/upload',
       data: form,
+      options: Options(
+        sendTimeout: const Duration(minutes: 5),
+        receiveTimeout: const Duration(minutes: 3),
+      ),
       onSendProgress: (sent, total) {
         if (total > 0) {
           onProgress?.call((sent / total).clamp(0.0, 1.0));
@@ -178,7 +192,8 @@ Future<MediaUploadResult?> uploadVideoFromPath(
       mediaType: data['mediaType'] as String? ?? 'video',
       mimeType: data['mimeType'] as String? ?? mime,
     );
-  } on DioException {
+  } on DioException catch (e) {
+    debugPrint('uploadVideo failed: ${dioErrorMessage(e)} ${e.response?.data}');
     return null;
   }
 }

@@ -50,14 +50,28 @@ class _EvidenceSectionState extends State<EvidenceSection> {
     final api = context.read<AuthProvider>().api;
     final prov = context.read<ServiceRequestsProvider>();
     try {
+      var anyFail = false;
       for (final pick in picks) {
         final uploaded = await uploadPickedMedia(pick: pick, api: api);
-        if (uploaded == null || uploaded.url.isEmpty) continue;
+        if (uploaded == null || uploaded.url.isEmpty) {
+          anyFail = true;
+          continue;
+        }
         await prov.addEvidence(widget.ticketId, {
           'stage': widget.stage,
-          'kind': pick.isVideo ? 'video' : 'image',
+          'kind': uploaded.mediaType == 'video' || pick.isVideo
+              ? 'video'
+              : 'image',
           'fileUrl': uploaded.url,
         });
+      }
+      if (anyFail && mounted) {
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(
+            content: Text('Một số ảnh/video không tải lên được. Thử video ngắn hơn.'),
+          ),
+        );
       }
       widget.onChanged();
     } catch (e) {

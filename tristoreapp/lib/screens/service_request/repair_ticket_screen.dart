@@ -606,13 +606,25 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
     setState(() => _busy = true);
     try {
+      var anyFail = false;
       for (final pick in picks) {
         final uploaded = await uploadPickedMedia(pick: pick, api: api);
-        if (uploaded == null) continue;
+        if (uploaded == null) {
+          anyFail = true;
+          continue;
+        }
         _reqAttachments.add({
           'url': uploaded.url,
-          'mediaType': pick.isVideo ? 'video' : 'image',
+          'mediaType': uploaded.mediaType,
         });
+      }
+      if (anyFail && mounted) {
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(
+            content: Text('Một số ảnh/video không tải lên được. Thử video ngắn hơn.'),
+          ),
+        );
       }
       if (mounted) setState(() {});
     } catch (e) {

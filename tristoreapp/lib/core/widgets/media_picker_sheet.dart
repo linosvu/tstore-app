@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as p;
 
 import '../localization/app_localizations.dart';
 import '../utils/media_upload.dart';
@@ -22,19 +21,6 @@ class MediaPickResult {
 
   final String path;
   final bool isVideo;
-}
-
-bool _looksLikeVideoPath(String path) {
-  final ext = p.extension(path).toLowerCase();
-  return const {
-    '.mp4',
-    '.mov',
-    '.m4v',
-    '.avi',
-    '.mkv',
-    '.webm',
-    '.3gp',
-  }.contains(ext);
 }
 
 /// Chọn media: camera = 1 file; thư viện ảnh/video = nhiều file.
@@ -138,12 +124,10 @@ Future<List<MediaPickResult>?> showMediaPickerSheet(
       case MediaPickKind.galleryVideo:
         final xs = await picker.pickMultiVideo(maxDuration: maxVideoDuration);
         if (xs.isEmpty) return null;
+        // Luôn đánh dấu video: Android thường copy file cache không có đuôi
+        // (.mp4/.mov) — đoán theo path sẽ gửi nhầm vào luồng nén ảnh.
         return [
-          for (final x in xs)
-            MediaPickResult(
-              path: x.path,
-              isVideo: _looksLikeVideoPath(x.path),
-            ),
+          for (final x in xs) MediaPickResult(path: x.path, isVideo: true),
         ];
     }
   } on PlatformException catch (e) {
