@@ -14,7 +14,8 @@ bool canEditTicketRequestInfo(ServiceTicketPublic ticket, String? role, String? 
   if (closed && !isOnsiteDone(ticket.type, ticket.status)) return false;
   if (role == 'admin' || role == 'manager') return true;
   if (userId == null || userId.isEmpty) return false;
-  return ticket.staffUserId == userId;
+  final assigned = ticket.staffUserId.trim();
+  return assigned.isEmpty || assigned == userId;
 }
 
 /// Form sửa Tên / SĐT / SP / Lỗi / Phí / Thời gian hẹn / Ghi chú.

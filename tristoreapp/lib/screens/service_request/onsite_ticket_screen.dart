@@ -121,7 +121,8 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
     if (role == 'admin' || role == 'manager') return true;
     final uid = user?.id;
     if (uid == null || uid.isEmpty) return false;
-    return t.staffUserId == uid;
+    final assigned = t.staffUserId.trim();
+    return assigned.isEmpty || assigned == uid;
   }
 
   bool get _isManager {
@@ -135,7 +136,7 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
   String _staffLabel(ServiceTicketPublic t) {
     final name = (t.staffName ?? '').trim();
     if (name.isNotEmpty) return name;
-    return t.staffUserId.trim().isEmpty ? '—' : t.staffUserId;
+    return t.staffUserId.trim().isEmpty ? 'Chưa gán' : t.staffUserId;
   }
 
   Future<void> _changeAssignee(String staffUserId) async {
@@ -975,7 +976,8 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                   title: 'Nhân viên hỗ trợ',
                   child: canAssign
                       ? SearchableUserDropdown(
-                          labelText: 'NV hỗ trợ *',
+                          labelText: 'NV hỗ trợ',
+                          hintText: 'Chưa gán',
                           value: t.staffUserId.trim().isEmpty
                               ? null
                               : t.staffUserId,
@@ -987,6 +989,23 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                           style: Theme.of(context).textTheme.bodyLarge,
                         ),
                 ),
+                const SizedBox(height: 12),
+                EvidenceSection(
+                  ticketId: t.id,
+                  stage: 'contact',
+                  evidences: t.evidences,
+                  onChanged: _load,
+                  readOnly: !open,
+                  title: 'Bằng chứng không gặp được',
+                ),
+                if (open) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed:
+                        !canContactFailed ? null : _promptContactFailed,
+                    child: const Text('Không gặp được khách'),
+                  ),
+                ],
                 if (_showOnsitePaymentCard(t)) ...[
                   const SizedBox(height: 12),
                   _onsitePaymentCard(context, l10n, t),
@@ -1060,21 +1079,6 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  EvidenceSection(
-                    ticketId: t.id,
-                    stage: 'contact',
-                    evidences: t.evidences,
-                    onChanged: _load,
-                    readOnly: !open,
-                    title: 'Bằng chứng không gặp được',
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed:
-                        !canContactFailed ? null : _promptContactFailed,
-                    child: const Text('Không gặp được khách'),
-                  ),
                 ],
                 if (!open && !paused) ...[
                   const SizedBox(height: 12),
@@ -1082,15 +1086,6 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                 ],
                 if (paused) ...[
                   const SizedBox(height: 12),
-                  EvidenceSection(
-                    ticketId: t.id,
-                    stage: 'contact',
-                    evidences: t.evidences,
-                    onChanged: _load,
-                    readOnly: true,
-                    title: 'Bằng chứng không gặp được',
-                  ),
-                  const SizedBox(height: 16),
                   SectionCard(
                     title: 'Chọn lịch hẹn mới',
                     child: Column(

@@ -203,7 +203,7 @@ class _CreateServiceRequestScreenState extends State<CreateServiceRequestScreen>
         'feeAmount': _isFree ? 0 : _feeAmount,
         'appointmentDate': yyyyMmDd(_appointmentDate),
         'appointmentSlot': _appointmentTime,
-        // NV hỗ trợ / NV sửa chữa — mặc định người tạo (API).
+        // NV hỗ trợ HTO/HTN: API mặc định chưa gán. SC mặc định người tạo.
       };
       final created =
           await context.read<ServiceRequestsProvider>().createRequest(body);

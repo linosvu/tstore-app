@@ -114,10 +114,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
       _ticket?.evidences.any((e) => e.stage == 'contact') ?? false;
 
   String? _completeBlockReason({required bool requireGuide}) {
-    final staffId = (_ticket?.staffUserId ?? '').trim();
-    if (staffId.isEmpty) {
-      return 'Chọn nhân viên kỹ thuật phụ trách.';
-    }
     if (!_hasContactEvidence) {
       return 'Cần thêm bằng chứng liên hệ (ảnh/video/ghi âm).';
     }
@@ -133,7 +129,8 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
     if (role == 'admin' || role == 'manager') return true;
     final uid = user?.id;
     if (uid == null || uid.isEmpty) return false;
-    return t.staffUserId == uid;
+    final assigned = t.staffUserId.trim();
+    return assigned.isEmpty || assigned == uid;
   }
 
   Future<void> _changeAssignee(String staffUserId) async {
@@ -406,7 +403,7 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
 
   String _staffLabel(ServiceTicketPublic t) {
     final id = t.staffUserId.trim();
-    if (id.isEmpty) return '—';
+    if (id.isEmpty) return 'Chưa gán';
     for (final u in _users) {
       if (u.$1 == id) return u.$2;
     }
@@ -502,7 +499,8 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                   title: 'Nhân viên kỹ thuật phụ trách',
                   child: canAssign
                       ? SearchableUserDropdown(
-                          labelText: 'KTV phụ trách *',
+                          labelText: 'KTV phụ trách',
+                          hintText: 'Chưa gán',
                           value: t.staffUserId.trim().isEmpty
                               ? null
                               : t.staffUserId,
@@ -521,8 +519,15 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                   evidences: t.evidences,
                   onChanged: _load,
                   readOnly: !open,
-                  title: 'Bằng chứng liên hệ *',
+                  title: 'Bằng chứng liên hệ / không liên hệ được',
                 ),
+                if (open) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: !canContactFailed ? null : _promptContactFailed,
+                    child: const Text('Không liên hệ được'),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'Hướng dẫn / xử lý',
@@ -557,11 +562,6 @@ class _OnlineTicketScreenState extends State<OnlineTicketScreen> {
                   OutlinedButton(
                     onPressed: _busy || completeBlock != null ? null : _fail,
                     child: const Text('Thất bại'),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: !canContactFailed ? null : _promptContactFailed,
-                    child: const Text('Không liên hệ được'),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
