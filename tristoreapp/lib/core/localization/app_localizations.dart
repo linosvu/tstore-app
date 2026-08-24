@@ -626,6 +626,7 @@ class AppLocalizations {
   String get ordersListSearchEmpty => 'Không tìm thấy đơn phù hợp.';
   String get ordersSearchHint => 'Mã đơn, tên khách, tên sản phẩm trong đơn…';
   String get ordersFilterAll => 'Tất cả';
+  String get ordersFilterDueSoon => 'Cần xử lý 24h';
   String get ordersFilterPaymentUnpaid => 'Công nợ';
   String get ordersFilterShowMore => 'Xem thêm';
   String get ordersFilterShowLess => 'Thu gọn';

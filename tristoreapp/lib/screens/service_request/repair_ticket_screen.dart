@@ -22,6 +22,8 @@ import 'widgets/countdown_banner.dart';
 import 'widgets/edit_request_info_sheet.dart';
 import 'widgets/evidence_section.dart';
 import 'widgets/locked_request_info_card.dart';
+import 'widgets/repair/deadline_card.dart';
+import 'widgets/repair/sub_status_badge.dart';
 import 'widgets/repair_stepper.dart';
 import 'widgets/signature_pad.dart';
 import 'widgets/signature_thumb.dart';
@@ -48,11 +50,24 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   int? _previewStepIndex;
 
   // Handoff / inspect
+  static const _defaultTermsText =
+      'Kỹ thuật hỗ trợ Phong — 034 621 2738 hoặc Tây — 090 577 8145. '
+      'Trong vòng 3 ngày kỹ thuật báo tình trạng máy và thời gian dự kiến hoàn thành.';
+
+  String? _technicianId;
+  String? _vendorId;
+  String? _repairType;
+  String? _sendStaffUserId;
+  String? _pickupStaffUserId;
+  List<RepairTechnicianPublic> _technicians = [];
+  List<RepairVendorPublic> _vendors = [];
   String? _techUserId;
   String? _receiveStaffUserId;
   DateTime _contactDeadline = DateTime.now().add(const Duration(hours: 4));
   String? _repairMethod;
   bool _inspectFormDirty = false;
+  bool _termsDirty = false;
+  final _termsCtrl = TextEditingController();
   final _initialCtrl = TextEditingController();
   final _receiveNoteCtrl = TextEditingController();
   final _methodNoteCtrl = TextEditingController();
@@ -112,12 +127,25 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
       _loadUsers();
+      _loadRepairConfig();
+    });
+  }
+
+  Future<void> _loadRepairConfig() async {
+    final prov = context.read<ServiceRequestsProvider>();
+    final vendors = await prov.fetchRepairVendors();
+    final techs = await prov.fetchRepairTechnicians();
+    if (!mounted) return;
+    setState(() {
+      _vendors = vendors;
+      _technicians = techs;
     });
   }
 
   @override
   void dispose() {
     _initialCtrl.dispose();
+    _termsCtrl.dispose();
     _receiveNoteCtrl.dispose();
     _methodNoteCtrl.dispose();
     _reqNameCtrl.dispose();
@@ -216,10 +244,24 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           _initialCtrl.text = detail?.initialAssessment ?? '';
           _methodNoteCtrl.text = detail?.extraNote ?? '';
           _repairMethod = detail?.repairMethod;
+          _technicianId = detail?.technicianId;
+          _vendorId = detail?.vendorId;
+          _repairType = detail?.repairType ??
+              (detail?.repairMethod == 'store'
+                  ? 'in_store'
+                  : detail?.repairMethod != null
+                      ? 'external'
+                      : null);
           if (detail?.contactDeadlineAt != null) {
             final parsed = DateTime.tryParse(detail!.contactDeadlineAt!);
             if (parsed != null) _contactDeadline = parsed;
           }
+        }
+
+        if (!_termsDirty) {
+          final terms = detail?.termsText?.trim();
+          _termsCtrl.text =
+              (terms != null && terms.isNotEmpty) ? terms : _defaultTermsText;
         }
 
         // Chỉ seed khi form chưa dirty — tránh hồi sinh ghi chú sau khi user xóa
@@ -350,6 +392,24 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return null;
   }
 
+  Future<void> _updateRepairTerms() async {
+    final ok = await context.read<ServiceRequestsProvider>().patchTicket(
+          widget.ticketId,
+          'repair-terms',
+          body: {'termsText': _termsCtrl.text.trim()},
+        );
+    if (ok != null && mounted) {
+      setState(() {
+        _termsDirty = false;
+        _ticket = ok;
+      });
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Đã lưu cam kết')),
+      );
+    }
+  }
+
   Future<void> _handoff(ServiceTicketPublic t) async {
     final block = _handoffBlockReason(t);
     if (block != null) {
@@ -364,59 +424,67 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (mounted) setState(() => _inspectFormDirty = false);
   }
 
-  String? _startRepairBlockReason(ServiceTicketPublic t, RepairDetailPublic? d) {
-    if (t.staffUserId.trim().isEmpty) {
-      return 'QL cần bàn giao kỹ thuật (chọn KTV + hẹn gọi).';
-    }
-    if (d?.contactDeadlineAt == null) {
-      return 'QL cần chọn giờ hẹn gọi khách.';
-    }
+  String? _confirmInspectBlockReason(ServiceTicketPublic t) {
     if (_initialCtrl.text.trim().isEmpty) {
       return 'Nhập đánh giá ban đầu.';
     }
-    if (d?.contactConfirmedAt == null) {
-      return 'Cần xác nhận đã liên hệ khách.';
+    if (_technicianId == null || _technicianId!.isEmpty) {
+      return 'Chọn nhân viên kỹ thuật.';
     }
-    if (!t.evidences.any((e) => e.stage == 'contact')) {
-      return 'Cần bằng chứng gọi khách.';
-    }
-    if (_repairMethod == null) {
-      return 'Chọn hình thức sửa chữa.';
+    if (_repairType == null) return 'Chọn hình thức sửa chữa.';
+    if (_repairType == 'external' &&
+        (_vendorId == null || _vendorId!.isEmpty)) {
+      return 'Chọn đơn vị sửa ngoài.';
     }
     if (!t.evidences.any((e) => e.stage == 'repair_method')) {
-      return 'Cần ảnh/video bàn giao hình thức sửa chữa.';
+      return 'Cần ảnh/video hình thức sửa chữa.';
     }
     return null;
   }
 
-  Future<void> _assignTech(ServiceTicketPublic t) async {
-    if (_techUserId == null) {
-      AppMessenger.showSnackBar(
-        context,
-        const SnackBar(content: Text('Chọn nhân viên kỹ thuật.')),
-      );
-      return;
-    }
-    setState(() => _inspectFormDirty = true);
-    await _action('assign-tech', body: {
-      'techUserId': _techUserId,
-      'contactDeadlineAt': _contactDeadline.toUtc().toIso8601String(),
-    });
-  }
-
-  Future<void> _startRepair(ServiceTicketPublic t, RepairDetailPublic? d) async {
-    final block = _startRepairBlockReason(t, d);
+  Future<void> _confirmInspect(ServiceTicketPublic t) async {
+    final block = _confirmInspectBlockReason(t);
     if (block != null) {
       AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
       return;
     }
-    await _action('start-repair', body: {
-      'repairMethod': _repairMethod,
+    await _action('confirm-inspect', body: {
       'initialAssessment': _initialCtrl.text.trim(),
+      'technicianId': _technicianId,
+      'repairType': _repairType,
+      if (_repairType == 'external') 'vendorId': _vendorId,
       if (_methodNoteCtrl.text.trim().isNotEmpty)
         'extraNote': _methodNoteCtrl.text.trim(),
     });
     if (mounted) setState(() => _inspectFormDirty = false);
+  }
+
+  Future<void> _saveRepairWork() async {
+    await _action('save-repair-work', body: {
+      'solution': _solutionCtrl.text.trim(),
+      'partCost': _parseCostField(_partCostCtrl),
+      'laborCost': _parseCostField(_laborCostCtrl),
+      'warrantyMonths': int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
+    });
+    if (mounted) setState(() => _repairFormDirty = false);
+  }
+
+  Future<void> _openExtendDeadline(ServiceTicketPublic t) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => RepairExtendDeadlineSheet(
+        ticketId: t.id,
+        evidences: t.evidences,
+        onReload: _load,
+        onSaved: (dt, note) async {
+          await _action('extend-deadline', body: {
+            'newDeadlineAt': dt.toUtc().toIso8601String(),
+            if (note != null) 'contactNote': note,
+          });
+        },
+      ),
+    );
   }
 
   Future<void> _cancelRequest(ServiceTicketPublic t) async {
@@ -473,6 +541,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return repairStepIndex(
       t.status,
       customerRejectPending: d?.customerRejectPending ?? false,
+      subStatus: d?.subStatus,
     );
   }
 
@@ -1069,6 +1138,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       label: ticketStatusLabel(t.type, t.status),
                       tone: ticketStatusTone(t.status),
                     ),
+                    const SizedBox(width: 8),
+                    RepairSubStatusBadge(subStatus: d?.subStatus),
                     if (d?.customerRejectPending == true) ...[
                       const SizedBox(width: 8),
                       const StatusBadge(
@@ -1081,6 +1152,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 const SizedBox(height: 10),
                 RepairStepper(
                   status: t.status,
+                  subStatus: d?.subStatus,
                   customerRejectPending: d?.customerRejectPending ?? false,
                   browsable: !t.isDeleted,
                   previewIndex: _previewStepIndex,
@@ -1241,6 +1313,45 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     List<String> userIds,
     Map<String, String> nameOf,
   ) {
+    final termsCard = SectionCard(
+      title: 'Cam kết với khách',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _termsCtrl,
+            readOnly: _historyView,
+            decoration: const InputDecoration(
+              labelText: 'Nội dung cam kết',
+            ),
+            maxLines: 4,
+            onChanged: (_) => setState(() => _termsDirty = true),
+          ),
+          if (!_historyView) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _termsCtrl.text = _defaultTermsText;
+                            _termsDirty = true;
+                          }),
+                  child: const Text('Khôi phục mặc định'),
+                ),
+                const Spacer(),
+                FilledButton.tonal(
+                  onPressed: _busy || !_termsDirty ? null : _updateRepairTerms,
+                  child: const Text('Lưu cam kết'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+
     final staffSigs = t.signatures
         .where((s) => s.stage == 'receive' && s.signer == 'staff')
         .toList();
@@ -1336,6 +1447,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
     if (bothSigned) {
       return [
+        termsCard,
+        const SizedBox(height: 12),
         evidence,
         const SizedBox(height: 12),
         SectionCard(
@@ -1424,6 +1537,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
 
     return [
+      termsCard,
+      const SizedBox(height: 12),
       evidence,
       const SizedBox(height: 12),
       SignaturePadSection(
@@ -1459,217 +1574,182 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     List<String> userIds,
     Map<String, String> nameOf,
   ) {
-    final contacted = d?.contactConfirmedAt != null;
-    final meId = context.read<AuthProvider>().user?.id;
-    final canAssign = _isManager ||
-        (t.request?.managerUserId != null &&
-            t.request!.managerUserId == meId);
-    final techAssigned = t.staffUserId.trim().isNotEmpty;
-    const methods = [
-      'store',
-      'warranty_center',
-      'external',
-      'other',
-    ];
+    final sub = d?.subStatus ?? 'pending_check';
+    final isPendingSend = sub == 'pending_send';
+    _sendStaffUserId ??= context.read<AuthProvider>().user?.id;
 
     return [
-      SectionCard(
-        title: 'Bàn giao kỹ thuật',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TsDropdownFieldNullable<String>(
-              value: (_techUserId ?? t.staffUserId).trim().isEmpty
-                  ? null
-                  : (_techUserId ?? t.staffUserId),
-              labelText: 'Nhân viên kỹ thuật *',
-              items: [
-                ...userIds,
-                if ((_techUserId ?? t.staffUserId).trim().isNotEmpty &&
-                    !userIds.contains(_techUserId ?? t.staffUserId))
-                  (_techUserId ?? t.staffUserId),
-              ],
-              itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
-              onChanged: !canAssign || _historyView
-                  ? null
-                  : (v) => setState(() {
-                        _techUserId = v;
-                        _inspectFormDirty = true;
-                      }),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Hẹn gọi khách trước *'),
-              subtitle: Text(
-                (d?.contactDeadlineAt != null
-                        ? DateTime.tryParse(d!.contactDeadlineAt!)
-                        : null)
-                    ?.toLocal()
-                    .toString() ??
-                    _contactDeadline.toLocal().toString(),
-              ),
-              trailing: const Icon(Icons.schedule),
-              onTap: !canAssign || _historyView
-                  ? null
-                  : () async {
-                      final d0 = await showDatePicker(
-                        context: context,
-                        initialDate: _contactDeadline,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
-                      );
-                      if (d0 == null || !mounted) return;
-                      final tm = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(_contactDeadline),
-                      );
-                      if (tm == null) return;
-                      setState(() {
-                        _contactDeadline = DateTime(
-                          d0.year,
-                          d0.month,
-                          d0.day,
-                          tm.hour,
-                          tm.minute,
-                        );
-                        _inspectFormDirty = true;
-                      });
-                    },
-            ),
-            if (canAssign && !_historyView) ...[
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: _busy ? null : () => _assignTech(t),
-                child: Text(techAssigned ? 'Cập nhật bàn giao' : 'Lưu bàn giao'),
-              ),
-            ] else if (!techAssigned)
-              const Text(
-                'Chờ quản lý bàn giao kỹ thuật.',
-                style: TextStyle(color: Colors.orange),
-              )
-            else
-              Text(
-                'KTV: ${t.staffName ?? nameOf[t.staffUserId] ?? t.staffUserId}',
-                style: const TextStyle(color: Colors.green),
-              ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 12),
-      SectionCard(
-        title: 'Đánh giá ban đầu *',
-        child: TextField(
-          controller: _initialCtrl,
-          readOnly: _historyView,
-          decoration: const InputDecoration(
-            labelText: 'Nhận định / đánh giá ban đầu',
-          ),
-          maxLines: 3,
-          onChanged: (_) => setState(() => _inspectFormDirty = true),
-        ),
-      ),
-      const SizedBox(height: 12),
-      EvidenceSection(
+      RepairDeadlineCard(
         ticketId: t.id,
-        stage: 'contact',
+        deadlineAt: t.deadlineAt,
+        deadlineChanges: d?.deadlineChanges ?? const [],
         evidences: t.evidences,
-        onChanged: _load,
         readOnly: _historyView,
-        title: 'Bằng chứng gọi khách *',
+        onExtend: () => _openExtendDeadline(t),
+        onReload: _load,
       ),
       const SizedBox(height: 12),
-      if (!contacted && !_historyView)
+      if (!isPendingSend) ...[
         SectionCard(
-          title: 'Xác nhận đã liên hệ',
-          child: Column(
-            children: [
-              TextField(
-                controller: _contactNoteCtrl,
-                decoration: const InputDecoration(labelText: 'Ghi chú liên hệ'),
-                onChanged: (_) => _inspectFormDirty = true,
-              ),
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: _busy
-                    ? null
-                    : () => _action('confirm-contacted', body: {
-                          if (_contactNoteCtrl.text.trim().isNotEmpty)
-                            'contactNote': _contactNoteCtrl.text.trim(),
-                        }),
-                child: const Text('Đã gọi khách'),
-              ),
-            ],
+          title: 'Nhân viên kỹ thuật *',
+          child: TsDropdownFieldNullable<String>(
+            value: _technicianId,
+            labelText: 'Kỹ thuật viên',
+            items: _technicians.map((x) => x.id).toList(),
+            itemLabel: (id) {
+              if (id == null) return '—';
+              for (final x in _technicians) {
+                if (x.id == id) return x.name;
+              }
+              return id;
+            },
+            onChanged: _historyView
+                ? null
+                : (v) => setState(() {
+                      _technicianId = v;
+                      _inspectFormDirty = true;
+                    }),
           ),
-        )
-      else if (contacted)
-        const Text(
-          'Đã xác nhận liên hệ khách.',
-          style: TextStyle(color: Colors.green),
-        )
-      else if (_historyView && (d?.contactNote ?? '').trim().isNotEmpty)
-        Text('Ghi chú liên hệ: ${d!.contactNote}'),
-      const SizedBox(height: 12),
-      SectionCard(
-        title: 'Hình thức sửa chữa *',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final m in methods)
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Đánh giá ban đầu *',
+          child: TextField(
+            controller: _initialCtrl,
+            readOnly: _historyView,
+            decoration: const InputDecoration(
+              labelText: 'Nhận định / đánh giá ban đầu',
+            ),
+            maxLines: 3,
+            onChanged: (_) => setState(() => _inspectFormDirty = true),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Hình thức sửa chữa *',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Wrap(
+                spacing: 8,
+                children: [
                   ChoiceChip(
-                    label: Text(repairMethodLabel(m)),
-                    selected: _repairMethod == m,
+                    label: Text(repairTypeLabel('in_store')),
+                    selected: _repairType == 'in_store',
                     onSelected: _historyView
                         ? null
                         : (_) => setState(() {
-                              _repairMethod = m;
+                              _repairType = 'in_store';
                               _inspectFormDirty = true;
                             }),
                   ),
+                  ChoiceChip(
+                    label: Text(repairTypeLabel('external')),
+                    selected: _repairType == 'external',
+                    onSelected: _historyView
+                        ? null
+                        : (_) => setState(() {
+                              _repairType = 'external';
+                              _inspectFormDirty = true;
+                            }),
+                  ),
+                ],
+              ),
+              if (_repairType == 'external') ...[
+                const SizedBox(height: 8),
+                TsDropdownFieldNullable<String>(
+                  value: _vendorId,
+                  labelText: 'Đơn vị sửa ngoài *',
+                  items: _vendors.map((v) => v.id).toList(),
+                  itemLabel: (id) {
+                    if (id == null) return '—';
+                    for (final v in _vendors) {
+                      if (v.id == id) return v.name;
+                    }
+                    return id;
+                  },
+                  onChanged: _historyView
+                      ? null
+                      : (v) => setState(() {
+                            _vendorId = v;
+                            _inspectFormDirty = true;
+                          }),
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-            EvidenceSection(
-              ticketId: t.id,
-              stage: 'repair_method',
-              evidences: t.evidences,
-              onChanged: _load,
-              readOnly: _historyView,
-              title: 'Ảnh/video bàn giao *',
-              noteField: TextField(
-                controller: _methodNoteCtrl,
+              const SizedBox(height: 12),
+              EvidenceSection(
+                ticketId: t.id,
+                stage: 'repair_method',
+                evidences: t.evidences,
+                onChanged: _load,
                 readOnly: _historyView,
-                decoration: const InputDecoration(labelText: 'Ghi chú'),
-                maxLines: 2,
-                onChanged: (_) => _inspectFormDirty = true,
+                title: 'Ảnh/video kiểm tra *',
+                noteField: TextField(
+                  controller: _methodNoteCtrl,
+                  readOnly: _historyView,
+                  decoration: const InputDecoration(labelText: 'Ghi chú'),
+                  maxLines: 2,
+                  onChanged: (_) => _inspectFormDirty = true,
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-      if (!_historyView) ...[
-        const SizedBox(height: 12),
-        if (_startRepairBlockReason(t, d) != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              _startRepairBlockReason(t, d)!,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-                fontSize: 13,
-              ),
-            ),
+            ],
           ),
-        FilledButton(
-          onPressed: _busy || _startRepairBlockReason(t, d) != null
-              ? null
-              : () => _startRepair(t, d),
-          child: const Text('Chuyển sang Sửa chữa'),
         ),
+        if (!_historyView) ...[
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _busy || _confirmInspectBlockReason(t) != null
+                ? null
+                : () => _confirmInspect(t),
+            child: const Text('Xác nhận kiểm tra'),
+          ),
+        ],
+      ],
+      if (isPendingSend) ...[
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Gửi đi',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (d?.vendorName != null)
+                Text(
+                  'Đơn vị: ${d!.vendorName}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              const SizedBox(height: 8),
+              TsDropdownFieldNullable<String>(
+                value: _sendStaffUserId,
+                labelText: 'Nhân viên bàn giao *',
+                items: userIds,
+                itemLabel: (id) => id == null ? '—' : (nameOf[id] ?? id),
+                onChanged: _historyView
+                    ? null
+                    : (v) => setState(() => _sendStaffUserId = v),
+              ),
+              const SizedBox(height: 8),
+              EvidenceSection(
+                ticketId: t.id,
+                stage: 'send',
+                evidences: t.evidences,
+                onChanged: _load,
+                readOnly: _historyView,
+                title: 'Ảnh/video bàn giao *',
+              ),
+              if (!_historyView) ...[
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: _busy ? null : () => _action('confirm-send', body: {
+                        'staffUserId': _sendStaffUserId,
+                      }),
+                  child: const Text('Xác nhận đã gửi'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+      if (!_historyView && !isPendingSend) ...[
         const SizedBox(height: 8),
         OutlinedButton(
           onPressed: _busy ? null : () => _cancelRequest(t),
@@ -1682,29 +1762,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     ];
   }
 
-  bool _needsReceiveBack(RepairDetailPublic? d) {
-    final m = d?.repairMethod ?? _repairMethod;
-    return m == 'warranty_center' || m == 'external' || m == 'other';
-  }
-
   int _parseCostField(TextEditingController c) =>
       parseIntegerLoose(c.text, _thousandsSep) ?? 0;
 
   String _money(int v) => formatIntegerWithSeparator(v, _thousandsSep);
-
-  Map<String, dynamic> _repairWorkBody() {
-    return {
-      'solution': _solutionCtrl.text.trim(),
-      'repairResult': _resultCtrl.text.trim(),
-      'partCost': _parseCostField(_partCostCtrl),
-      'laborCost': _parseCostField(_laborCostCtrl),
-      'warrantyMonths': int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
-      if (_repairContactNoteCtrl.text.trim().isNotEmpty)
-        'repairContactNote': _repairContactNoteCtrl.text.trim(),
-      if (_receiveBackNoteCtrl.text.trim().isNotEmpty)
-        'receiveBackNote': _receiveBackNoteCtrl.text.trim(),
-    };
-  }
 
   String? _advanceDeliveryBlockReason(
     ServiceTicketPublic t,
@@ -1713,24 +1774,20 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (_solutionCtrl.text.trim().isEmpty) {
       return 'Nhập nội dung sửa chữa.';
     }
+    if (!(d?.isRepairWorkSaved ?? false) || _repairFormDirty) {
+      return 'Cần bấm Lưu nội dung & chi phí trước.';
+    }
     if (_resultCtrl.text.trim().isEmpty) return 'Nhập kết quả sửa chữa.';
     if (int.tryParse(_warrantyCtrl.text.trim()) == null) {
       return 'Nhập bảo hành (tháng).';
     }
-    if (!t.evidences.any((e) => e.stage == 'repair_contact')) {
-      return 'Cần bằng chứng liên hệ khách (bước sửa).';
-    }
     if (!t.evidences.any((e) => e.stage == 'repair_result')) {
       return 'Cần bằng chứng kết quả sửa.';
-    }
-    if (_needsReceiveBack(d) &&
-        !t.evidences.any((e) => e.stage == 'receive_back')) {
-      return 'Cần bằng chứng nhận lại sản phẩm.';
     }
     return null;
   }
 
-  Future<void> _advanceDelivery(
+  Future<void> _completeRepair(
     ServiceTicketPublic t,
     RepairDetailPublic? d,
   ) async {
@@ -1739,7 +1796,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
       return;
     }
-    await _action('advance-delivery', body: _repairWorkBody());
+    await _action('complete-repair', body: {
+      'repairResult': _resultCtrl.text.trim(),
+    });
   }
 
   Future<void> _abortToPayment() async {
@@ -1785,13 +1844,92 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     ServiceTicketPublic t,
     RepairDetailPublic? d,
   ) {
-    final method = d?.repairMethod ?? _repairMethod;
-    final needBack = _needsReceiveBack(d);
+    final sub = d?.subStatus ?? 'in_repair';
+    final repairType = d?.repairType ??
+        (_repairType ??
+            (d?.repairMethod == 'store' ? 'in_store' : 'external'));
     final elapsed = formatRepairElapsed(
       d?.repairStartedAt,
       fallbackIso: t.statusChangedAt,
     );
-    final block = _advanceDeliveryBlockReason(t, d);
+    final canComplete = sub == 'in_repair' || sub == 'back_in_store';
+    final block = canComplete ? _advanceDeliveryBlockReason(t, d) : null;
+    _pickupStaffUserId ??= context.read<AuthProvider>().user?.id;
+
+    final workCard = SectionCard(
+      title: 'Nội dung & chi phí',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _solutionCtrl,
+            readOnly: _historyView,
+            decoration: const InputDecoration(
+              labelText: 'Nội dung sửa chữa *',
+            ),
+            maxLines: 3,
+            onChanged: (_) => setState(() => _repairFormDirty = true),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _partCostCtrl,
+            readOnly: _historyView,
+            decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
+            keyboardType: integerThousandsKeyboardType(_thousandsSep),
+            inputFormatters: [
+              IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+            ],
+            onChanged: (_) => setState(() => _repairFormDirty = true),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _laborCostCtrl,
+            readOnly: _historyView,
+            decoration: const InputDecoration(labelText: 'Tiền công'),
+            keyboardType: integerThousandsKeyboardType(_thousandsSep),
+            inputFormatters: [
+              IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
+            ],
+            onChanged: (_) => setState(() => _repairFormDirty = true),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _warrantyCtrl,
+            readOnly: _historyView,
+            decoration: const InputDecoration(
+              labelText: 'Bảo hành (tháng) *',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => setState(() => _repairFormDirty = true),
+          ),
+          if (!_historyView) ...[
+            const SizedBox(height: 12),
+            if (d?.isRepairWorkSaved == true && !_repairFormDirty)
+              Text(
+                'Đã lưu lúc ${formatServiceTime(d?.repairWorkSavedAt)}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontSize: 13,
+                ),
+              ),
+            if (_repairFormDirty || !(d?.isRepairWorkSaved ?? false))
+              Text(
+                'Cần bấm Lưu trước khi hoàn tất sửa chữa.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 13,
+                ),
+              ),
+            const SizedBox(height: 8),
+            FilledButton.tonal(
+              onPressed: _busy ? null : _saveRepairWork,
+              child: const Text('Lưu nội dung & chi phí'),
+            ),
+          ],
+        ],
+      ),
+    );
 
     return [
       SectionCard(
@@ -1800,149 +1938,152 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Hình thức: ${repairMethodLabel(method)}',
+              'Hình thức: ${repairTypeLabel(repairType)}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+            if (d?.technicianName != null)
+              Text('KTV: ${d!.technicianName}'),
+            if (d?.vendorName != null) Text('Đơn vị: ${d!.vendorName}'),
             if ((d?.extraNote ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 4),
               Text('Ghi chú: ${d!.extraNote}'),
             ],
             const SizedBox(height: 8),
             Text('Đã sửa: $elapsed'),
-          ],
-        ),
-      ),
-      const SizedBox(height: 12),
-      SectionCard(
-        title: 'Nội dung & chi phí',
-        child: Column(
-          children: [
-            TextField(
-              controller: _solutionCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(
-                labelText: 'Nội dung sửa chữa *',
-              ),
-              maxLines: 3,
-              onChanged: (_) => setState(() => _repairFormDirty = true),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _partCostCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
-              keyboardType: integerThousandsKeyboardType(_thousandsSep),
-              inputFormatters: [
-                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
-              ],
-              onChanged: (_) => setState(() => _repairFormDirty = true),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _laborCostCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(labelText: 'Tiền công'),
-              keyboardType: integerThousandsKeyboardType(_thousandsSep),
-              inputFormatters: [
-                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
-              ],
-              onChanged: (_) => setState(() => _repairFormDirty = true),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _warrantyCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(
-                labelText: 'Bảo hành (tháng) *',
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (_) => setState(() => _repairFormDirty = true),
+            Text(
+              'Trạng thái: ${repairSubStatusLabel(sub)}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ],
         ),
       ),
       const SizedBox(height: 12),
-      EvidenceSection(
-        ticketId: t.id,
-        stage: 'repair_contact',
-        evidences: t.evidences,
-        onChanged: () => _load(),
-        readOnly: _historyView,
-        title: 'Bằng chứng liên hệ khách *',
-        noteField: TextField(
-          controller: _repairContactNoteCtrl,
-          readOnly: _historyView,
-          decoration: const InputDecoration(labelText: 'Ghi chú liên hệ'),
-          maxLines: 2,
-          onChanged: (_) => setState(() => _repairFormDirty = true),
+      if (sub == 'at_vendor') ...[
+        SectionCard(
+          title: 'Đang sửa ngoài',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                d?.vendorName ?? '—',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Xác nhận khi đơn vị báo đã sửa xong để chuyển sang chờ lấy về.',
+              ),
+              if (!_historyView) ...[
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _busy
+                      ? null
+                      : () => _action('vendor-done'),
+                  child: const Text('Đơn vị đã sửa xong'),
+                ),
+              ],
+            ],
+          ),
         ),
-      ),
-      if (needBack) ...[
+        const SizedBox(height: 12),
+        workCard,
+      ] else if (sub == 'pending_pickup') ...[
+        SectionCard(
+          title: 'Lấy về cửa hàng',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TsDropdownFieldNullable<String>(
+                value: _pickupStaffUserId,
+                labelText: 'Nhân viên lấy về *',
+                items: [
+                  for (final u in _users) u.$1,
+                ],
+                itemLabel: (id) {
+                  if (id == null) return '—';
+                  for (final u in _users) {
+                    if (u.$1 == id) return u.$2;
+                  }
+                  return id;
+                },
+                onChanged: _historyView
+                    ? null
+                    : (v) => setState(() => _pickupStaffUserId = v),
+              ),
+              const SizedBox(height: 8),
+              EvidenceSection(
+                ticketId: t.id,
+                stage: 'return',
+                evidences: t.evidences,
+                onChanged: _load,
+                readOnly: _historyView,
+                title: 'Ảnh/video nhận lại *',
+              ),
+              if (!_historyView) ...[
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _busy || _pickupStaffUserId == null
+                      ? null
+                      : () => _action('confirm-pickup', body: {
+                            'staffUserId': _pickupStaffUserId,
+                          }),
+                  child: const Text('Xác nhận đã lấy về'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        workCard,
+      ] else ...[
+        workCard,
         const SizedBox(height: 12),
         EvidenceSection(
           ticketId: t.id,
-          stage: 'receive_back',
+          stage: 'repair_result',
           evidences: t.evidences,
-          onChanged: () => _load(),
+          onChanged: _load,
           readOnly: _historyView,
-          title: 'Nhận lại sản phẩm *',
-          noteField: TextField(
-            controller: _receiveBackNoteCtrl,
+          title: 'Bằng chứng kết quả sửa *',
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Kết quả sửa chữa',
+          child: TextField(
+            controller: _resultCtrl,
             readOnly: _historyView,
-            decoration: const InputDecoration(labelText: 'Ghi chú nhận lại'),
-            maxLines: 2,
+            decoration: const InputDecoration(labelText: 'Kết quả *'),
+            maxLines: 3,
             onChanged: (_) => setState(() => _repairFormDirty = true),
           ),
         ),
-      ],
-      const SizedBox(height: 12),
-      EvidenceSection(
-        ticketId: t.id,
-        stage: 'repair_result',
-        evidences: t.evidences,
-        onChanged: () => _load(),
-        readOnly: _historyView,
-        title: 'Bằng chứng kết quả sửa *',
-      ),
-      const SizedBox(height: 12),
-      SectionCard(
-        title: 'Kết quả sửa chữa',
-        child: TextField(
-          controller: _resultCtrl,
-          readOnly: _historyView,
-          decoration: const InputDecoration(labelText: 'Kết quả *'),
-          maxLines: 3,
-          onChanged: (_) => setState(() => _repairFormDirty = true),
-        ),
-      ),
-      if (!_historyView) ...[
-        const SizedBox(height: 12),
-        if (block != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              block,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-                fontSize: 13,
+        if (!_historyView) ...[
+          const SizedBox(height: 12),
+          if (block != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                block,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 13,
+                ),
               ),
             ),
+          FilledButton(
+            onPressed: _busy || block != null
+                ? null
+                : () => _completeRepair(t, d),
+            child: const Text('Hoàn tất sửa — sang Trả khách'),
           ),
-        FilledButton(
-          onPressed: _busy || block != null
-              ? null
-              : () => _advanceDelivery(t, d),
-          child: const Text('Chuyển qua Bàn giao'),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton(
-          onPressed: _busy ? null : _abortToPayment,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Theme.of(context).colorScheme.error,
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: _busy ? null : _abortToPayment,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Hủy'),
           ),
-          child: const Text('Hủy'),
-        ),
+        ],
       ],
     ];
   }
@@ -2139,10 +2280,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               : () => _action('complete-delivery', body: {
                     'deliveryMethod': _deliveryMethod,
                     'deliveryStaffUserId': _deliveryStaffUserId,
-                    'partCost': _parseCostField(_partCostCtrl),
-                    'laborCost': _parseCostField(_laborCostCtrl),
-                    'warrantyMonths':
-                        int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
                     if (_deliveryMethod == 'home' && _deliveryEta != null)
                       'deliveryEta':
                           _deliveryEta!.toUtc().toIso8601String(),
@@ -2151,7 +2288,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                     if (_deliveryNoteCtrl.text.trim().isNotEmpty)
                       'note': _deliveryNoteCtrl.text.trim(),
                   }),
-          child: const Text('Sang Thanh toán & Duyệt'),
+          child: const Text('Hoàn tất trả khách — sang Thanh toán'),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
@@ -2284,54 +2421,36 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
 
     return [
+      RepairDeadlineCard(
+        ticketId: t.id,
+        deadlineAt: t.deadlineAt,
+        deadlineChanges: d?.deadlineChanges ?? const [],
+        evidences: t.evidences,
+        readOnly: true,
+        onExtend: () {},
+        onReload: _load,
+      ),
+      const SizedBox(height: 12),
       SectionCard(
         title: 'Chi phí & bảo hành',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              controller: _partCostCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(labelText: 'Tiền linh kiện'),
-              keyboardType: integerThousandsKeyboardType(_thousandsSep),
-              inputFormatters: [
-                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
-              ],
-              onChanged: (_) => setState(() => _deliveryFormDirty = true),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _laborCostCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(labelText: 'Tiền công'),
-              keyboardType: integerThousandsKeyboardType(_thousandsSep),
-              inputFormatters: [
-                IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
-              ],
-              onChanged: (_) => setState(() => _deliveryFormDirty = true),
-            ),
-            const SizedBox(height: 8),
+            Text('Tiền linh kiện: ${_money(part)} đ'),
+            Text('Tiền công: ${_money(labor)} đ'),
+            const SizedBox(height: 4),
             Text(
               'Tổng chi phí: ${_money(total)} đ',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _warrantyCtrl,
-              readOnly: _historyView,
-              decoration: const InputDecoration(
-                labelText: 'Bảo hành (tháng)',
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (_) => setState(() => _deliveryFormDirty = true),
-            ),
+            Text('Bảo hành: ${d?.warrantyMonths ?? 0} tháng'),
             const SizedBox(height: 8),
             Text(
-              'Chỉ bảo hành những lỗi vừa sửa chữa',
+              'Chi phí chỉ sửa ở bước Sửa chữa (Làm lại bước nếu cần điều chỉnh).',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontStyle: FontStyle.italic,
+                fontSize: 13,
               ),
             ),
           ],
@@ -2352,13 +2471,48 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     ServiceTicketPublic t,
     RepairDetailPublic? d,
   ) {
-    final submitted = d?.paymentSubmittedAt != null;
+    final sub = d?.subStatus ?? 'pending_payment';
+    final pendingPayment = sub == 'pending_payment' || d?.paymentSubmittedAt == null;
+    final pendingApproval = sub == 'pending_approval';
+    final terminal = sub == 'completed' || sub == 'debt_open';
     final aborted = d?.abortedAt != null;
     final costTotal = (d?.partCost ?? 0) + (d?.laborCost ?? 0);
     final due = aborted
         ? (d?.paymentAmount ?? 0)
         : (d?.paymentAmount ?? costTotal);
     final isFree = _payMethod == 'free';
+    final currentUserId = context.read<AuthProvider>().user?.id;
+    final sameSubmitter =
+        pendingApproval && d?.paymentSubmittedBy == currentUserId;
+
+    if (terminal) {
+      return [
+        SectionCard(
+          title: 'Thanh toán & Duyệt',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                repairSubStatusLabel(sub),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text('Tổng chi phí sửa: ${_money(costTotal)} đ'),
+              if (sub == 'debt_open') ...[
+                Text('Công nợ: ${_money(d?.paymentAmount ?? 0)} đ'),
+                if (d?.paymentDueDate != null)
+                  Text('Hạn thu: ${d!.paymentDueDate}'),
+              ] else
+                Text(
+                  d?.paymentMethod == 'free'
+                      ? 'Miễn phí'
+                      : 'Đã thu: ${_money(d?.paymentAmount ?? 0)} đ',
+                ),
+            ],
+          ),
+        ),
+      ];
+    }
 
     return [
       if (aborted)
@@ -2389,7 +2543,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             Text('Tổng chi phí sửa: ${_money(costTotal)} đ'),
             Text('Còn lại / cần thu: ${_money(due)} đ'),
             const SizedBox(height: 12),
-            if (!submitted) ...[
+            if (pendingPayment) ...[
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Miễn phí'),
@@ -2471,7 +2625,47 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       }
                     },
                   ),
-                if (_payMethod == 'bank_transfer' || _payMethod == 'cash') ...[
+                if (_payMethod == 'bank_transfer') ...[
+                  const SizedBox(height: 8),
+                  const Text('Chứng từ chuyển khoản *'),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (var i = 0; i < _payProofUrls.length; i++)
+                        InputChip(
+                          label: Text('Ảnh ${i + 1}'),
+                          onDeleted: () => setState(() {
+                            _payProofUrls.removeAt(i);
+                            _payFormDirty = true;
+                          }),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => MediaViewerPage(
+                                  items: _payProofUrls
+                                      .map(
+                                        (u) => MediaViewerItem(
+                                          url: u,
+                                          mediaType: 'image',
+                                        ),
+                                      )
+                                      .toList(),
+                                  initialIndex: i,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ActionChip(
+                        avatar: const Icon(Icons.add_a_photo, size: 18),
+                        label: const Text('Thêm'),
+                        onPressed: _busy ? null : _addPayProof,
+                      ),
+                    ],
+                  ),
+                ] else if (_payMethod == 'cash') ...[
                   const SizedBox(height: 8),
                   const Text('Chứng từ (tuỳ chọn)'),
                   const SizedBox(height: 4),
@@ -2524,7 +2718,20 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               FilledButton(
                 onPressed: _busy
                     ? null
-                    : () => _action('submit-payment', body: {
+                    : () {
+                        if (_payMethod == 'bank_transfer' &&
+                            _payProofUrls.isEmpty) {
+                          AppMessenger.showSnackBar(
+                            context,
+                            const SnackBar(
+                              content: Text(
+                                'Chuyển khoản cần đính kèm chứng từ.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        _action('submit-payment', body: {
                           'paymentAmount': isFree
                               ? 0
                               : _parseCostField(_payAmountCtrl),
@@ -2535,7 +2742,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                             'paymentDueDate': yyyyMmDd(_payDue!),
                           if (_payProofUrls.isNotEmpty)
                             'paymentProofUrls': List<String>.from(_payProofUrls),
-                        }),
+                        });
+                      },
                 child: const Text('Ghi nhận thanh toán'),
               ),
               if (aborted && _isManager) ...[
@@ -2565,7 +2773,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   child: const Text('Duyệt kết thúc'),
                 ),
               ],
-            ] else ...[
+            ] else if (pendingApproval) ...[
               Text(
                 isFree || (d?.paymentMethod == 'free')
                     ? 'Miễn phí'
@@ -2604,12 +2812,40 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 ),
               ],
               const SizedBox(height: 8),
-              if (_isManager)
+              if (sameSubmitter)
+                Text(
+                  'Bạn đã ghi nhận — cần quản lý khác duyệt.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 13,
+                  ),
+                ),
+              if (_isManager) ...[
                 FilledButton(
-                  onPressed: _busy ? null : () => _action('confirm-payment'),
+                  onPressed: _busy || sameSubmitter
+                      ? null
+                      : () => _action('confirm-payment'),
                   child: Text(aborted ? 'Duyệt kết thúc' : 'Duyệt thanh toán'),
-                )
-              else
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          final r = await promptReason(
+                            context,
+                            title: 'Sửa lại thanh toán',
+                            hint: 'Lý do trả về bước ghi nhận',
+                          );
+                          if (r != null) {
+                            await _action('revise-payment', body: {
+                              'reason': r,
+                            });
+                          }
+                        },
+                  child: const Text('Sửa lại ghi nhận'),
+                ),
+              ] else
                 const Text('Chờ quản lý duyệt…'),
             ],
           ],

@@ -464,7 +464,21 @@ class RepairDetailPublic {
     this.paymentSubmittedAt,
     this.paymentConfirmedAt,
     this.paymentConfirmedBy,
+    this.paymentSubmittedBy,
     this.customerRejectPending = false,
+    this.subStatus,
+    this.repairType,
+    this.technicianId,
+    this.technicianName,
+    this.vendorId,
+    this.vendorName,
+    this.termsText,
+    this.checkedAt,
+    this.repairWorkSavedAt,
+    this.repairWorkSavedBy,
+    this.movements = const [],
+    this.deadlineChanges = const [],
+    this.paymentRecords = const [],
   });
 
   final String ticketId;
@@ -505,7 +519,23 @@ class RepairDetailPublic {
   final String? paymentSubmittedAt;
   final String? paymentConfirmedAt;
   final String? paymentConfirmedBy;
+  final String? paymentSubmittedBy;
   final bool customerRejectPending;
+  final String? subStatus;
+  final String? repairType;
+  final String? technicianId;
+  final String? technicianName;
+  final String? vendorId;
+  final String? vendorName;
+  final String? termsText;
+  final String? checkedAt;
+  final String? repairWorkSavedAt;
+  final String? repairWorkSavedBy;
+  final List<TicketMovementPublic> movements;
+  final List<DeadlineChangePublic> deadlineChanges;
+  final List<RepairPaymentRecordPublic> paymentRecords;
+
+  bool get isRepairWorkSaved => repairWorkSavedAt != null;
 
   factory RepairDetailPublic.fromJson(Map<String, dynamic> json) {
     final proofs = json['paymentProofUrls'];
@@ -550,7 +580,198 @@ class RepairDetailPublic {
       paymentSubmittedAt: json['paymentSubmittedAt'] as String?,
       paymentConfirmedAt: json['paymentConfirmedAt'] as String?,
       paymentConfirmedBy: json['paymentConfirmedBy'] as String?,
+      paymentSubmittedBy: json['paymentSubmittedBy'] as String?,
       customerRejectPending: json['customerRejectPending'] as bool? ?? false,
+      subStatus: json['subStatus'] as String?,
+      repairType: json['repairType'] as String?,
+      technicianId: json['technicianId'] as String?,
+      technicianName: json['technicianName'] as String?,
+      vendorId: json['vendorId'] as String?,
+      vendorName: json['vendorName'] as String?,
+      termsText: json['termsText'] as String?,
+      checkedAt: json['checkedAt'] as String?,
+      repairWorkSavedAt: json['repairWorkSavedAt'] as String?,
+      repairWorkSavedBy: json['repairWorkSavedBy'] as String?,
+      movements: _parseMovements(json['movements']),
+      deadlineChanges: _parseDeadlineChanges(json['deadlineChanges']),
+      paymentRecords: _parsePaymentRecords(json['paymentRecords']),
+    );
+  }
+
+  static List<TicketMovementPublic> _parseMovements(Object? raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((e) => TicketMovementPublic.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  static List<DeadlineChangePublic> _parseDeadlineChanges(Object? raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((e) => DeadlineChangePublic.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  static List<RepairPaymentRecordPublic> _parsePaymentRecords(Object? raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map(
+          (e) => RepairPaymentRecordPublic.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
+  }
+}
+
+class TicketMovementPublic {
+  const TicketMovementPublic({
+    required this.id,
+    required this.type,
+    required this.movedAt,
+    this.staffUserId,
+    this.staffName,
+    this.note,
+  });
+
+  final String id;
+  final String type;
+  final String movedAt;
+  final String? staffUserId;
+  final String? staffName;
+  final String? note;
+
+  factory TicketMovementPublic.fromJson(Map<String, dynamic> json) {
+    return TicketMovementPublic(
+      id: json['id'] as String,
+      type: json['type'] as String? ?? '',
+      movedAt: json['movedAt'] as String? ?? '',
+      staffUserId: json['staffUserId'] as String?,
+      staffName: json['staffName'] as String?,
+      note: json['note'] as String?,
+    );
+  }
+}
+
+class DeadlineChangePublic {
+  const DeadlineChangePublic({
+    required this.id,
+    this.oldDeadline,
+    required this.newDeadline,
+    this.contactNote,
+    this.staffUserId,
+    this.staffName,
+    this.createdAt,
+  });
+
+  final String id;
+  final String? oldDeadline;
+  final String newDeadline;
+  final String? contactNote;
+  final String? staffUserId;
+  final String? staffName;
+  final String? createdAt;
+
+  factory DeadlineChangePublic.fromJson(Map<String, dynamic> json) {
+    return DeadlineChangePublic(
+      id: json['id'] as String,
+      oldDeadline: json['oldDeadline'] as String?,
+      newDeadline: json['newDeadline'] as String? ?? '',
+      contactNote: json['contactNote'] as String?,
+      staffUserId: json['staffUserId'] as String?,
+      staffName: json['staffName'] as String?,
+      createdAt: json['createdAt'] as String?,
+    );
+  }
+}
+
+class RepairPaymentRecordPublic {
+  const RepairPaymentRecordPublic({
+    required this.id,
+    required this.amount,
+    required this.method,
+    this.proofUrls = const [],
+    this.note,
+    this.dueDate,
+    this.submittedBy,
+    this.submittedAt,
+    this.supersededAt,
+    this.reviseReason,
+  });
+
+  final String id;
+  final int amount;
+  final String method;
+  final List<String> proofUrls;
+  final String? note;
+  final String? dueDate;
+  final String? submittedBy;
+  final String? submittedAt;
+  final String? supersededAt;
+  final String? reviseReason;
+
+  factory RepairPaymentRecordPublic.fromJson(Map<String, dynamic> json) {
+    final proofs = json['proofUrls'];
+    return RepairPaymentRecordPublic(
+      id: json['id'] as String,
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      method: json['method'] as String? ?? '',
+      proofUrls: proofs is List
+          ? proofs.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+          : const [],
+      note: json['note'] as String?,
+      dueDate: json['dueDate'] as String?,
+      submittedBy: json['submittedBy'] as String?,
+      submittedAt: json['submittedAt'] as String?,
+      supersededAt: json['supersededAt'] as String?,
+      reviseReason: json['reviseReason'] as String?,
+    );
+  }
+}
+
+class RepairVendorPublic {
+  const RepairVendorPublic({
+    required this.id,
+    required this.name,
+    this.address,
+    this.phone,
+    this.active = true,
+  });
+
+  final String id;
+  final String name;
+  final String? address;
+  final String? phone;
+  final bool active;
+
+  factory RepairVendorPublic.fromJson(Map<String, dynamic> json) {
+    return RepairVendorPublic(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? '',
+      address: json['address'] as String?,
+      phone: json['phone'] as String?,
+      active: json['active'] as bool? ?? true,
+    );
+  }
+}
+
+class RepairTechnicianPublic {
+  const RepairTechnicianPublic({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.active = true,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+  final bool active;
+
+  factory RepairTechnicianPublic.fromJson(Map<String, dynamic> json) {
+    return RepairTechnicianPublic(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? '',
+      phone: json['phone'] as String?,
+      active: json['active'] as bool? ?? true,
     );
   }
 }

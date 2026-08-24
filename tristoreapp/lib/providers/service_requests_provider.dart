@@ -23,9 +23,20 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? _ticketStatus;
   bool _overdueOnly = false;
   bool _dueSoonOnly = false;
+  String? _subStatusIn;
+  String? _repairType;
+  String? _vendorId;
+  String? _technicianId;
+  bool _repairOverdue = false;
+  int? _dueWithinHours;
+  String? _receivedFrom;
+  String? _receivedTo;
   String _search = '';
 
   List<ServiceRequestPublic> get items {
+    if (_tab == 'repair') {
+      return _items;
+    }
     if (_overdueOnly) {
       return _items.where((r) => r.hasOverdueTicket).toList();
     }
@@ -93,6 +104,9 @@ class ServiceRequestsProvider extends ChangeNotifier {
       _statusFilter = null;
       _ticketStatus = null;
       _dueSoonOnly = false;
+      if (_tab == 'repair') _repairOverdue = true;
+    } else if (_tab == 'repair') {
+      _repairOverdue = false;
     }
     notifyListeners();
   }
@@ -103,6 +117,9 @@ class ServiceRequestsProvider extends ChangeNotifier {
       _statusFilter = null;
       _ticketStatus = null;
       _overdueOnly = false;
+      if (_tab == 'repair') _dueWithinHours = 12;
+    } else if (_tab == 'repair') {
+      _dueWithinHours = null;
     }
     notifyListeners();
   }
@@ -148,6 +165,24 @@ class ServiceRequestsProvider extends ChangeNotifier {
     }
     if (_ticketStatus != null && _ticketStatus!.isNotEmpty) {
       q['ticketStatus'] = _ticketStatus;
+    }
+    if (_subStatusIn != null && _subStatusIn!.isNotEmpty) {
+      q['subStatusIn'] = _subStatusIn;
+    }
+    if (_repairType != null) q['repairType'] = _repairType;
+    if (_vendorId != null) q['vendorId'] = _vendorId;
+    if (_technicianId != null) q['technicianId'] = _technicianId;
+    if (_repairOverdue) q['overdue'] = 'true';
+    if (_dueWithinHours != null) q['dueWithinHours'] = _dueWithinHours;
+    if (_tab == 'repair') {
+      if (_overdueOnly) q['overdue'] = 'true';
+      if (_dueSoonOnly) q['dueWithinHours'] = 12;
+    }
+    if (_receivedFrom != null && _receivedFrom!.isNotEmpty) {
+      q['receivedFrom'] = _receivedFrom;
+    }
+    if (_receivedTo != null && _receivedTo!.isNotEmpty) {
+      q['receivedTo'] = _receivedTo;
     }
     final st = _search.trim();
     if (st.isNotEmpty) q['search'] = st;
@@ -420,6 +455,81 @@ class ServiceRequestsProvider extends ChangeNotifier {
     if (data == null) return null;
     return ServiceTicketPublic.fromJson(data);
   }
+
+  Future<ServiceTicketPublic?> patchTicket(
+    String ticketId,
+    String action, {
+    Map<String, dynamic>? body,
+  }) async {
+    final res = await _api.patch<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/$action',
+      data: body,
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
+  Future<List<RepairVendorPublic>> fetchRepairVendors() async {
+    final res = await _api.get<Map<String, dynamic>>('/admin/repair-vendors');
+    final raw = res.data?['items'];
+    if (raw is! List) return [];
+    return raw
+        .map((e) => RepairVendorPublic.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<RepairTechnicianPublic>> fetchRepairTechnicians() async {
+    final res =
+        await _api.get<Map<String, dynamic>>('/admin/repair-technicians');
+    final raw = res.data?['items'];
+    if (raw is! List) return [];
+    return raw
+        .map((e) => RepairTechnicianPublic.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Map<String, int>> fetchRepairStats() async {
+    final res =
+        await _api.get<Map<String, dynamic>>('/admin/service-requests/repair-stats');
+    final counts = res.data?['counts'];
+    if (counts is! Map) return {};
+    return counts.map((k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0));
+  }
+
+  void setRepairListFilters({
+    String? subStatusIn,
+    String? repairType,
+    String? vendorId,
+    String? technicianId,
+    bool? repairOverdue,
+    int? dueWithinHours,
+    String? receivedFrom,
+    String? receivedTo,
+    bool clearSubStatus = false,
+    bool clearRepairType = false,
+    bool clearVendor = false,
+    bool clearTechnician = false,
+  }) {
+    if (clearSubStatus) _subStatusIn = null;
+    else if (subStatusIn != null) _subStatusIn = subStatusIn;
+    if (clearRepairType) _repairType = null;
+    else if (repairType != null) _repairType = repairType;
+    if (clearVendor) _vendorId = null;
+    else if (vendorId != null) _vendorId = vendorId;
+    if (clearTechnician) _technicianId = null;
+    else if (technicianId != null) _technicianId = technicianId;
+    if (repairOverdue != null) _repairOverdue = repairOverdue;
+    if (dueWithinHours != null) _dueWithinHours = dueWithinHours;
+    if (receivedFrom != null) _receivedFrom = receivedFrom;
+    if (receivedTo != null) _receivedTo = receivedTo;
+    notifyListeners();
+  }
+
+  String? get subStatusIn => _subStatusIn;
+  String? get repairTypeFilter => _repairType;
+  String? get vendorIdFilter => _vendorId;
+  String? get technicianIdFilter => _technicianId;
 
   Future<TakeDeviceResult?> takeDevice(
     String ticketId,

@@ -6,6 +6,7 @@ class RepairStepper extends StatelessWidget {
   const RepairStepper({
     super.key,
     required this.status,
+    this.subStatus,
     this.customerRejectPending = false,
     this.browsable = false,
     this.previewIndex,
@@ -13,6 +14,7 @@ class RepairStepper extends StatelessWidget {
   });
 
   final String status;
+  final String? subStatus;
   final bool customerRejectPending;
   /// Cho phép bấm các bước đã qua / hiện tại để xem lại (không rewind).
   final bool browsable;
@@ -25,6 +27,7 @@ class RepairStepper extends StatelessWidget {
     final idx = repairStepIndex(
       status,
       customerRejectPending: customerRejectPending,
+      subStatus: subStatus,
     );
     final focus = previewIndex ?? idx;
     return SingleChildScrollView(

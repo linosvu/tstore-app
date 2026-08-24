@@ -42,6 +42,20 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
   late final ServiceRequestsProvider _prov;
   List<(String, String)> _users = [];
   bool _loadingUsers = false;
+  Map<String, int> _repairStats = {};
+  List<RepairVendorPublic> _vendors = [];
+  List<RepairTechnicianPublic> _technicians = [];
+
+  static const _repairSubFilters = <(String, String)>[
+    ('pending_check', 'Chưa KT'),
+    ('pending_send', 'Chờ gửi'),
+    ('in_repair', 'Sửa shop'),
+    ('at_vendor', 'Sửa ngoài'),
+    ('pending_delivery', 'Trả KH'),
+    ('pending_payment', 'Chờ TT'),
+    ('pending_approval', 'Chờ duyệt'),
+    ('debt_open', 'Công nợ'),
+  ];
 
   @override
   void initState() {
@@ -56,8 +70,145 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUsers();
+      if (widget.tab == 'repair') _loadRepairFilters();
       _prov.load(reset: true);
     });
+  }
+
+  Future<void> _loadRepairFilters() async {
+    final stats = await _prov.fetchRepairStats();
+    final vendors = await _prov.fetchRepairVendors();
+    final techs = await _prov.fetchRepairTechnicians();
+    if (!mounted) return;
+    setState(() {
+      _repairStats = stats;
+      _vendors = vendors;
+      _technicians = techs;
+    });
+  }
+
+  Future<void> _reloadList() async {
+    await _prov.load(reset: true);
+    if (widget.tab == 'repair') await _loadRepairFilters();
+  }
+
+  Future<void> _openRepairFilterSheet(ServiceRequestsProvider prov) async {
+    final selected = (prov.subStatusIn ?? '')
+        .split(',')
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    String? vendorId = prov.vendorIdFilter;
+    String? technicianId = prov.technicianIdFilter;
+    String? repairType = prov.repairTypeFilter;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Lọc phiếu sửa chữa',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final f in _repairSubFilters)
+                        FilterChip(
+                          label: Text(f.$2),
+                          selected: selected.contains(f.$1),
+                          onSelected: (v) {
+                            setLocal(() {
+                              if (v) {
+                                selected.add(f.$1);
+                              } else {
+                                selected.remove(f.$1);
+                              }
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TsDropdownFieldNullable<String>(
+                    value: repairType,
+                    labelText: 'Hình thức',
+                    items: const [null, 'in_store', 'external'],
+                    itemLabel: (v) {
+                      if (v == null) return 'Tất cả';
+                      return repairTypeLabel(v);
+                    },
+                    onChanged: (v) => setLocal(() => repairType = v),
+                  ),
+                  const SizedBox(height: 8),
+                  TsDropdownFieldNullable<String>(
+                    value: vendorId,
+                    labelText: 'Đơn vị sửa ngoài',
+                    items: [null, ..._vendors.map((v) => v.id)],
+                    itemLabel: (id) {
+                      if (id == null) return 'Tất cả';
+                      for (final v in _vendors) {
+                        if (v.id == id) return v.name;
+                      }
+                      return id;
+                    },
+                    onChanged: (v) => setLocal(() => vendorId = v),
+                  ),
+                  const SizedBox(height: 8),
+                  TsDropdownFieldNullable<String>(
+                    value: technicianId,
+                    labelText: 'Kỹ thuật viên',
+                    items: [null, ..._technicians.map((t) => t.id)],
+                    itemLabel: (id) {
+                      if (id == null) return 'Tất cả';
+                      for (final t in _technicians) {
+                        if (t.id == id) return t.name;
+                      }
+                      return id;
+                    },
+                    onChanged: (v) => setLocal(() => technicianId = v),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () {
+                      prov.setRepairListFilters(
+                        subStatusIn: selected.isEmpty
+                            ? null
+                            : selected.join(','),
+                        repairType: repairType,
+                        vendorId: vendorId,
+                        technicianId: technicianId,
+                        clearSubStatus: selected.isEmpty,
+                        clearRepairType: repairType == null,
+                        clearVendor: vendorId == null,
+                        clearTechnician: technicianId == null,
+                      );
+                      Navigator.pop(ctx);
+                      _reloadList();
+                    },
+                    child: const Text('Áp dụng'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -104,7 +255,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
         ),
       ),
     );
-    if (ok == true) await _prov.load(reset: true);
+    if (ok == true) await _reloadList();
   }
 
   void _openRequest(ServiceRequestPublic req) {
@@ -113,7 +264,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
       MaterialPageRoute<void>(
         builder: (_) => ServiceRequestDetailScreen(requestId: req.id),
       ),
-    ).then((_) => _prov.load(reset: true));
+    ).then((_) => _reloadList());
   }
 
   void _openTicket(ServiceTicketBrief t) {
@@ -127,7 +278,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     Navigator.push<void>(
       context,
       MaterialPageRoute<void>(builder: (_) => screen),
-    ).then((_) => _prov.load(reset: true));
+    ).then((_) => _reloadList());
   }
 
   @override
@@ -187,23 +338,42 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                                 child: LinearProgressIndicator(),
                               ),
                             )
-                          : TsDropdownFieldNullable<String>(
-                              value: prov.supportStaffUserId,
-                              items: [
-                                null,
-                                ..._users.map((u) => u.$1),
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: TsDropdownFieldNullable<String>(
+                                    value: prov.supportStaffUserId,
+                                    items: [
+                                      null,
+                                      ..._users.map((u) => u.$1),
+                                    ],
+                                    itemLabel: (id) {
+                                      if (id == null) return 'Tất cả NV';
+                                      for (final u in _users) {
+                                        if (u.$1 == id) return u.$2;
+                                      }
+                                      return id;
+                                    },
+                                    onChanged: (v) {
+                                      prov.setSupportStaffUserId(v);
+                                      _reloadList();
+                                    },
+                                  ),
+                                ),
+                                if (widget.tab == 'repair') ...[
+                                  IconButton(
+                                    tooltip: 'Lọc nâng cao',
+                                    onPressed: () => _openRepairFilterSheet(prov),
+                                    icon: Badge(
+                                      isLabelVisible: prov.subStatusIn != null ||
+                                          prov.vendorIdFilter != null ||
+                                          prov.technicianIdFilter != null ||
+                                          prov.repairTypeFilter != null,
+                                      child: const Icon(Icons.tune),
+                                    ),
+                                  ),
+                                ],
                               ],
-                              itemLabel: (id) {
-                                if (id == null) return 'Tất cả NV';
-                                for (final u in _users) {
-                                  if (u.$1 == id) return u.$2;
-                                }
-                                return id;
-                              },
-                              onChanged: (v) {
-                                prov.setSupportStaffUserId(v);
-                                prov.load(reset: true);
-                              },
                             ),
                     ),
                   ],
@@ -252,6 +422,15 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
       ('cancelled', 'Hủy'),
     ];
 
+    final repairClearAll = prov.statusFilter == null &&
+        prov.ticketStatus == null &&
+        !prov.overdueOnly &&
+        !prov.dueSoonOnly &&
+        prov.subStatusIn == null &&
+        prov.vendorIdFilter == null &&
+        prov.technicianIdFilter == null &&
+        prov.repairTypeFilter == null;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -259,16 +438,26 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
         children: [
           FilterChip(
             label: const Text('Tất cả'),
-            selected: prov.statusFilter == null &&
-                prov.ticketStatus == null &&
-                !prov.overdueOnly &&
-                !prov.dueSoonOnly,
+            selected: widget.tab == 'repair'
+                ? repairClearAll
+                : prov.statusFilter == null &&
+                    prov.ticketStatus == null &&
+                    !prov.overdueOnly &&
+                    !prov.dueSoonOnly,
             onSelected: (_) {
               prov.setTicketStatus(null);
               prov.setStatusFilter(null);
               prov.setOverdueOnly(false);
               prov.setDueSoonOnly(false);
-              prov.load(reset: true);
+              if (widget.tab == 'repair') {
+                prov.setRepairListFilters(
+                  clearSubStatus: true,
+                  clearRepairType: true,
+                  clearVendor: true,
+                  clearTechnician: true,
+                );
+              }
+              _reloadList();
             },
           ),
           const SizedBox(width: 6),
@@ -277,7 +466,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
             selected: prov.dueSoonOnly,
             onSelected: (_) {
               prov.setDueSoonOnly(true);
-              prov.load(reset: true);
+              _reloadList();
             },
           ),
           const SizedBox(width: 6),
@@ -286,7 +475,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
             selected: prov.overdueOnly,
             onSelected: (_) {
               prov.setOverdueOnly(true);
-              prov.load(reset: true);
+              _reloadList();
             },
           ),
           const SizedBox(width: 6),
@@ -297,7 +486,23 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                 selected: prov.ticketStatus == f.$1,
                 onSelected: (_) {
                   prov.setTicketStatus(f.$1);
-                  prov.load(reset: true);
+                  _reloadList();
+                },
+              ),
+              const SizedBox(width: 6),
+            ],
+          ] else if (widget.tab == 'repair') ...[
+            for (final f in _repairSubFilters) ...[
+              FilterChip(
+                label: Text(
+                  _repairStats[f.$1] != null && _repairStats[f.$1]! > 0
+                      ? '${f.$2} (${_repairStats[f.$1]})'
+                      : f.$2,
+                ),
+                selected: prov.subStatusIn == f.$1,
+                onSelected: (_) {
+                  prov.setRepairListFilters(subStatusIn: f.$1);
+                  _reloadList();
                 },
               ),
               const SizedBox(width: 6),
@@ -309,7 +514,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                 selected: prov.statusFilter == s,
                 onSelected: (_) {
                   prov.setStatusFilter(s);
-                  prov.load(reset: true);
+                  _reloadList();
                 },
               ),
               const SizedBox(width: 6),
@@ -327,7 +532,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     if (prov.error != null && prov.items.isEmpty) {
       return ErrorBanner(
         message: prov.error!,
-        onRetry: () => prov.load(reset: true),
+        onRetry: () => _reloadList(),
       );
     }
     if (prov.items.isEmpty) {
@@ -337,7 +542,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
       );
     }
     return RefreshIndicator(
-      onRefresh: () => prov.load(reset: true),
+      onRefresh: () => _reloadList(),
       child: NotificationListener<ScrollNotification>(
         onNotification: (n) {
           if (n.metrics.pixels > n.metrics.maxScrollExtent - 200) {

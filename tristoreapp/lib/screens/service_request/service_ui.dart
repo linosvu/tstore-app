@@ -215,8 +215,37 @@ String yyyyMmDd(DateTime d) =>
     '${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
-/// Repair wizard steps.
-int repairStepIndex(String status, {bool customerRejectPending = false}) {
+/// Repair wizard steps — derive from sub_status when available.
+int repairStepIndex(
+  String status, {
+  bool customerRejectPending = false,
+  String? subStatus,
+}) {
+  if (subStatus != null && subStatus.isNotEmpty) {
+    switch (subStatus) {
+      case 'receiving':
+        return 0;
+      case 'pending_check':
+      case 'pending_send':
+        return 1;
+      case 'in_repair':
+      case 'at_vendor':
+      case 'pending_pickup':
+      case 'back_in_store':
+        return 2;
+      case 'pending_delivery':
+        return 3;
+      case 'pending_payment':
+      case 'pending_approval':
+      case 'debt_open':
+      case 'completed':
+        return 4;
+      case 'cancelled':
+      case 'declined':
+      case 'customer_rejected':
+        return 5;
+    }
+  }
   switch (status) {
     case 'received':
       return 0;
@@ -243,10 +272,56 @@ const repairStepLabels = [
   'Tiếp nhận',
   'Kiểm tra',
   'Sửa chữa',
-  'Bàn giao',
+  'Trả khách',
   'Thanh toán & Duyệt',
   'Xong',
 ];
+
+String repairSubStatusLabel(String? sub) {
+  switch (sub) {
+    case 'receiving':
+      return 'Đang tiếp nhận';
+    case 'pending_check':
+      return 'Chưa kiểm tra';
+    case 'pending_send':
+      return 'Chờ gửi đi';
+    case 'in_repair':
+      return 'Đang sửa tại shop';
+    case 'at_vendor':
+      return 'Đang sửa ngoài';
+    case 'pending_pickup':
+      return 'Chờ lấy về';
+    case 'back_in_store':
+      return 'Đã lấy về';
+    case 'pending_delivery':
+      return 'Chờ trả khách';
+    case 'pending_payment':
+      return 'Chờ thanh toán';
+    case 'pending_approval':
+      return 'Chờ duyệt';
+    case 'debt_open':
+      return 'Công nợ mở';
+    case 'completed':
+      return 'Hoàn tất';
+    case 'declined':
+      return 'Khách không sửa';
+    case 'cancelled':
+      return 'Huỷ';
+    default:
+      return sub ?? '—';
+  }
+}
+
+String repairTypeLabel(String? type) {
+  switch (type) {
+    case 'in_store':
+      return 'Tại cửa hàng';
+    case 'external':
+      return 'Sửa ngoài';
+    default:
+      return '—';
+  }
+}
 
 const supportFlowStepLabels = [
   'Quản lý',

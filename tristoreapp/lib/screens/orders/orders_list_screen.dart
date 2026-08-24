@@ -46,15 +46,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   String? _error;
   String? _statusFilter;
   String? _paymentFilter;
+  bool _dueSoonOnly = false;
   bool _filtersExpanded = false;
   bool _includeDeleted = false;
   int _scopeSegment = 0;
 
-  static const _primaryStatusFilters = <String?>[
-    null,
-    'confirmed',
-    'completed'
-  ];
+  static const _primaryStatusFilters = ['confirmed', 'completed'];
   static const _extraStatusFilters = [
     'draft',
     'delivery',
@@ -165,6 +162,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       q['list'] = listParam;
     }
     if (_statusFilter != null) q['status'] = _statusFilter;
+    if (_dueSoonOnly) q['expectedDeliveryFilter'] = 'due_soon';
     if (_paymentFilter != null) q['paymentFilter'] = _paymentFilter;
     if (_includeDeleted) q['includeDeleted'] = 'true';
     final searchTrim = _searchCtrl.text.trim();
@@ -604,6 +602,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         scrollDirection: Axis.horizontal,
         padding: pad,
         child: spaced([
+          _allChip(l10n, scheme),
+          _dueSoonChip(l10n, scheme),
           ...primaryChips,
           _paymentChip('unpaid', l10n.ordersFilterPaymentUnpaid, scheme),
           _filtersToggleChip(
@@ -625,8 +625,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       scrollDirection: Axis.horizontal,
       padding: pad,
       children: [
-        ...primaryChips.expand((w) => [w, gap]),
-        ...extraChips.expand((w) => [w, gap]),
+        _allChip(l10n, scheme),
+        gap,
+        _dueSoonChip(l10n, scheme),
+        ...primaryChips.expand((w) => [gap, w]),
+        ...extraChips.expand((w) => [gap, w]),
         _paymentChip('unpaid', l10n.ordersFilterPaymentUnpaid, scheme),
         if (_isElevated(context)) ...[
           gap,
@@ -679,7 +682,54 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     );
   }
 
-  Widget _chip(String? value, String label, ColorScheme scheme) {
+  Widget _allChip(AppLocalizations l10n, ColorScheme scheme) {
+    final selected = _statusFilter == null && !_dueSoonOnly;
+    return FilterChip(
+      label: Text(
+        l10n.ordersFilterAll,
+        style: TextStyle(
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          color: selected ? AppColors.primary : scheme.onSurface,
+        ),
+      ),
+      selected: selected,
+      showCheckmark: false,
+      side: BorderSide.none,
+      shape: const StadiumBorder(),
+      onSelected: (_) {
+        setState(() {
+          _statusFilter = null;
+          _dueSoonOnly = false;
+        });
+        _load(reset: true);
+      },
+    );
+  }
+
+  Widget _dueSoonChip(AppLocalizations l10n, ColorScheme scheme) {
+    return FilterChip(
+      label: Text(
+        l10n.ordersFilterDueSoon,
+        style: TextStyle(
+          fontWeight: _dueSoonOnly ? FontWeight.w600 : FontWeight.w500,
+          color: _dueSoonOnly ? AppColors.primary : scheme.onSurface,
+        ),
+      ),
+      selected: _dueSoonOnly,
+      showCheckmark: false,
+      side: BorderSide.none,
+      shape: const StadiumBorder(),
+      onSelected: (_) {
+        setState(() {
+          _dueSoonOnly = true;
+          _statusFilter = null;
+        });
+        _load(reset: true);
+      },
+    );
+  }
+
+  Widget _chip(String value, String label, ColorScheme scheme) {
     final selected = _statusFilter == value;
     return FilterChip(
       label: Text(
@@ -694,7 +744,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       side: BorderSide.none,
       shape: const StadiumBorder(),
       onSelected: (sel) {
-        setState(() => _statusFilter = sel ? value : null);
+        setState(() {
+          _statusFilter = sel ? value : null;
+          _dueSoonOnly = false;
+        });
         _load(reset: true);
       },
     );
