@@ -291,13 +291,21 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         final preserveRepair = softRepair && _repairFormDirty;
         final preserveDelivery = softDelivery && _deliveryFormDirty;
         final preservePay = softPay && _payFormDirty;
-        final preserveCosts = preserveRepair || preserveDelivery;
+        // Chi phí thuộc bước Sửa chữa — không gắn với dirty bước Trả khách.
+        final preserveCosts = preserveRepair;
+        // Kết quả sửa nhập riêng (gửi lúc complete-repair), không thuộc Lưu chi phí.
+        // Giữ text local khi server chưa có — tránh mất sau Lưu / upload bằng chứng.
+        final serverResult = (detail?.repairResult ?? '').trim();
+        final preserveResult =
+            softRepair && _resultCtrl.text.trim().isNotEmpty && serverResult.isEmpty;
 
         if (!preserveRepair) {
           _solutionCtrl.text = detail?.solution ?? '';
           _repairContactNoteCtrl.text = detail?.repairContactNote ?? '';
           _receiveBackNoteCtrl.text = detail?.receiveBackNote ?? '';
-          _resultCtrl.text = detail?.repairResult ?? '';
+          if (!preserveResult) {
+            _resultCtrl.text = detail?.repairResult ?? '';
+          }
         }
         if (!preserveCosts) {
           _partCostCtrl.text = formatIntegerWithSeparator(
@@ -354,7 +362,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
   }
 
-  Future<bool> _action(String action, {Map<String, dynamic>? body}) async {
+  Future<bool> _action(
+    String action, {
+    Map<String, dynamic>? body,
+    bool clearRepairDirty = false,
+    bool clearDeliveryDirty = false,
+    bool clearPayDirty = false,
+  }) async {
     if (_busy) return false;
     setState(() => _busy = true);
     try {
@@ -364,9 +378,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       if (updated != null && mounted) {
         setState(() {
           _ticket = updated;
-          _repairFormDirty = false;
-          _deliveryFormDirty = false;
-          _payFormDirty = false;
+          // Chỉ clear dirty của form vừa lưu — tránh mất draft khi
+          // vendor-done / pickup / extend-deadline / upload kèm _load.
+          if (clearRepairDirty) _repairFormDirty = false;
+          if (clearDeliveryDirty) _deliveryFormDirty = false;
+          if (clearPayDirty) _payFormDirty = false;
           _previewStepIndex = null;
         });
         AppMessenger.showSnackBar(
@@ -592,13 +608,16 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   }
 
   Future<void> _saveRepairWork() async {
-    await _action('save-repair-work', body: {
-      'solution': _solutionCtrl.text.trim(),
-      'partCost': _parseCostField(_partCostCtrl),
-      'laborCost': _parseCostField(_laborCostCtrl),
-      'warrantyMonths': int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
-    });
-    if (mounted) setState(() => _repairFormDirty = false);
+    await _action(
+      'save-repair-work',
+      body: {
+        'solution': _solutionCtrl.text.trim(),
+        'partCost': _parseCostField(_partCostCtrl),
+        'laborCost': _parseCostField(_laborCostCtrl),
+        'warrantyMonths': int.tryParse(_warrantyCtrl.text.trim()) ?? 0,
+      },
+      clearRepairDirty: true,
+    );
   }
 
   Future<void> _openExtendDeadline(ServiceTicketPublic t) async {
@@ -1990,9 +2009,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       AppMessenger.showSnackBar(context, SnackBar(content: Text(block)));
       return;
     }
-    await _action('complete-repair', body: {
-      'repairResult': _resultCtrl.text.trim(),
-    });
+    await _action(
+      'complete-repair',
+      body: {
+        'repairResult': _resultCtrl.text.trim(),
+      },
+      clearRepairDirty: true,
+    );
   }
 
   Future<void> _abortToPayment() async {
@@ -2473,7 +2496,8 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             readOnly: _historyView,
             decoration: const InputDecoration(labelText: 'Kết quả *'),
             maxLines: 3,
-            onChanged: (_) => setState(() => _repairFormDirty = true),
+            // Không gắn _repairFormDirty — kết quả gửi lúc Hoàn tất, không qua Lưu chi phí.
+            onChanged: (_) => setState(() {}),
           ),
         ),
         if (!_historyView) ...[
@@ -2703,17 +2727,21 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         FilledButton(
           onPressed: _busy || block != null
               ? null
-              : () => _action('complete-delivery', body: {
-                    'deliveryMethod': _deliveryMethod,
-                    'deliveryStaffUserId': _deliveryStaffUserId,
-                    if (_deliveryMethod == 'home' && _deliveryEta != null)
-                      'deliveryEta':
-                          _deliveryEta!.toUtc().toIso8601String(),
-                    if (_shippingPayerCtrl.text.trim().isNotEmpty)
-                      'shippingFeePayer': _shippingPayerCtrl.text.trim(),
-                    if (_deliveryNoteCtrl.text.trim().isNotEmpty)
-                      'note': _deliveryNoteCtrl.text.trim(),
-                  }),
+              : () => _action(
+                    'complete-delivery',
+                    body: {
+                      'deliveryMethod': _deliveryMethod,
+                      'deliveryStaffUserId': _deliveryStaffUserId,
+                      if (_deliveryMethod == 'home' && _deliveryEta != null)
+                        'deliveryEta':
+                            _deliveryEta!.toUtc().toIso8601String(),
+                      if (_shippingPayerCtrl.text.trim().isNotEmpty)
+                        'shippingFeePayer': _shippingPayerCtrl.text.trim(),
+                      if (_deliveryNoteCtrl.text.trim().isNotEmpty)
+                        'note': _deliveryNoteCtrl.text.trim(),
+                    },
+                    clearDeliveryDirty: true,
+                  ),
           child: const Text('Hoàn tất trả khách — sang Thanh toán'),
         ),
         const SizedBox(height: 8),
@@ -3121,18 +3149,23 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                           );
                           return;
                         }
-                        _action('submit-payment', body: {
-                          'paymentAmount': isFree
-                              ? 0
-                              : _parseCostField(_payAmountCtrl),
-                          'paymentMethod': _payMethod,
-                          if (_payNoteCtrl.text.trim().isNotEmpty)
-                            'paymentNote': _payNoteCtrl.text.trim(),
-                          if (_payMethod == 'pay_later' && _payDue != null)
-                            'paymentDueDate': yyyyMmDd(_payDue!),
-                          if (_payProofUrls.isNotEmpty)
-                            'paymentProofUrls': List<String>.from(_payProofUrls),
-                        });
+                        _action(
+                          'submit-payment',
+                          body: {
+                            'paymentAmount': isFree
+                                ? 0
+                                : _parseCostField(_payAmountCtrl),
+                            'paymentMethod': _payMethod,
+                            if (_payNoteCtrl.text.trim().isNotEmpty)
+                              'paymentNote': _payNoteCtrl.text.trim(),
+                            if (_payMethod == 'pay_later' && _payDue != null)
+                              'paymentDueDate': yyyyMmDd(_payDue!),
+                            if (_payProofUrls.isNotEmpty)
+                              'paymentProofUrls':
+                                  List<String>.from(_payProofUrls),
+                          },
+                          clearPayDirty: true,
+                        );
                       },
                 child: const Text('Ghi nhận thanh toán'),
               ),
@@ -3145,17 +3178,21 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                           if (!isFree ||
                               _payNoteCtrl.text.trim().isNotEmpty ||
                               _payProofUrls.isNotEmpty) {
-                            final ok = await _action('submit-payment', body: {
-                              'paymentAmount': isFree
-                                  ? 0
-                                  : _parseCostField(_payAmountCtrl),
-                              'paymentMethod': _payMethod,
-                              if (_payNoteCtrl.text.trim().isNotEmpty)
-                                'paymentNote': _payNoteCtrl.text.trim(),
-                              if (_payProofUrls.isNotEmpty)
-                                'paymentProofUrls':
-                                    List<String>.from(_payProofUrls),
-                            });
+                            final ok = await _action(
+                              'submit-payment',
+                              body: {
+                                'paymentAmount': isFree
+                                    ? 0
+                                    : _parseCostField(_payAmountCtrl),
+                                'paymentMethod': _payMethod,
+                                if (_payNoteCtrl.text.trim().isNotEmpty)
+                                  'paymentNote': _payNoteCtrl.text.trim(),
+                                if (_payProofUrls.isNotEmpty)
+                                  'paymentProofUrls':
+                                      List<String>.from(_payProofUrls),
+                              },
+                              clearPayDirty: true,
+                            );
                             if (!ok) return;
                           }
                           await _action('confirm-payment');
