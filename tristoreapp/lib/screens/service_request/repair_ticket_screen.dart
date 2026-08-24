@@ -9,6 +9,7 @@ import 'package:tstore/core/utils/media_upload_flow.dart';
 import 'package:tstore/core/widgets/media_picker_sheet.dart';
 import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
+import 'package:tstore/core/widgets/pending_media_tile.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
@@ -23,6 +24,7 @@ import 'widgets/edit_request_info_sheet.dart';
 import 'widgets/evidence_section.dart';
 import 'widgets/locked_request_info_card.dart';
 import 'widgets/repair/deadline_card.dart';
+import 'widgets/repair/repair_terms_sheet.dart';
 import 'widgets/repair/sub_status_badge.dart';
 import 'widgets/repair_stepper.dart';
 import 'widgets/signature_pad.dart';
@@ -59,6 +61,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   String? _repairType;
   String? _sendStaffUserId;
   String? _pickupStaffUserId;
+  DateTime _sendMovedAt = DateTime.now();
+  DateTime _pickupMovedAt = DateTime.now();
+  final _sendNoteCtrl = TextEditingController();
+  final _pickupNoteCtrl = TextEditingController();
+  final _vendorDoneNoteCtrl = TextEditingController();
+  bool _invalidatingRepairSave = false;
   List<RepairTechnicianPublic> _technicians = [];
   List<RepairVendorPublic> _vendors = [];
   String? _techUserId;
@@ -102,6 +110,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   String _payMethod = 'cash';
   DateTime? _payDue;
   final List<String> _payProofUrls = [];
+  final List<PendingMediaUpload> _pendingPayProofs = [];
 
   // Request editing (Thông tin YC gốc)
   bool _editingRequest = false;
@@ -120,6 +129,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   final _reqSlotCtrl = TextEditingController();
   DateTime _reqAppointmentDate = DateTime.now().add(const Duration(days: 1));
   List<Map<String, String>> _reqAttachments = [];
+  final List<PendingMediaUpload> _pendingReqAttachments = [];
 
   @override
   void initState() {
@@ -171,6 +181,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     _deliveryNoteCtrl.dispose();
     _payAmountCtrl.dispose();
     _payNoteCtrl.dispose();
+    _sendNoteCtrl.dispose();
+    _pickupNoteCtrl.dispose();
+    _vendorDoneNoteCtrl.dispose();
     super.dispose();
   }
 
@@ -378,14 +391,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   }
 
   String? _handoffBlockReason(ServiceTicketPublic t) {
-    final hasEvidence = t.evidences.any((e) => e.stage == 'receive');
     final hasStaff = t.signatures.any(
       (s) => s.stage == 'receive' && s.signer == 'staff',
     );
     final hasCustomer = t.signatures.any(
       (s) => s.stage == 'receive' && s.signer == 'customer',
     );
-    if (!hasEvidence) return 'Cần thêm bằng chứng tiếp nhận (ảnh/video).';
     if (!hasStaff) return 'Cần chữ ký nhân viên.';
     if (!hasCustomer) return 'Cần chữ ký khách.';
     if (_receiveStaffUserId == null) return 'Chọn nhân viên tiếp nhận.';
@@ -410,6 +421,130 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
   }
 
+  Future<void> _openTermsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => RepairTermsSheet(
+        initialText: _termsCtrl.text,
+        defaultText: _defaultTermsText,
+        onSave: (text) async {
+          setState(() {
+            _termsCtrl.text = text;
+            _termsDirty = true;
+          });
+          await _updateRepairTerms();
+        },
+      ),
+    );
+  }
+
+  Widget _termsCommitmentRow() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              _termsCtrl.text,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ),
+          if (!_historyView)
+            IconButton(
+              tooltip: 'Sửa cam kết',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: _busy ? null : _openTermsSheet,
+            ),
+        ],
+      ),
+    );
+  }
+
+  bool _deadlineReadOnly(ServiceTicketPublic t, RepairDetailPublic? d) {
+    final step = _historyView
+        ? _previewStepIndex!
+        : _currentStepIndex(t, d);
+    return step >= 3;
+  }
+
+  TicketMovementPublic? _movement(RepairDetailPublic? d, String type) {
+    final list = d?.movements ?? const [];
+    for (var i = list.length - 1; i >= 0; i--) {
+      if (list[i].type == type) return list[i];
+    }
+    return null;
+  }
+
+  String _userName(String? userId) {
+    if (userId == null) return '—';
+    for (final u in _users) {
+      if (u.$1 == userId) return u.$2;
+    }
+    return userId;
+  }
+
+  void _onRepairFieldChanged() {
+    final wasDirty = _repairFormDirty;
+    setState(() => _repairFormDirty = true);
+    if (!wasDirty && !_historyView && !_invalidatingRepairSave) {
+      _invalidateRepairWorkSave();
+    }
+  }
+
+  Future<void> _invalidateRepairWorkSave() async {
+    if (_invalidatingRepairSave || _historyView) return;
+    _invalidatingRepairSave = true;
+    try {
+      final updated = await context
+          .read<ServiceRequestsProvider>()
+          .ticketAction(widget.ticketId, 'invalidate-repair-work-save');
+      if (updated != null && mounted) {
+        setState(() => _ticket = updated);
+      }
+    } catch (_) {
+      // Client vẫn khoá nút qua _repairFormDirty.
+    } finally {
+      _invalidatingRepairSave = false;
+    }
+  }
+
+  Widget _movementDateTile({
+    required String title,
+    required DateTime value,
+    required ValueChanged<DateTime> onChanged,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      subtitle: Text(formatServiceTime(value.toIso8601String())),
+      trailing: const Icon(Icons.schedule),
+      onTap: _historyView
+          ? null
+          : () async {
+              final d0 = await showDatePicker(
+                context: context,
+                initialDate: value,
+                firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                lastDate: DateTime.now().add(const Duration(days: 1)),
+              );
+              if (d0 == null || !mounted) return;
+              final tm = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay.fromDateTime(value),
+              );
+              if (tm == null) return;
+              onChanged(
+                DateTime(d0.year, d0.month, d0.day, tm.hour, tm.minute),
+              );
+            },
+    );
+  }
+
   Future<void> _handoff(ServiceTicketPublic t) async {
     final block = _handoffBlockReason(t);
     if (block != null) {
@@ -424,7 +559,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (mounted) setState(() => _inspectFormDirty = false);
   }
 
-  String? _confirmInspectBlockReason(ServiceTicketPublic t) {
+  String? _confirmInspectBlockReason(ServiceTicketPublic _) {
     if (_initialCtrl.text.trim().isEmpty) {
       return 'Nhập đánh giá ban đầu.';
     }
@@ -435,9 +570,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (_repairType == 'external' &&
         (_vendorId == null || _vendorId!.isEmpty)) {
       return 'Chọn đơn vị sửa ngoài.';
-    }
-    if (!t.evidences.any((e) => e.stage == 'repair_method')) {
-      return 'Cần ảnh/video hình thức sửa chữa.';
     }
     return null;
   }
@@ -677,15 +809,34 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     try {
       var anyFail = false;
       for (final pick in picks) {
-        final uploaded = await uploadPickedMedia(pick: pick, api: api);
-        if (uploaded == null) {
+        final pending = enqueuePendingMedia(pick: pick, scopeKey: 'request');
+        setState(() => _pendingReqAttachments.add(pending));
+        try {
+          final uploaded = await uploadPickedMedia(
+            pick: pick,
+            api: api,
+            onProgress: (v) {
+              if (!mounted) return;
+              setState(() => pending.progress = v);
+            },
+          );
+          if (uploaded == null) {
+            anyFail = true;
+            continue;
+          }
+          _reqAttachments.add({
+            'url': uploaded.url,
+            'mediaType': uploaded.mediaType,
+          });
+        } catch (_) {
           anyFail = true;
-          continue;
+        } finally {
+          if (mounted) {
+            setState(
+              () => _pendingReqAttachments.removeWhere((e) => e.id == pending.id),
+            );
+          }
         }
-        _reqAttachments.add({
-          'url': uploaded.url,
-          'mediaType': uploaded.mediaType,
-        });
       }
       if (anyFail && mounted) {
         AppMessenger.showSnackBar(
@@ -705,6 +856,11 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _removePendingReqAttachment(String id) {
+    if (!mounted) return;
+    setState(() => _pendingReqAttachments.removeWhere((e) => e.id == id));
   }
 
   void _removeRequestAttachmentAt(int index) {
@@ -971,6 +1127,46 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                ..._pendingReqAttachments.map(
+                  (pending) => SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        LocalMediaPreviewTile(
+                          localPath: pending.localPath,
+                          isVideo: pending.isVideo,
+                          progress: pending.progress,
+                          width: 64,
+                          height: 64,
+                        ),
+                        Positioned(
+                          right: -4,
+                          top: -4,
+                          child: Material(
+                            color: Colors.black.withValues(alpha: 0.75),
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              onTap: _busy
+                                  ? null
+                                  : () => _removePendingReqAttachment(pending.id),
+                              customBorder: const CircleBorder(),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 for (var i = 0; i < _reqAttachments.length; i++)
                   Stack(
                     children: [
@@ -998,19 +1194,23 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                         },
                       ),
                       Positioned(
-                        top: 0,
-                        right: 0,
-                        child: IconButton(
-                          visualDensity: VisualDensity.compact,
-                          iconSize: 16,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black54,
-                            foregroundColor: Colors.white,
+                        right: -4,
+                        top: -4,
+                        child: Material(
+                          color: Colors.black.withValues(alpha: 0.75),
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            onTap: _busy ? null : () => _removeRequestAttachmentAt(i),
+                            customBorder: const CircleBorder(),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
-                          onPressed: _busy
-                              ? null
-                              : () => _removeRequestAttachmentAt(i),
-                          icon: const Icon(Icons.close),
                         ),
                       ),
                     ],
@@ -1213,6 +1413,18 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 ),
                 const SizedBox(height: 12),
                 _buildRequestInfoEditor(t, d),
+                if (d != null) ...[
+                  const SizedBox(height: 12),
+                  RepairDeadlineCard(
+                    ticketId: t.id,
+                    deadlineAt: t.deadlineAt,
+                    deadlineChanges: d.deadlineChanges,
+                    evidences: t.evidences,
+                    readOnly: _deadlineReadOnly(t, d),
+                    onExtend: () => _openExtendDeadline(t),
+                    onReload: _load,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 ..._buildStepBody(t, d, userIds, nameOf, l10n),
                 const SizedBox(height: 12),
@@ -1313,45 +1525,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     List<String> userIds,
     Map<String, String> nameOf,
   ) {
-    final termsCard = SectionCard(
-      title: 'Cam kết với khách',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _termsCtrl,
-            readOnly: _historyView,
-            decoration: const InputDecoration(
-              labelText: 'Nội dung cam kết',
-            ),
-            maxLines: 4,
-            onChanged: (_) => setState(() => _termsDirty = true),
-          ),
-          if (!_historyView) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                            _termsCtrl.text = _defaultTermsText;
-                            _termsDirty = true;
-                          }),
-                  child: const Text('Khôi phục mặc định'),
-                ),
-                const Spacer(),
-                FilledButton.tonal(
-                  onPressed: _busy || !_termsDirty ? null : _updateRepairTerms,
-                  child: const Text('Lưu cam kết'),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-
     final staffSigs = t.signatures
         .where((s) => s.stage == 'receive' && s.signer == 'staff')
         .toList();
@@ -1400,7 +1573,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       evidences: t.evidences,
       onChanged: _load,
       readOnly: _historyView,
-      title: 'Bằng chứng tiếp nhận *',
+      title: 'Bằng chứng tiếp nhận',
       noteField: TextField(
         controller: _receiveNoteCtrl,
         readOnly: _historyView,
@@ -1447,8 +1620,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
     if (bothSigned) {
       return [
-        termsCard,
-        const SizedBox(height: 12),
         evidence,
         const SizedBox(height: 12),
         SectionCard(
@@ -1480,6 +1651,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   ),
                 ],
               ),
+              _termsCommitmentRow(),
               Row(
                 children: [
                   if (!_historyView) ...[
@@ -1537,8 +1709,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
 
     return [
-      termsCard,
-      const SizedBox(height: 12),
       evidence,
       const SizedBox(height: 12),
       SignaturePadSection(
@@ -1563,6 +1733,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         readOnly: _historyView,
         title: 'Chữ ký khách *',
       ),
+      _termsCommitmentRow(),
       const SizedBox(height: 12),
       ctas,
     ];
@@ -1579,16 +1750,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     _sendStaffUserId ??= context.read<AuthProvider>().user?.id;
 
     return [
-      RepairDeadlineCard(
-        ticketId: t.id,
-        deadlineAt: t.deadlineAt,
-        deadlineChanges: d?.deadlineChanges ?? const [],
-        evidences: t.evidences,
-        readOnly: _historyView,
-        onExtend: () => _openExtendDeadline(t),
-        onReload: _load,
-      ),
-      const SizedBox(height: 12),
       if (!isPendingSend) ...[
         SectionCard(
           title: 'Nhân viên kỹ thuật *',
@@ -1683,7 +1844,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 evidences: t.evidences,
                 onChanged: _load,
                 readOnly: _historyView,
-                title: 'Ảnh/video kiểm tra *',
+                title: 'Ảnh/video kiểm tra',
                 noteField: TextField(
                   controller: _methodNoteCtrl,
                   readOnly: _historyView,
@@ -1703,6 +1864,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 : () => _confirmInspect(t),
             child: const Text('Xác nhận kiểm tra'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: _busy ? null : _declineRepair,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Khách không sửa'),
+          ),
         ],
       ],
       if (isPendingSend) ...[
@@ -1717,6 +1886,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   'Đơn vị: ${d!.vendorName}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
+              const SizedBox(height: 8),
+              _movementDateTile(
+                title: 'Ngày giờ gửi *',
+                value: _sendMovedAt,
+                onChanged: (v) => setState(() => _sendMovedAt = v),
+              ),
               const SizedBox(height: 8),
               TsDropdownFieldNullable<String>(
                 value: _sendStaffUserId,
@@ -1734,14 +1909,26 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 evidences: t.evidences,
                 onChanged: _load,
                 readOnly: _historyView,
-                title: 'Ảnh/video bàn giao *',
+                title: 'Ảnh/video bàn giao',
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _sendNoteCtrl,
+                readOnly: _historyView,
+                decoration: const InputDecoration(labelText: 'Ghi chú'),
+                maxLines: 2,
               ),
               if (!_historyView) ...[
                 const SizedBox(height: 8),
                 FilledButton(
-                  onPressed: _busy ? null : () => _action('confirm-send', body: {
-                        'staffUserId': _sendStaffUserId,
-                      }),
+                  onPressed: _busy
+                      ? null
+                      : () => _action('confirm-send', body: {
+                            'staffUserId': _sendStaffUserId,
+                            'movedAt': _sendMovedAt.toUtc().toIso8601String(),
+                            if (_sendNoteCtrl.text.trim().isNotEmpty)
+                              'note': _sendNoteCtrl.text.trim(),
+                          }),
                   child: const Text('Xác nhận đã gửi'),
                 ),
               ],
@@ -1759,6 +1946,16 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           child: const Text('Hủy yêu cầu'),
         ),
       ],
+      if (!_historyView && isPendingSend) ...[
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _busy ? null : _declineRepair,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('Khách không sửa'),
+        ),
+      ],
     ];
   }
 
@@ -1768,7 +1965,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   String _money(int v) => formatIntegerWithSeparator(v, _thousandsSep);
 
   String? _advanceDeliveryBlockReason(
-    ServiceTicketPublic t,
+    ServiceTicketPublic _,
     RepairDetailPublic? d,
   ) {
     if (_solutionCtrl.text.trim().isEmpty) {
@@ -1780,9 +1977,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (_resultCtrl.text.trim().isEmpty) return 'Nhập kết quả sửa chữa.';
     if (int.tryParse(_warrantyCtrl.text.trim()) == null) {
       return 'Nhập bảo hành (tháng).';
-    }
-    if (!t.evidences.any((e) => e.stage == 'repair_result')) {
-      return 'Cần bằng chứng kết quả sửa.';
     }
     return null;
   }
@@ -1812,22 +2006,62 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
   }
 
+  Future<void> _declineRepair() async {
+    final r = await promptReason(
+      context,
+      title: 'Khách không sửa — lý do',
+      hint: 'Lý do khách từ chối sửa chữa',
+    );
+    if (r != null) {
+      await _action('decline-repair', body: {'reason': r});
+    }
+  }
+
   Future<void> _addPayProof() async {
     final picks = await showMediaPickerSheet(context, allowVideo: false);
     if (picks == null || picks.isEmpty || !mounted) return;
     final api = context.read<AuthProvider>().api;
     setState(() => _busy = true);
     try {
+      var anyFail = false;
       for (final pick in picks) {
-        final uploaded = await uploadPickedMedia(pick: pick, api: api);
-        if (uploaded == null || uploaded.url.isEmpty) continue;
-        _payProofUrls.add(uploaded.url);
+        final pending = enqueuePendingMedia(pick: pick, scopeKey: 'pay-proof');
+        setState(() => _pendingPayProofs.add(pending));
+        try {
+          final uploaded = await uploadPickedMedia(
+            pick: pick,
+            api: api,
+            onProgress: (v) {
+              if (!mounted) return;
+              setState(() => pending.progress = v);
+            },
+          );
+          if (uploaded == null || uploaded.url.isEmpty) {
+            anyFail = true;
+            continue;
+          }
+          _payProofUrls.add(uploaded.url);
+        } catch (_) {
+          anyFail = true;
+        } finally {
+          if (mounted) {
+            setState(
+              () => _pendingPayProofs.removeWhere((e) => e.id == pending.id),
+            );
+          }
+        }
       }
       if (mounted) {
         setState(() {
           _payFormDirty = true;
           _busy = false;
         });
+        if (anyFail) {
+          AppMessenger.showSnackBar(
+            context,
+            const SnackBar(content: Text('Một số chứng từ tải lên thất bại.')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1838,6 +2072,124 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
         );
       }
     }
+  }
+
+  void _removePendingPayProof(String id) {
+    if (!mounted) return;
+    setState(() => _pendingPayProofs.removeWhere((e) => e.id == id));
+  }
+
+  Widget _proofTiles({
+    required bool canEdit,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ..._pendingPayProofs.map(
+          (pending) => SizedBox(
+            width: 64,
+            height: 64,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                LocalMediaPreviewTile(
+                  localPath: pending.localPath,
+                  isVideo: pending.isVideo,
+                  progress: pending.progress,
+                  width: 64,
+                  height: 64,
+                ),
+                if (canEdit)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        onTap: () => _removePendingPayProof(pending.id),
+                        customBorder: const CircleBorder(),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        for (var i = 0; i < _payProofUrls.length; i++)
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                MediaTile(
+                  url: _payProofUrls[i],
+                  mediaType: 'image',
+                  width: 64,
+                  height: 64,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => MediaViewerPage(
+                          items: _payProofUrls
+                              .map(
+                                (u) => MediaViewerItem(
+                                  url: u,
+                                  mediaType: 'image',
+                                ),
+                              )
+                              .toList(),
+                          initialIndex: i,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (canEdit)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        onTap: () => setState(() {
+                          _payProofUrls.removeAt(i);
+                          _payFormDirty = true;
+                        }),
+                        customBorder: const CircleBorder(),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        if (canEdit)
+          ActionChip(
+            avatar: const Icon(Icons.add_a_photo, size: 18),
+            label: const Text('Thêm'),
+            onPressed: _busy ? null : _addPayProof,
+          ),
+      ],
+    );
   }
 
   List<Widget> _repairingStep(
@@ -1868,7 +2220,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               labelText: 'Nội dung sửa chữa *',
             ),
             maxLines: 3,
-            onChanged: (_) => setState(() => _repairFormDirty = true),
+            onChanged: (_) => _onRepairFieldChanged(),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -1879,7 +2231,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             inputFormatters: [
               IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
             ],
-            onChanged: (_) => setState(() => _repairFormDirty = true),
+            onChanged: (_) => _onRepairFieldChanged(),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -1890,7 +2242,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             inputFormatters: [
               IntegerThousandsInputFormatter(separatorKey: _thousandsSep),
             ],
-            onChanged: (_) => setState(() => _repairFormDirty = true),
+            onChanged: (_) => _onRepairFieldChanged(),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -1901,13 +2253,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (_) => setState(() => _repairFormDirty = true),
+            onChanged: (_) => _onRepairFieldChanged(),
           ),
           if (!_historyView) ...[
             const SizedBox(height: 12),
             if (d?.isRepairWorkSaved == true && !_repairFormDirty)
               Text(
-                'Đã lưu lúc ${formatServiceTime(d?.repairWorkSavedAt)}',
+                'Đã lưu ${formatServiceTimeHm(d?.repairWorkSavedAt)} · '
+                '${_userName(d?.repairWorkSavedBy)}',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.primary,
                   fontSize: 13,
@@ -1968,17 +2321,53 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 d?.vendorName ?? '—',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
+              if (_movement(d, 'send') != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Đã gửi: ${formatServiceTime(_movement(d, 'send')!.movedAt)}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                if ((_movement(d, 'send')!.staffName ?? '').isNotEmpty)
+                  Text(
+                    'NV gửi: ${_movement(d, 'send')!.staffName}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                if ((_movement(d, 'send')!.note ?? '').trim().isNotEmpty)
+                  Text(
+                    'Ghi chú gửi: ${_movement(d, 'send')!.note}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+              ],
               const SizedBox(height: 8),
               const Text(
                 'Xác nhận khi đơn vị báo đã sửa xong để chuyển sang chờ lấy về.',
               ),
               if (!_historyView) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _vendorDoneNoteCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Ghi chú (tuỳ chọn)',
+                  ),
+                  maxLines: 2,
+                ),
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: _busy
                       ? null
-                      : () => _action('vendor-done'),
+                      : () => _action('vendor-done', body: {
+                            if (_vendorDoneNoteCtrl.text.trim().isNotEmpty)
+                              'note': _vendorDoneNoteCtrl.text.trim(),
+                          }),
                   child: const Text('Đơn vị đã sửa xong'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: _busy ? null : _declineRepair,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: const Text('Khách không sửa'),
                 ),
               ],
             ],
@@ -1992,6 +2381,18 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (d?.vendorName != null)
+                Text(
+                  'Từ: ${d!.vendorName}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              const SizedBox(height: 8),
+              _movementDateTile(
+                title: 'Ngày giờ lấy về *',
+                value: _pickupMovedAt,
+                onChanged: (v) => setState(() => _pickupMovedAt = v),
+              ),
+              const SizedBox(height: 8),
               TsDropdownFieldNullable<String>(
                 value: _pickupStaffUserId,
                 labelText: 'Nhân viên lấy về *',
@@ -2016,7 +2417,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 evidences: t.evidences,
                 onChanged: _load,
                 readOnly: _historyView,
-                title: 'Ảnh/video nhận lại *',
+                title: 'Ảnh/video nhận lại',
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _pickupNoteCtrl,
+                readOnly: _historyView,
+                decoration: const InputDecoration(labelText: 'Ghi chú'),
+                maxLines: 2,
               ),
               if (!_historyView) ...[
                 const SizedBox(height: 12),
@@ -2025,8 +2433,20 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       ? null
                       : () => _action('confirm-pickup', body: {
                             'staffUserId': _pickupStaffUserId,
+                            'movedAt':
+                                _pickupMovedAt.toUtc().toIso8601String(),
+                            if (_pickupNoteCtrl.text.trim().isNotEmpty)
+                              'note': _pickupNoteCtrl.text.trim(),
                           }),
                   child: const Text('Xác nhận đã lấy về'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: _busy ? null : _declineRepair,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: const Text('Khách không sửa'),
                 ),
               ],
             ],
@@ -2043,7 +2463,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           evidences: t.evidences,
           onChanged: _load,
           readOnly: _historyView,
-          title: 'Bằng chứng kết quả sửa *',
+          title: 'Bằng chứng kết quả sửa',
         ),
         const SizedBox(height: 12),
         SectionCard(
@@ -2077,11 +2497,19 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           ),
           const SizedBox(height: 8),
           OutlinedButton(
+            onPressed: _busy ? null : _declineRepair,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Khách không sửa'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
             onPressed: _busy ? null : _abortToPayment,
             style: OutlinedButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Hủy'),
+            child: const Text('Hủy giữa chừng'),
           ),
         ],
       ],
@@ -2091,9 +2519,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
   String? _completeDeliveryBlockReason(ServiceTicketPublic t) {
     if (_deliveryStaffUserId == null || _deliveryStaffUserId!.trim().isEmpty) {
       return 'Chọn nhân viên bàn giao.';
-    }
-    if (!t.evidences.any((e) => e.stage == 'delivery')) {
-      return 'Cần bằng chứng bàn giao.';
     }
     final hasStaff = t.signatures.any(
       (s) => s.stage == 'delivery' && s.signer == 'staff',
@@ -2123,6 +2548,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     final labor = _parseCostField(_laborCostCtrl);
     final total = part + labor;
     final block = _completeDeliveryBlockReason(t);
+    final sub = d?.subStatus ?? 'pending_delivery';
 
     final staffSigs = t.signatures
         .where((s) => s.stage == 'delivery' && s.signer == 'staff')
@@ -2171,7 +2597,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       evidences: t.evidences,
       onChanged: () => _load(),
       readOnly: _historyView,
-      title: 'Bằng chứng bàn giao *',
+      title: 'Bằng chứng bàn giao',
       noteField: TextField(
         controller: _deliveryNoteCtrl,
         readOnly: _historyView,
@@ -2421,15 +2847,27 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     }
 
     return [
-      RepairDeadlineCard(
-        ticketId: t.id,
-        deadlineAt: t.deadlineAt,
-        deadlineChanges: d?.deadlineChanges ?? const [],
-        evidences: t.evidences,
-        readOnly: true,
-        onExtend: () {},
-        onReload: _load,
-      ),
+      if (sub == 'declined') ...[
+        SectionCard(
+          title: 'Khách không sửa',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Lý do: ${d?.abortReason ?? d?.repairResult ?? '—'}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Chi phí = 0. Hoàn tất trả máy rồi sang thanh toán (miễn phí).',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+      methodCard,
       const SizedBox(height: 12),
       SectionCard(
         title: 'Chi phí & bảo hành',
@@ -2445,14 +2883,17 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             ),
             const SizedBox(height: 8),
             Text('Bảo hành: ${d?.warrantyMonths ?? 0} tháng'),
-            const SizedBox(height: 8),
-            Text(
-              'Chi phí chỉ sửa ở bước Sửa chữa (Làm lại bước nếu cần điều chỉnh).',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 13,
+            if (!_historyView &&
+                _canRewindRepair(t, d) &&
+                sub != 'declined') ...[
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _busy
+                    ? null
+                    : () => _rewindToStep(2, t, d),
+                child: const Text('Sửa chi phí'),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -2460,8 +2901,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       evidence,
       const SizedBox(height: 12),
       ...signatureBlock,
-      const SizedBox(height: 12),
-      methodCard,
       const SizedBox(height: 12),
       ctas,
     ];
@@ -2476,11 +2915,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     final pendingApproval = sub == 'pending_approval';
     final terminal = sub == 'completed' || sub == 'debt_open';
     final aborted = d?.abortedAt != null;
+    final declined = d?.subStatus == 'declined' ||
+        (d?.repairResult ?? '').startsWith('Khách không sửa');
     final costTotal = (d?.partCost ?? 0) + (d?.laborCost ?? 0);
-    final due = aborted
+    final due = (aborted || declined)
         ? (d?.paymentAmount ?? 0)
         : (d?.paymentAmount ?? costTotal);
     final isFree = _payMethod == 'free';
+    final displayDue = isFree ? 0 : due;
     final currentUserId = context.read<AuthProvider>().user?.id;
     final sameSubmitter =
         pendingApproval && d?.paymentSubmittedBy == currentUserId;
@@ -2535,13 +2977,31 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
           ),
         ),
       if (aborted) const SizedBox(height: 12),
+      if (declined && !aborted)
+        SectionCard(
+          title: 'Khách không sửa',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Lý do: ${d?.abortReason ?? '—'}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text('Chi phí 0 — ghi nhận miễn phí rồi duyệt để đóng.'),
+            ],
+          ),
+        ),
+      if (declined && !aborted) const SizedBox(height: 12),
       SectionCard(
         title: 'Thanh toán & Duyệt',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Tổng chi phí sửa: ${_money(costTotal)} đ'),
-            Text('Còn lại / cần thu: ${_money(due)} đ'),
+            Text('Còn lại / cần thu: ${_money(displayDue)} đ'),
             const SizedBox(height: 12),
             if (pendingPayment) ...[
               SwitchListTile(
@@ -2629,82 +3089,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   const SizedBox(height: 8),
                   const Text('Chứng từ chuyển khoản *'),
                   const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (var i = 0; i < _payProofUrls.length; i++)
-                        InputChip(
-                          label: Text('Ảnh ${i + 1}'),
-                          onDeleted: () => setState(() {
-                            _payProofUrls.removeAt(i);
-                            _payFormDirty = true;
-                          }),
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => MediaViewerPage(
-                                  items: _payProofUrls
-                                      .map(
-                                        (u) => MediaViewerItem(
-                                          url: u,
-                                          mediaType: 'image',
-                                        ),
-                                      )
-                                      .toList(),
-                                  initialIndex: i,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ActionChip(
-                        avatar: const Icon(Icons.add_a_photo, size: 18),
-                        label: const Text('Thêm'),
-                        onPressed: _busy ? null : _addPayProof,
-                      ),
-                    ],
-                  ),
+                  _proofTiles(canEdit: !_historyView),
                 ] else if (_payMethod == 'cash') ...[
                   const SizedBox(height: 8),
                   const Text('Chứng từ (tuỳ chọn)'),
                   const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (var i = 0; i < _payProofUrls.length; i++)
-                        InputChip(
-                          label: Text('Ảnh ${i + 1}'),
-                          onDeleted: () => setState(() {
-                            _payProofUrls.removeAt(i);
-                            _payFormDirty = true;
-                          }),
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => MediaViewerPage(
-                                  items: _payProofUrls
-                                      .map(
-                                        (u) => MediaViewerItem(
-                                          url: u,
-                                          mediaType: 'image',
-                                        ),
-                                      )
-                                      .toList(),
-                                  initialIndex: i,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ActionChip(
-                        avatar: const Icon(Icons.add_a_photo, size: 18),
-                        label: const Text('Thêm'),
-                        onPressed: _busy ? null : _addPayProof,
-                      ),
-                    ],
-                  ),
+                  _proofTiles(canEdit: !_historyView),
                 ],
               ],
               const SizedBox(height: 8),
@@ -2778,8 +3168,15 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 isFree || (d?.paymentMethod == 'free')
                     ? 'Miễn phí'
                     : 'Đã ghi nhận: ${_money(d?.paymentAmount ?? 0)} đ',
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               Text('PT: ${d?.paymentMethod ?? '—'}'),
+              if (d?.paymentSubmittedAt != null)
+                Text(
+                  'Ghi bởi ${_userName(d?.paymentSubmittedBy)} · '
+                  '${formatServiceTime(d?.paymentSubmittedAt)}',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                ),
               if ((d?.paymentNote ?? '').trim().isNotEmpty)
                 Text('Ghi chú: ${d!.paymentNote}'),
               if ((d?.paymentProofUrls ?? const []).isNotEmpty) ...[

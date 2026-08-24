@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/media_upload_flow.dart';
 import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:tstore/core/widgets/media_picker_sheet.dart';
 import 'package:tstore/core/widgets/media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
+import 'package:tstore/core/widgets/pending_media_tile.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
@@ -38,47 +40,54 @@ class EvidenceSection extends StatefulWidget {
 
 class _EvidenceSectionState extends State<EvidenceSection> {
   bool _busy = false;
+  final List<PendingMediaUpload> _pending = [];
+  final Set<String> _cancelledPendingIds = {};
 
-  List<TicketEvidencePublic> get _stageItems =>
-      widget.evidences.where((e) => e.stage == widget.stage).toList();
+  List<TicketEvidencePublic> get _stageItems => widget.evidences
+      .where((e) => e.stage == widget.stage && (e.fileUrl).trim().isNotEmpty)
+      .toList();
 
-  Future<void> _add() async {
+  void _cancelPending(PendingMediaUpload pending) {
+    _cancelledPendingIds.add(pending.id);
+    if (!mounted) return;
+    setState(() {
+      _pending.removeWhere((e) => e.id == pending.id);
+    });
+  }
+
+  Future<void> _confirmRemove(TicketEvidencePublic item) async {
     if (_busy || widget.readOnly) return;
-    final picks = await showMediaPickerSheet(context, allowVideo: true);
-    if (picks == null || picks.isEmpty || !mounted) return;
-    setState(() => _busy = true);
-    final api = context.read<AuthProvider>().api;
-    final prov = context.read<ServiceRequestsProvider>();
-    try {
-      var anyFail = false;
-      for (final pick in picks) {
-        final uploaded = await uploadPickedMedia(pick: pick, api: api);
-        if (uploaded == null || uploaded.url.isEmpty) {
-          anyFail = true;
-          continue;
-        }
-        await prov.addEvidence(widget.ticketId, {
-          'stage': widget.stage,
-          'kind': uploaded.mediaType == 'video' || pick.isVideo
-              ? 'video'
-              : 'image',
-          'fileUrl': uploaded.url,
-        });
-      }
-      if (anyFail && mounted) {
-        AppMessenger.showSnackBar(
-          context,
-          const SnackBar(
-            content: Text('Một số ảnh/video không tải lên được. Thử video ngắn hơn.'),
+    final l10n = AppLocalizations.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.deliveryRemoveImage),
+        content: Text(l10n.productsRemoveImageTooltip),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.cancel),
           ),
-        );
-      }
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await context
+          .read<ServiceRequestsProvider>()
+          .removeEvidence(widget.ticketId, item.id);
       widget.onChanged();
     } catch (e) {
       if (mounted) {
         AppMessenger.showSnackBar(
           context,
-          SnackBar(content: Text('Không tải được bằng chứng: $e')),
+          SnackBar(content: Text('Không xoá được bằng chứng: $e')),
         );
       }
     } finally {
@@ -86,9 +95,73 @@ class _EvidenceSectionState extends State<EvidenceSection> {
     }
   }
 
+  Future<void> _add() async {
+    if (_busy || widget.readOnly) return;
+    final picks = await showMediaPickerSheet(context, allowVideo: true);
+    if (picks == null || picks.isEmpty || !mounted) return;
+
+    setState(() => _busy = true);
+    final api = context.read<AuthProvider>().api;
+    final prov = context.read<ServiceRequestsProvider>();
+    var anyAdded = false;
+    try {
+      for (final pick in picks) {
+        if (!mounted) return;
+        final pending = enqueuePendingMedia(
+          pick: pick,
+          scopeKey: widget.stage,
+        );
+        setState(() => _pending.add(pending));
+
+        try {
+          final uploaded = await uploadPickedMedia(
+            pick: pick,
+            api: api,
+            onProgress: (v) {
+              if (!mounted) return;
+              if (_cancelledPendingIds.contains(pending.id)) return;
+              setState(() => pending.progress = v);
+            },
+          );
+
+          if (!mounted) return;
+          if (_cancelledPendingIds.contains(pending.id)) continue;
+          if (uploaded == null || uploaded.url.trim().isEmpty) continue;
+
+          await prov.addEvidence(widget.ticketId, {
+            'stage': widget.stage,
+            'kind': pick.isVideo ? 'video' : 'image',
+            'fileUrl': uploaded.url,
+          });
+          anyAdded = true;
+        } catch (e) {
+          if (mounted) {
+            AppMessenger.showSnackBar(
+              context,
+              SnackBar(content: Text('Không tải được bằng chứng: $e')),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _pending.removeWhere((e) => e.id == pending.id));
+            _cancelledPendingIds.remove(pending.id);
+          }
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        if (anyAdded) widget.onChanged();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _stageItems;
+    final canDelete = !widget.readOnly && !_busy;
+    final canCancelPending = !widget.readOnly;
+
     return SectionCard(
       title: widget.title,
       titleTrailing: widget.readOnly
@@ -107,9 +180,9 @@ class _EvidenceSectionState extends State<EvidenceSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (items.isEmpty)
+          if (items.isEmpty && _pending.isEmpty)
             const Text(
-              'Chưa có bằng chứng.',
+              'Chưa có thông tin',
               style: TextStyle(color: Colors.grey),
             )
           else
@@ -117,29 +190,99 @@ class _EvidenceSectionState extends State<EvidenceSection> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (var i = 0; i < items.length; i++)
-                  MediaTile(
-                    url: items[i].fileUrl,
-                    mediaType: items[i].kind,
+                for (final p in _pending)
+                  SizedBox(
                     width: 64,
                     height: 64,
-                    onTap: () {
-                      Navigator.push<void>(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => MediaViewerPage(
-                            items: [
-                              for (final e in items)
-                                MediaViewerItem(
-                                  url: e.fileUrl,
-                                  mediaType: e.kind,
-                                ),
-                            ],
-                            initialIndex: i,
-                          ),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        LocalMediaPreviewTile(
+                          localPath: p.localPath,
+                          isVideo: p.isVideo,
+                          loading: true,
+                          error: false,
+                          progress: p.progress,
+                          width: 64,
+                          height: 64,
                         ),
-                      );
-                    },
+                        if (canCancelPending)
+                          Positioned(
+                            right: -4,
+                            top: -4,
+                            child: Material(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                onTap: () => _cancelPending(p),
+                                customBorder: const CircleBorder(),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                for (var i = 0; i < items.length; i++)
+                  SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        MediaTile(
+                          url: items[i].fileUrl,
+                          mediaType: items[i].kind,
+                          width: 64,
+                          height: 64,
+                          onTap: () {
+                            Navigator.push<void>(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => MediaViewerPage(
+                                  items: [
+                                    for (final e in items)
+                                      MediaViewerItem(
+                                        url: e.fileUrl,
+                                        mediaType: e.kind,
+                                      ),
+                                  ],
+                                  initialIndex: i,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        if (canDelete)
+                          Positioned(
+                            right: -4,
+                            top: -4,
+                            child: Material(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                onTap: () => _confirmRemove(items[i]),
+                                customBorder: const CircleBorder(),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
               ],
             ),

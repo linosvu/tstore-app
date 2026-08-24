@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
@@ -187,6 +188,15 @@ String formatServiceTime(String? iso) {
       '${local.minute.toString().padLeft(2, '0')}';
 }
 
+String formatServiceTimeHm(String? iso) {
+  if (iso == null || iso.isEmpty) return '—';
+  final dt = DateTime.tryParse(iso);
+  if (dt == null) return iso;
+  final local = dt.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+}
+
 /// Số tiền VNĐ có dấu chấm hàng nghìn (giống Đơn hàng).
 String formatServiceMoney(int v) =>
     formatIntegerWithSeparator(v, ThousandsGroupSeparatorKey.dot);
@@ -234,6 +244,7 @@ int repairStepIndex(
       case 'back_in_store':
         return 2;
       case 'pending_delivery':
+      case 'declined':
         return 3;
       case 'pending_payment':
       case 'pending_approval':
@@ -241,7 +252,6 @@ int repairStepIndex(
       case 'completed':
         return 4;
       case 'cancelled':
-      case 'declined':
       case 'customer_rejected':
         return 5;
     }
@@ -277,7 +287,8 @@ const repairStepLabels = [
   'Xong',
 ];
 
-String repairSubStatusLabel(String? sub) {
+String repairSubStatusLabel(String? sub, [AppLocalizations? l10n]) {
+  if (l10n != null) return l10n.repairSubStatusLabel(sub);
   switch (sub) {
     case 'receiving':
       return 'Đang tiếp nhận';

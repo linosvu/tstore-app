@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../../models/service_request.dart';
+import 'package:tstore/core/widgets/media_tile.dart';
+import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import '../evidence_section.dart';
 import '../../service_ui.dart';
 
 /// Card hạn xử lý + lịch sử dời hạn (SC v3).
-class RepairDeadlineCard extends StatelessWidget {
+class RepairDeadlineCard extends StatefulWidget {
   const RepairDeadlineCard({
     super.key,
     required this.ticketId,
@@ -27,13 +29,26 @@ class RepairDeadlineCard extends StatelessWidget {
   final VoidCallback onReload;
 
   @override
+  State<RepairDeadlineCard> createState() => _RepairDeadlineCardState();
+}
+
+class _RepairDeadlineCardState extends State<RepairDeadlineCard> {
+  bool _historyExpanded = false;
+
+  List<TicketEvidencePublic> get _deadlineEvidences => widget.evidences
+      .where((e) => e.stage == 'deadline_call')
+      .toList(growable: false);
+
+  @override
   Widget build(BuildContext context) {
-    final label = deadlineRemainingLabel(deadlineAt, markOverdue: true);
+    final label = deadlineRemainingLabel(widget.deadlineAt, markOverdue: true);
+    final changes = widget.deadlineChanges;
+
     return SectionCard(
       title: 'Hạn xử lý',
-      titleTrailing: readOnly
+      titleTrailing: widget.readOnly
           ? null
-          : TextButton(onPressed: onExtend, child: const Text('Sửa hạn')),
+          : TextButton(onPressed: widget.onExtend, child: const Text('Sửa hạn')),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -47,26 +62,93 @@ class RepairDeadlineCard extends StatelessWidget {
                   : Colors.amber.shade900,
             ),
           ),
-          if (deadlineChanges.isNotEmpty) ...[
-            const SizedBox(height: 8),
+          if (widget.deadlineAt != null) ...[
+            const SizedBox(height: 4),
             Text(
-              'Đã dời hạn ${deadlineChanges.length} lần',
+              formatServiceTime(widget.deadlineAt),
               style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
-            for (final c in deadlineChanges) ...[
-              const Divider(height: 16),
-              Text(
-                '→ ${c.newDeadline}',
-                style: const TextStyle(fontSize: 13),
+          ],
+          if (changes.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => setState(() => _historyExpanded = !_historyExpanded),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Đã dời hạn ${changes.length} lần',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _historyExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
               ),
-              if ((c.contactNote ?? '').trim().isNotEmpty)
-                Text(c.contactNote!, style: const TextStyle(fontSize: 12)),
-              if (c.staffName != null)
+            ),
+            if (_historyExpanded)
+              for (final c in changes) ...[
+                const Divider(height: 16),
                 Text(
-                  '${c.staffName} · ${c.createdAt ?? ''}',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  c.oldDeadline != null
+                      ? '${formatServiceTime(c.oldDeadline)} → ${formatServiceTime(c.newDeadline)}'
+                      : '→ ${formatServiceTime(c.newDeadline)}',
+                  style: const TextStyle(fontSize: 13),
                 ),
-            ],
+                if ((c.contactNote ?? '').trim().isNotEmpty)
+                  Text(c.contactNote!, style: const TextStyle(fontSize: 12)),
+                if (c.staffName != null)
+                  Text(
+                    '${c.staffName} · ${formatServiceTime(c.createdAt)}',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+              ],
+          ],
+          if (_deadlineEvidences.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Bằng chứng gọi khách',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var i = 0; i < _deadlineEvidences.length; i++)
+                  MediaTile(
+                    url: _deadlineEvidences[i].fileUrl,
+                    mediaType: _deadlineEvidences[i].kind,
+                    width: 56,
+                    height: 56,
+                    onTap: () {
+                      Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => MediaViewerPage(
+                            items: [
+                              for (final e in _deadlineEvidences)
+                                MediaViewerItem(
+                                  url: e.fileUrl,
+                                  mediaType: e.kind,
+                                ),
+                            ],
+                            initialIndex: i,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
           ],
         ],
       ),
@@ -99,9 +181,6 @@ class _RepairExtendDeadlineSheetState extends State<RepairExtendDeadlineSheet> {
   final _noteCtrl = TextEditingController();
   bool _saving = false;
 
-  bool get _hasEvidence =>
-      widget.evidences.any((e) => e.stage == 'deadline_call');
-
   @override
   void dispose() {
     _noteCtrl.dispose();
@@ -129,7 +208,7 @@ class _RepairExtendDeadlineSheetState extends State<RepairExtendDeadlineSheet> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Hạn mới *'),
-            subtitle: Text(_newDeadline.toLocal().toString()),
+            subtitle: Text(formatServiceTime(_newDeadline.toIso8601String())),
             trailing: const Icon(Icons.schedule),
             onTap: () async {
               final d0 = await showDatePicker(
@@ -160,7 +239,7 @@ class _RepairExtendDeadlineSheetState extends State<RepairExtendDeadlineSheet> {
             stage: 'deadline_call',
             evidences: widget.evidences,
             onChanged: widget.onReload,
-            title: 'Bằng chứng gọi khách *',
+            title: 'Bằng chứng gọi khách',
           ),
           TextField(
             controller: _noteCtrl,
@@ -169,7 +248,7 @@ class _RepairExtendDeadlineSheetState extends State<RepairExtendDeadlineSheet> {
           ),
           const SizedBox(height: 12),
           FilledButton(
-            onPressed: !_hasEvidence || _saving
+            onPressed: _saving
                 ? null
                 : () async {
                     setState(() => _saving = true);

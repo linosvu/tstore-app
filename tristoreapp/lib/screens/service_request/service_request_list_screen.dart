@@ -51,7 +51,10 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     ('pending_send', 'Chờ gửi'),
     ('in_repair', 'Sửa shop'),
     ('at_vendor', 'Sửa ngoài'),
+    ('pending_pickup', 'Chờ lấy'),
+    ('back_in_store', 'Đã lấy về'),
     ('pending_delivery', 'Trả KH'),
+    ('declined', 'Không sửa'),
     ('pending_payment', 'Chờ TT'),
     ('pending_approval', 'Chờ duyệt'),
     ('debt_open', 'Công nợ'),
@@ -100,6 +103,12 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     String? vendorId = prov.vendorIdFilter;
     String? technicianId = prov.technicianIdFilter;
     String? repairType = prov.repairTypeFilter;
+    DateTime? receivedFrom = prov.receivedFromFilter != null
+        ? DateTime.tryParse(prov.receivedFromFilter!)
+        : null;
+    DateTime? receivedTo = prov.receivedToFilter != null
+        ? DateTime.tryParse(prov.receivedToFilter!)
+        : null;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -182,6 +191,59 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                     },
                     onChanged: (v) => setLocal(() => technicianId = v),
                   ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Tiếp nhận từ'),
+                    subtitle: Text(
+                      receivedFrom != null
+                          ? yyyyMmDd(receivedFrom!)
+                          : 'Không giới hạn',
+                    ),
+                    trailing: const Icon(Icons.calendar_today_outlined),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: receivedFrom ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                      );
+                      if (picked != null) {
+                        setLocal(() => receivedFrom = picked);
+                      }
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Tiếp nhận đến'),
+                    subtitle: Text(
+                      receivedTo != null
+                          ? yyyyMmDd(receivedTo!)
+                          : 'Không giới hạn',
+                    ),
+                    trailing: const Icon(Icons.calendar_today_outlined),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: receivedTo ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                      );
+                      if (picked != null) {
+                        setLocal(() => receivedTo = picked);
+                      }
+                    },
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => setLocal(() {
+                        receivedFrom = null;
+                        receivedTo = null;
+                      }),
+                      child: const Text('Xóa khoảng ngày'),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -192,10 +254,17 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                         repairType: repairType,
                         vendorId: vendorId,
                         technicianId: technicianId,
+                        receivedFrom: receivedFrom != null
+                            ? yyyyMmDd(receivedFrom!)
+                            : null,
+                        receivedTo:
+                            receivedTo != null ? yyyyMmDd(receivedTo!) : null,
                         clearSubStatus: selected.isEmpty,
                         clearRepairType: repairType == null,
                         clearVendor: vendorId == null,
                         clearTechnician: technicianId == null,
+                        clearReceivedDates:
+                            receivedFrom == null && receivedTo == null,
                       );
                       Navigator.pop(ctx);
                       _reloadList();
@@ -368,7 +437,9 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                                       isLabelVisible: prov.subStatusIn != null ||
                                           prov.vendorIdFilter != null ||
                                           prov.technicianIdFilter != null ||
-                                          prov.repairTypeFilter != null,
+                                          prov.repairTypeFilter != null ||
+                                          prov.receivedFromFilter != null ||
+                                          prov.receivedToFilter != null,
                                       child: const Icon(Icons.tune),
                                     ),
                                   ),
@@ -429,7 +500,9 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
         prov.subStatusIn == null &&
         prov.vendorIdFilter == null &&
         prov.technicianIdFilter == null &&
-        prov.repairTypeFilter == null;
+        prov.repairTypeFilter == null &&
+        prov.receivedFromFilter == null &&
+        prov.receivedToFilter == null;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -455,6 +528,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
                   clearRepairType: true,
                   clearVendor: true,
                   clearTechnician: true,
+                  clearReceivedDates: true,
                 );
               }
               _reloadList();
@@ -462,7 +536,7 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
           ),
           const SizedBox(width: 6),
           FilterChip(
-            label: const Text('Cần xử lý 24h'),
+            label: const Text('Sắp hết hạn (<12h)'),
             selected: prov.dueSoonOnly,
             onSelected: (_) {
               prov.setDueSoonOnly(true);

@@ -834,6 +834,41 @@ class AppLocalizations {
   String get serviceOnsiteTicket => 'Phiếu hỗ trợ tại nhà';
   String get serviceRepairTicket => 'Phiếu sửa chữa';
 
+  String repairSubStatusLabel(String? sub) {
+    switch (sub) {
+      case 'receiving':
+        return 'Đang tiếp nhận';
+      case 'pending_check':
+        return 'Chưa kiểm tra';
+      case 'pending_send':
+        return 'Chờ gửi đi';
+      case 'in_repair':
+        return 'Đang sửa tại shop';
+      case 'at_vendor':
+        return 'Đang sửa ngoài';
+      case 'pending_pickup':
+        return 'Chờ lấy về';
+      case 'back_in_store':
+        return 'Đã lấy về';
+      case 'pending_delivery':
+        return 'Chờ trả khách';
+      case 'pending_payment':
+        return 'Chờ thanh toán';
+      case 'pending_approval':
+        return 'Chờ duyệt';
+      case 'debt_open':
+        return 'Công nợ mở';
+      case 'completed':
+        return 'Hoàn tất';
+      case 'declined':
+        return 'Khách không sửa';
+      case 'cancelled':
+        return 'Huỷ';
+      default:
+        return sub ?? '—';
+    }
+  }
+
   // Tasks
   String get tasksDashboardSection => 'Nhiệm vụ của tôi';
   String get tasksViewAll => 'Xem tất cả';

@@ -400,6 +400,18 @@ class ServiceRequestsProvider extends ChangeNotifier {
     return ServiceTicketPublic.fromJson(data);
   }
 
+  Future<ServiceTicketPublic?> removeEvidence(
+    String ticketId,
+    String evidenceId,
+  ) async {
+    final res = await _api.delete<Map<String, dynamic>>(
+      '/admin/service-tickets/$ticketId/evidences/$evidenceId',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
   Future<ServiceTicketPublic?> softDeleteTicket(String ticketId) async {
     final res = await _api.delete<Map<String, dynamic>>(
       '/admin/service-tickets/$ticketId',
@@ -510,6 +522,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
     bool clearRepairType = false,
     bool clearVendor = false,
     bool clearTechnician = false,
+    bool clearReceivedDates = false,
   }) {
     if (clearSubStatus) _subStatusIn = null;
     else if (subStatusIn != null) _subStatusIn = subStatusIn;
@@ -521,8 +534,17 @@ class ServiceRequestsProvider extends ChangeNotifier {
     else if (technicianId != null) _technicianId = technicianId;
     if (repairOverdue != null) _repairOverdue = repairOverdue;
     if (dueWithinHours != null) _dueWithinHours = dueWithinHours;
-    if (receivedFrom != null) _receivedFrom = receivedFrom;
-    if (receivedTo != null) _receivedTo = receivedTo;
+    if (clearReceivedDates) {
+      _receivedFrom = null;
+      _receivedTo = null;
+    } else {
+      if (receivedFrom != null) {
+        _receivedFrom = receivedFrom.isEmpty ? null : receivedFrom;
+      }
+      if (receivedTo != null) {
+        _receivedTo = receivedTo.isEmpty ? null : receivedTo;
+      }
+    }
     notifyListeners();
   }
 
@@ -530,6 +552,8 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? get repairTypeFilter => _repairType;
   String? get vendorIdFilter => _vendorId;
   String? get technicianIdFilter => _technicianId;
+  String? get receivedFromFilter => _receivedFrom;
+  String? get receivedToFilter => _receivedTo;
 
   Future<TakeDeviceResult?> takeDevice(
     String ticketId,
