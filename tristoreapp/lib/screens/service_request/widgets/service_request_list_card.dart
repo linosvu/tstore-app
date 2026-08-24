@@ -306,7 +306,10 @@ class ServiceRequestListCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         StatusBadge(
-                          label: ticketStatusLabel(latest.type, latest.status),
+                          label: latest.type == 'repair' &&
+                                  (latest.subStatus ?? '').isNotEmpty
+                              ? repairSubStatusLabel(latest.subStatus)
+                              : ticketStatusLabel(latest.type, latest.status),
                           tone: ticketStatusTone(latest.status),
                         ),
                         if (createdLabel != null) ...[
@@ -418,17 +421,14 @@ class ServiceRequestListCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 if (isRepair && latest.type == 'repair')
                   TicketFlowProgressBar(
-                    labels: const [
-                      'Quản lý',
-                      'Kiểm tra',
-                      'Sửa chữa',
-                      'Bàn giao',
-                      'Thanh toán',
-                    ],
+                    labels: repairStepLabels,
                     activeIndex: () {
                       final failed = latest.status == 'cancelled' ||
                           latest.status == 'customer_rejected';
-                      final raw = repairStepIndex(latest.status);
+                      final raw = repairStepIndex(
+                        latest.status,
+                        subStatus: latest.subStatus,
+                      );
                       if (failed) {
                         return raw >= 5 ? 4 : raw.clamp(0, 4);
                       }

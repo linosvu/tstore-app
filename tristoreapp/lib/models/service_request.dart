@@ -72,6 +72,9 @@ class ServiceTicketBrief {
     this.deadlineAt,
     this.contactFailedCount = 0,
     this.isOverdue = false,
+    this.subStatus,
+    this.repairType,
+    this.vendorName,
     this.statusChangedAt,
     this.createdAt,
   });
@@ -105,6 +108,9 @@ class ServiceTicketBrief {
   final String? deadlineAt;
   final int contactFailedCount;
   final bool isOverdue;
+  final String? subStatus;
+  final String? repairType;
+  final String? vendorName;
   final String? statusChangedAt;
   final String? createdAt;
 
@@ -212,6 +218,9 @@ class ServiceTicketBrief {
       deadlineAt: json['deadlineAt'] as String?,
       contactFailedCount: (json['contactFailedCount'] as num?)?.toInt() ?? 0,
       isOverdue: json['isOverdue'] as bool? ?? false,
+      subStatus: json['subStatus'] as String?,
+      repairType: json['repairType'] as String?,
+      vendorName: json['vendorName'] as String?,
       statusChangedAt: json['statusChangedAt'] as String?,
       createdAt: json['createdAt'] as String?,
     );
