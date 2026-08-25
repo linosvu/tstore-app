@@ -1789,10 +1789,18 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             },
             onChanged: _historyView
                 ? null
-                : (v) => setState(() {
+                : (v) async {
+                    setState(() {
                       _technicianId = v;
                       _inspectFormDirty = true;
-                    }),
+                    });
+                    // QL/Admin: lưu ngay + push, không chờ hoàn tất bước Kiểm tra.
+                    if (v != null && _isManager) {
+                      await _action('assign-technician', body: {
+                        'technicianId': v,
+                      });
+                    }
+                  },
           ),
         ),
         const SizedBox(height: 12),
