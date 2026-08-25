@@ -675,6 +675,10 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return role == 'admin' || role == 'manager';
   }
 
+  bool get _isAdmin {
+    return context.read<AuthProvider>().user?.role == 'admin';
+  }
+
   bool _canRewindRepair(ServiceTicketPublic t, RepairDetailPublic? d) {
     if (t.isDeleted) return false;
     final user = context.read<AuthProvider>().user;
@@ -2999,7 +3003,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Quản lý chọn miễn phí / số tiền rồi Duyệt để đóng phiếu.',
+                'Admin chọn miễn phí / số tiền rồi Duyệt để đóng phiếu.',
               ),
             ],
           ),
@@ -3169,7 +3173,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       },
                 child: const Text('Ghi nhận thanh toán'),
               ),
-              if (aborted && _isManager) ...[
+              if (aborted && _isAdmin) ...[
                 const SizedBox(height: 8),
                 OutlinedButton(
                   onPressed: _busy
@@ -3248,13 +3252,13 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               const SizedBox(height: 8),
               if (sameSubmitter)
                 Text(
-                  'Bạn đã ghi nhận — cần quản lý khác duyệt.',
+                  'Bạn đã ghi nhận — cần Admin khác duyệt.',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.error,
                     fontSize: 13,
                   ),
                 ),
-              if (_isManager) ...[
+              if (_isAdmin) ...[
                 FilledButton(
                   onPressed: _busy || sameSubmitter
                       ? null
@@ -3280,7 +3284,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   child: const Text('Sửa lại ghi nhận'),
                 ),
               ] else
-                const Text('Chờ quản lý duyệt…'),
+                const Text('Chờ Admin duyệt…'),
             ],
           ],
         ),
