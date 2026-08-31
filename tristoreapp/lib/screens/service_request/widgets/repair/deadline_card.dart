@@ -41,7 +41,6 @@ class _RepairDeadlineCardState extends State<RepairDeadlineCard> {
 
   @override
   Widget build(BuildContext context) {
-    final label = deadlineRemainingLabel(widget.deadlineAt, markOverdue: true);
     final changes = widget.deadlineChanges;
 
     return SectionCard(
@@ -52,23 +51,19 @@ class _RepairDeadlineCardState extends State<RepairDeadlineCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.isEmpty ? 'Chưa đặt hạn' : label,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: label.contains('Quá hạn')
-                  ? Colors.red.shade700
-                  : Colors.amber.shade900,
-            ),
-          ),
-          if (widget.deadlineAt != null) ...[
-            const SizedBox(height: 4),
+          if (widget.deadlineAt != null)
             Text(
               formatServiceTime(widget.deadlineAt),
-              style: const TextStyle(fontSize: 13, color: Colors.grey),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else
+            const Text(
+              'Chưa đặt hạn',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-          ],
           if (changes.isNotEmpty) ...[
             const SizedBox(height: 8),
             InkWell(

@@ -13,7 +13,9 @@ import 'package:tstore/core/constants/routes.dart';
 import 'package:tstore/core/localization/app_localizations.dart';
 import 'package:tstore/core/theme/app_text_styles.dart';
 import 'package:tstore/models/sale_order.dart';
+import 'package:tstore/providers/address_catalog_provider.dart';
 import 'package:tstore/providers/auth_provider.dart';
+import 'package:tstore/utils/order_address_display.dart';
 import 'package:tstore/screens/main_shell.dart';
 import 'package:tstore/screens/management/management_date_presets.dart';
 import 'package:tstore/screens/orders/sale_order_detail_screen.dart';
@@ -28,7 +30,18 @@ import 'package:tstore/widgets/ui/screen_gradient_header.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 
 class OrdersListScreen extends StatefulWidget {
-  const OrdersListScreen({super.key});
+  const OrdersListScreen({
+    super.key,
+    this.listOnly = false,
+    this.expectedDeliveryToday = false,
+    this.onTotalChanged,
+  });
+
+  /// Chỉ hiển thị danh sách (không header/filter/search).
+  final bool listOnly;
+  /// Preset: hẹn giao đúng ngày hôm nay.
+  final bool expectedDeliveryToday;
+  final ValueChanged<int>? onTotalChanged;
 
   @override
   State<OrdersListScreen> createState() => _OrdersListScreenState();
@@ -163,6 +176,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     }
     if (_statusFilter != null) q['status'] = _statusFilter;
     if (_dueSoonOnly) q['expectedDeliveryFilter'] = 'due_soon';
+    if (widget.expectedDeliveryToday) q['expectedDeliveryToday'] = 'true';
     if (_paymentFilter != null) q['paymentFilter'] = _paymentFilter;
     if (_includeDeleted) q['includeDeleted'] = 'true';
     final searchTrim = _searchCtrl.text.trim();
@@ -206,6 +220,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         _loading = false;
         _loadingMore = false;
       });
+      widget.onTotalChanged?.call(total);
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -410,6 +425,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    if (widget.listOnly) {
+      return _buildBody(l10n);
+    }
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -800,9 +818,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           EmptyState(
-            message: _searchCtrl.text.trim().isNotEmpty
-                ? l10n.ordersListSearchEmpty
-                : l10n.ordersListEmpty,
+            message: widget.expectedDeliveryToday
+                ? l10n.actionTodayOrdersEmpty
+                : _searchCtrl.text.trim().isNotEmpty
+                    ? l10n.ordersListSearchEmpty
+                    : l10n.ordersListEmpty,
           ),
         ],
       );
@@ -894,6 +914,9 @@ class _OrderRowCard extends StatelessWidget {
         saleChannelLabel != null ||
         showReceived;
     final notesText = (order.notes ?? '').trim();
+    final catalog = context.watch<AddressCatalogProvider>();
+    final addressLine = resolveOrderDeliveryAddress(order, catalog).trim();
+    final showAddress = addressLine.isNotEmpty && addressLine != '—';
     return Material(
       color: scheme.surface,
       elevation: 0,
@@ -1016,6 +1039,19 @@ class _OrderRowCard extends StatelessWidget {
                               ),
                             ],
                           ),
+                          if (showAddress) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              addressLine,
+                              style: AppTextStyles.dataSecondary(context)
+                                  .copyWith(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                           if (showCreatorRow) ...[
                             const SizedBox(height: 2),
                             Row(

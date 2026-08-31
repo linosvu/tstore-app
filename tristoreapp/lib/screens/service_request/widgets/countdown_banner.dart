@@ -26,14 +26,13 @@ class CountdownBanner extends StatelessWidget {
     final now = DateTime.now();
     final overdue = isOverdue || deadline.isBefore(now);
     final diff = deadline.difference(now);
-    String remaining;
-    if (overdue) {
-      final late = now.difference(deadline);
-      remaining = 'Quá hạn ${late.inHours}h ${late.inMinutes.remainder(60)}p';
-    } else if (diff.inDays >= 1) {
-      remaining = 'Còn ${diff.inDays} ngày ${diff.inHours.remainder(24)}h';
-    } else {
-      remaining = 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
+    String? remaining;
+    if (!overdue) {
+      if (diff.inDays >= 1) {
+        remaining = 'Còn ${diff.inDays} ngày ${diff.inHours.remainder(24)}h';
+      } else {
+        remaining = 'Còn ${diff.inHours}h ${diff.inMinutes.remainder(60)}p';
+      }
     }
 
     final bg = overdue
@@ -62,15 +61,20 @@ class CountdownBanner extends StatelessWidget {
               children: [
                 Text(
                   '$label · ${formatServiceTime(deadlineAt)}',
-                  style: TextStyle(fontSize: 12, color: fg),
-                ),
-                Text(
-                  remaining,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: fg,
                   ),
                 ),
+                if (remaining != null)
+                  Text(
+                    remaining,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: fg,
+                    ),
+                  ),
               ],
             ),
           ),

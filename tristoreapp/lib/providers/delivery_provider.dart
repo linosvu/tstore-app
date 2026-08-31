@@ -272,6 +272,32 @@ class DeliveryProvider extends ChangeNotifier {
     return DeliveryPublic.fromJson(data);
   }
 
+  Future<DeliveryPublic?> addSignature(
+    String id, {
+    required String signer,
+    required String imageUrl,
+  }) async {
+    final res = await _api.post<Map<String, dynamic>>(
+      '/admin/deliveries/$id/signatures',
+      data: {'signer': signer, 'imageUrl': imageUrl},
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return DeliveryPublic.fromJson(data);
+  }
+
+  Future<DeliveryPublic?> removeSignature(
+    String id,
+    String signatureId,
+  ) async {
+    final res = await _api.delete<Map<String, dynamic>>(
+      '/admin/deliveries/$id/signatures/$signatureId',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return DeliveryPublic.fromJson(data);
+  }
+
   Future<DeliveryPublic?> patchLine(
     String deliveryId,
     String lineId, {

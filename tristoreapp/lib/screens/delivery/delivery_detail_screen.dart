@@ -18,9 +18,13 @@ import 'package:tstore/core/widgets/pending_media_tile.dart';
 import 'package:tstore/core/widgets/media_viewer_page.dart';
 import 'package:tstore/models/delivery.dart';
 import 'package:tstore/models/sale_order.dart';
+import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/delivery_provider.dart';
 import 'package:tstore/screens/delivery/delivery_ui.dart';
+import 'package:tstore/screens/service_request/service_ui.dart';
+import 'package:tstore/screens/service_request/widgets/signature_pad.dart';
+import 'package:tstore/screens/service_request/widgets/signature_thumb.dart';
 import 'package:tstore/widgets/sale_order_code_link_row.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
@@ -66,11 +70,21 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   UploadConfig? _uploadConfig;
   final List<PendingMediaUpload> _pendingCheckin = [];
   final _noteCtrl = TextEditingController();
+  final _checkinNoteCtrl = TextEditingController();
   Timer? _notesDebounce;
+  Timer? _checkinNotesDebounce;
   bool _suppressAutosave = false;
+  bool _suppressCheckinAutosave = false;
+  bool _resignCheckinStaff = false;
+  bool _resignCheckinCustomer = false;
   String? _assigneeId;
   String _priority = 'normal';
   String? _shippingCarrier;
+
+  static const List<String> _checkinNoteChips = [
+    'Đã kiểm tra đầy đủ',
+    'Không bể vỡ & trầy xước',
+  ];
 
   static const List<String> _checkinTypes = [
     'received',
@@ -83,6 +97,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     _checkinTabController =
         TabController(length: _checkinTypes.length, vsync: this);
     _noteCtrl.addListener(_onNotesChanged);
+    _checkinNoteCtrl.addListener(_onCheckinNotesChanged);
     _load();
     _loadUploadConfig();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -106,8 +121,11 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
   @override
   void dispose() {
     _notesDebounce?.cancel();
+    _checkinNotesDebounce?.cancel();
     _noteCtrl.removeListener(_onNotesChanged);
+    _checkinNoteCtrl.removeListener(_onCheckinNotesChanged);
     _noteCtrl.dispose();
+    _checkinNoteCtrl.dispose();
     _checkinTabController.dispose();
     super.dispose();
   }
@@ -117,6 +135,14 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     _notesDebounce?.cancel();
     _notesDebounce = Timer(const Duration(milliseconds: 500), () {
       if (mounted) unawaited(_autosaveNotes());
+    });
+  }
+
+  void _onCheckinNotesChanged() {
+    if (_suppressCheckinAutosave) return;
+    _checkinNotesDebounce?.cancel();
+    _checkinNotesDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) unawaited(_autosaveCheckinNotes());
     });
   }
 
@@ -139,22 +165,33 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     if (d != null) await _enrichLinkedSaleOrder(d);
     if (!mounted) return;
     _notesDebounce?.cancel();
+    _checkinNotesDebounce?.cancel();
     final priorNotes = (_d?.deliveryNote ?? '').trim();
     final localNotes = _noteCtrl.text.trim();
     final notesDirty = localNotes != priorNotes;
+    final priorCheckinNotes = (_d?.checkinNote ?? '').trim();
+    final localCheckinNotes = _checkinNoteCtrl.text.trim();
+    final checkinNotesDirty = localCheckinNotes != priorCheckinNotes;
     _suppressAutosave = true;
+    _suppressCheckinAutosave = true;
     setState(() {
       _d = d;
       _error = d == null ? 'Không tải được đơn.' : null;
       _loading = false;
+      _resignCheckinStaff = false;
+      _resignCheckinCustomer = false;
       if (d != null) {
         _syncLocalFieldsFromDelivery(d);
         if (!notesDirty) {
           _noteCtrl.text = d.deliveryNote ?? '';
         }
+        if (!checkinNotesDirty) {
+          _checkinNoteCtrl.text = d.checkinNote ?? '';
+        }
       }
     });
     _suppressAutosave = false;
+    _suppressCheckinAutosave = false;
   }
 
   Future<void> _enrichLinkedSaleOrder(DeliveryPublic d) async {
@@ -502,6 +539,94 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
       AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _autosaving = false);
+    }
+  }
+
+  Future<void> _autosaveCheckinNotes() async {
+    final d = _d;
+    if (d == null ||
+        _suppressCheckinAutosave ||
+        _autosaving ||
+        !_canEditDelivery(d)) {
+      return;
+    }
+
+    final notes = _checkinNoteCtrl.text.trim();
+    final notesChanged = notes != (d.checkinNote?.trim() ?? '');
+    if (!notesChanged) return;
+
+    _autosaving = true;
+    final p = context.read<DeliveryProvider>();
+    final l10n = AppLocalizations.of(context);
+    try {
+      final updated =
+          await p.patch(widget.deliveryId, {'checkinNote': notes});
+      if (updated != null && mounted) {
+        setState(() => _d = updated);
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final data = e.response?.data;
+      String msg = e.message ?? l10n.error;
+      if (data is Map && data['message'] != null) {
+        msg = data['message'].toString();
+      }
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    } finally {
+      if (mounted) setState(() => _autosaving = false);
+    }
+  }
+
+  void _appendCheckinNoteChip(String chip) {
+    final d = _d;
+    if (d == null || !_canEditDelivery(d)) return;
+    final cur = _checkinNoteCtrl.text;
+    final sep = cur.trim().isEmpty ? '' : ' · ';
+    _checkinNoteCtrl.text = '$cur$sep$chip';
+    _checkinNoteCtrl.selection = TextSelection.collapsed(
+      offset: _checkinNoteCtrl.text.length,
+    );
+  }
+
+  List<TicketSignaturePublic> _checkinSignaturesAsTicket(DeliveryPublic d) {
+    return d.signatures
+        .map(
+          (s) => TicketSignaturePublic(
+            id: s.id,
+            stage: '',
+            signer: s.signer,
+            imageUrl: s.imageUrl,
+            signedAt: s.signedAt,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> _saveCheckinSignature(String signer, String imageUrl) async {
+    final p = context.read<DeliveryProvider>();
+    final updated = await p.addSignature(
+      widget.deliveryId,
+      signer: signer,
+      imageUrl: imageUrl,
+    );
+    if (updated != null && mounted) {
+      setState(() {
+        _d = updated;
+        _resignCheckinStaff = false;
+        _resignCheckinCustomer = false;
+      });
+    }
+  }
+
+  Future<void> _removeCheckinSignature(String signatureId) async {
+    final p = context.read<DeliveryProvider>();
+    final updated = await p.removeSignature(widget.deliveryId, signatureId);
+    if (updated != null && mounted) {
+      setState(() {
+        _d = updated;
+        _resignCheckinStaff = false;
+        _resignCheckinCustomer = false;
+      });
     }
   }
 
@@ -1373,38 +1498,261 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen>
     DeliveryPublic d,
     bool terminal,
   ) {
-    final tabH = min(420.0, MediaQuery.sizeOf(context).height * 0.46);
-    return SizedBox(
-      height: tabH,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TabBar(
-            controller: _checkinTabController,
-            isScrollable: true,
-            tabs: [
-              Tab(text: l10n.deliveryTypeReceived),
-              Tab(text: l10n.deliveryTypeInstall),
+    final tabH = min(260.0, MediaQuery.sizeOf(context).height * 0.28);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: tabH,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TabBar(
+                controller: _checkinTabController,
+                isScrollable: true,
+                tabs: [
+                  Tab(text: l10n.deliveryTypeReceived),
+                  Tab(text: l10n.deliveryTypeInstall),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _checkinTabController,
+                  children: [
+                    for (final type in _checkinTypes)
+                      _checkinTypeTabContent(
+                        context,
+                        l10n,
+                        scheme,
+                        d,
+                        type,
+                        terminal,
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _checkinTabController,
-              children: [
-                for (final type in _checkinTypes)
-                  _checkinTypeTabContent(
-                    context,
-                    l10n,
-                    scheme,
-                    d,
-                    type,
-                    terminal,
+        ),
+        const SizedBox(height: AppSpacing.space3),
+        _checkinNoteSection(context, l10n, scheme, d, terminal),
+        const SizedBox(height: AppSpacing.space3),
+        _checkinSignatureSection(context, l10n, d, terminal),
+      ],
+    );
+  }
+
+  Widget _checkinNoteSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    ColorScheme scheme,
+    DeliveryPublic d,
+    bool terminal,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.deliveryCheckinNoteLabel,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: AppSpacing.space2),
+        TextField(
+          controller: _checkinNoteCtrl,
+          readOnly: terminal,
+          decoration: InputDecoration(
+            hintText: l10n.deliveryCheckinNoteLabel,
+            border: const OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          minLines: 2,
+        ),
+        if (!terminal) ...[
+          const SizedBox(height: AppSpacing.space2),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _checkinNoteChips
+                .map(
+                  (chip) => ActionChip(
+                    label: Text(chip),
+                    onPressed: () => _appendCheckinNoteChip(chip),
                   ),
-              ],
-            ),
+                )
+                .toList(),
           ),
         ],
-      ),
+      ],
+    );
+  }
+
+  Widget _checkinSignatureSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    DeliveryPublic d,
+    bool terminal,
+  ) {
+    final sigs = _checkinSignaturesAsTicket(d);
+    final staffSigs =
+        d.signatures.where((s) => s.signer == 'staff').toList();
+    final customerSigs =
+        d.signatures.where((s) => s.signer == 'customer').toList();
+    final bothSigned = staffSigs.isNotEmpty && customerSigs.isNotEmpty;
+    final readOnly = terminal;
+
+    Future<void> onSaveStaff(String url) => _saveCheckinSignature('staff', url);
+    Future<void> onSaveCustomer(String url) =>
+        _saveCheckinSignature('customer', url);
+    Future<void> onRemove(String id) => _removeCheckinSignature(id);
+
+    void onChanged() => unawaited(_load());
+
+    if (bothSigned) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: SignatureThumb(
+                  label: 'Người giao hàng',
+                  url: staffSigs.last.imageUrl,
+                  subtitle: staffSigs.last.signedAt == null
+                      ? null
+                      : formatServiceTime(staffSigs.last.signedAt),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SignatureThumb(
+                  label: 'Khách hàng',
+                  url: customerSigs.last.imageUrl,
+                  subtitle: customerSigs.last.signedAt == null
+                      ? null
+                      : formatServiceTime(customerSigs.last.signedAt),
+                ),
+              ),
+            ],
+          ),
+          if (!readOnly) ...[
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => setState(() => _resignCheckinStaff = true),
+                  child: const Text('Ký lại NV'),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      setState(() => _resignCheckinCustomer = true),
+                  child: const Text('Ký lại khách'),
+                ),
+              ],
+            ),
+            if (_resignCheckinStaff) ...[
+              const SizedBox(height: 8),
+              SignaturePadSection(
+                key: ValueKey('checkin-sig-${d.id}-staff-resign'),
+                ticketId: d.id,
+                stage: '',
+                signer: 'staff',
+                signatures: const [],
+                onChanged: onChanged,
+                readOnly: readOnly,
+                title: 'Ký lại — Người giao hàng',
+                onSave: onSaveStaff,
+                onRemove: onRemove,
+              ),
+            ],
+            if (_resignCheckinCustomer) ...[
+              const SizedBox(height: 8),
+              SignaturePadSection(
+                key: ValueKey('checkin-sig-${d.id}-customer-resign'),
+                ticketId: d.id,
+                stage: '',
+                signer: 'customer',
+                signatures: const [],
+                onChanged: onChanged,
+                readOnly: readOnly,
+                title: 'Ký lại — Khách hàng',
+                onSave: onSaveCustomer,
+                onRemove: onRemove,
+              ),
+            ],
+          ],
+        ],
+      );
+    }
+
+    if (readOnly) {
+      if (staffSigs.isEmpty && customerSigs.isEmpty) {
+        return Text(
+          'Chưa có chữ ký.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        );
+      }
+      return Row(
+        children: [
+          if (staffSigs.isNotEmpty)
+            Expanded(
+              child: SignatureThumb(
+                label: 'Người giao hàng',
+                url: staffSigs.last.imageUrl,
+                subtitle: staffSigs.last.signedAt == null
+                    ? null
+                    : formatServiceTime(staffSigs.last.signedAt),
+              ),
+            ),
+          if (staffSigs.isNotEmpty && customerSigs.isNotEmpty)
+            const SizedBox(width: 8),
+          if (customerSigs.isNotEmpty)
+            Expanded(
+              child: SignatureThumb(
+                label: 'Khách hàng',
+                url: customerSigs.last.imageUrl,
+                subtitle: customerSigs.last.signedAt == null
+                    ? null
+                    : formatServiceTime(customerSigs.last.signedAt),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: SignaturePadSection(
+            key: ValueKey('checkin-sig-${d.id}-staff'),
+            ticketId: d.id,
+            stage: '',
+            signer: 'staff',
+            signatures: sigs,
+            onChanged: onChanged,
+            readOnly: readOnly,
+            title: 'Người giao hàng',
+            onSave: onSaveStaff,
+            onRemove: onRemove,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SignaturePadSection(
+            key: ValueKey('checkin-sig-${d.id}-customer'),
+            ticketId: d.id,
+            stage: '',
+            signer: 'customer',
+            signatures: sigs,
+            onChanged: onChanged,
+            readOnly: readOnly,
+            title: 'Khách hàng',
+            onSave: onSaveCustomer,
+            onRemove: onRemove,
+          ),
+        ),
+      ],
     );
   }
 

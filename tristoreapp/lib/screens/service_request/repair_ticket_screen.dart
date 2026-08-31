@@ -19,7 +19,6 @@ import 'package:tstore/widgets/ui/status_badge.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
 import 'service_ui.dart';
-import 'widgets/countdown_banner.dart';
 import 'widgets/edit_request_info_sheet.dart';
 import 'widgets/evidence_section.dart';
 import 'widgets/locked_request_info_card.dart';
@@ -496,12 +495,14 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     return null;
   }
 
-  String _userName(String? userId) {
-    if (userId == null) return '—';
+  String _userName(String? userId, {String? displayName}) {
+    final named = displayName?.trim();
+    if (named != null && named.isNotEmpty) return named;
+    if (userId == null || userId.isEmpty) return '—';
     for (final u in _users) {
       if (u.$1 == userId) return u.$2;
     }
-    return userId;
+    return '—';
   }
 
   void _onRepairFieldChanged() {
@@ -1430,11 +1431,6 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                   ),
                 ],
                 const SizedBox(height: 10),
-                CountdownBanner(
-                  deadlineAt: t.deadlineAt,
-                  isOverdue: t.isOverdue,
-                ),
-                const SizedBox(height: 12),
                 _buildRequestInfoEditor(t, d),
                 if (d != null) ...[
                   const SizedBox(height: 12),
@@ -2295,7 +2291,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
             if (d?.isRepairWorkSaved == true && !_repairFormDirty)
               Text(
                 'Đã lưu ${formatServiceTimeHm(d?.repairWorkSavedAt)} · '
-                '${_userName(d?.repairWorkSavedBy)}',
+                '${_userName(d?.repairWorkSavedBy, displayName: d?.repairWorkSavedByName)}',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.primary,
                   fontSize: 13,
@@ -2492,24 +2488,30 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
       ] else ...[
         workCard,
         const SizedBox(height: 12),
-        EvidenceSection(
-          ticketId: t.id,
-          stage: 'repair_result',
-          evidences: t.evidences,
-          onChanged: _load,
-          readOnly: _historyView,
-          title: 'Bằng chứng kết quả sửa',
-        ),
-        const SizedBox(height: 12),
         SectionCard(
-          title: 'Kết quả sửa chữa',
-          child: TextField(
-            controller: _resultCtrl,
-            readOnly: _historyView,
-            decoration: const InputDecoration(labelText: 'Kết quả *'),
-            maxLines: 3,
-            // Không gắn _repairFormDirty — kết quả gửi lúc Hoàn tất, không qua Lưu chi phí.
-            onChanged: (_) => setState(() {}),
+          title: 'Quản lý kiểm tra lại',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              EvidenceSection(
+                ticketId: t.id,
+                stage: 'repair_result',
+                evidences: t.evidences,
+                onChanged: _load,
+                readOnly: _historyView,
+                title: 'Ảnh/video sửa chữa',
+                wrapInCard: false,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _resultCtrl,
+                readOnly: _historyView,
+                decoration: const InputDecoration(labelText: 'Kết quả *'),
+                maxLines: 3,
+                // Không gắn _repairFormDirty — kết quả gửi lúc Hoàn tất, không qua Lưu chi phí.
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
           ),
         ),
         if (!_historyView) ...[
@@ -2964,8 +2966,9 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     final isFree = _payMethod == 'free';
     final displayDue = isFree ? 0 : due;
     final currentUserId = context.read<AuthProvider>().user?.id;
-    final sameSubmitter =
-        pendingApproval && d?.paymentSubmittedBy == currentUserId;
+    final sameSubmitterBlocked = pendingApproval &&
+        d?.paymentSubmittedBy == currentUserId &&
+        !_isAdmin;
 
     if (terminal) {
       return [
@@ -3222,7 +3225,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
               Text('PT: ${d?.paymentMethod ?? '—'}'),
               if (d?.paymentSubmittedAt != null)
                 Text(
-                  'Ghi bởi ${_userName(d?.paymentSubmittedBy)} · '
+                  'Ghi bởi ${_userName(d?.paymentSubmittedBy, displayName: d?.paymentSubmittedByName)} · '
                   '${formatServiceTime(d?.paymentSubmittedAt)}',
                   style: const TextStyle(fontSize: 13, color: Colors.grey),
                 ),
@@ -3258,7 +3261,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 ),
               ],
               const SizedBox(height: 8),
-              if (sameSubmitter)
+              if (sameSubmitterBlocked)
                 Text(
                   'Bạn đã ghi nhận — cần Admin khác duyệt.',
                   style: TextStyle(
@@ -3268,7 +3271,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                 ),
               if (_isAdmin) ...[
                 FilledButton(
-                  onPressed: _busy || sameSubmitter
+                  onPressed: _busy || sameSubmitterBlocked
                       ? null
                       : () => _action('confirm-payment'),
                   child: Text(aborted ? 'Duyệt kết thúc' : 'Duyệt thanh toán'),

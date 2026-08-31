@@ -24,6 +24,7 @@ import 'package:tstore/widgets/ui/app_surface_card.dart';
 import 'package:tstore/screens/orders/sale_order_flow_screen.dart';
 import 'package:tstore/screens/products/products_screen.dart';
 import 'package:tstore/screens/management/management_hub_screen.dart';
+import 'package:tstore/screens/tristore/action_today_screen.dart';
 import 'package:tstore/screens/tristore/dashboard_drill_down_config.dart';
 import 'package:tstore/screens/tristore/dashboard_drill_down_screen.dart';
 import 'package:tstore/design_system/design_system.dart';
@@ -372,6 +373,22 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: AppSpacing.sectionGap),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.push<void>(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ActionTodayScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.today_outlined),
+                      label: Text(l10n.dashboardActionTodayButton),
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.sectionGap),
                   Text(
                     l10n.dashboardTodayTitle,

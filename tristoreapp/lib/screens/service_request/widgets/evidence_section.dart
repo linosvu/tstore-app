@@ -23,6 +23,7 @@ class EvidenceSection extends StatefulWidget {
     this.readOnly = false,
     this.title = 'Bằng chứng',
     this.noteField,
+    this.wrapInCard = true,
   });
 
   final String ticketId;
@@ -33,6 +34,8 @@ class EvidenceSection extends StatefulWidget {
   final String title;
   /// Ghi chú dưới bằng chứng (vd. tiếp nhận SC).
   final Widget? noteField;
+  /// false: nhúng nội dung vào SectionCard cha (không bọc thêm card).
+  final bool wrapInCard;
 
   @override
   State<EvidenceSection> createState() => _EvidenceSectionState();
@@ -156,37 +159,38 @@ class _EvidenceSectionState extends State<EvidenceSection> {
     }
   }
 
+  Widget? get _addButton => widget.readOnly
+      ? null
+      : IconButton(
+          tooltip: 'Thêm',
+          onPressed: _busy ? null : _add,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.add_a_photo_outlined),
+        );
+
   @override
   Widget build(BuildContext context) {
     final items = _stageItems;
     final canDelete = !widget.readOnly && !_busy;
     final canCancelPending = !widget.readOnly;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
 
-    return SectionCard(
-      title: widget.title,
-      titleTrailing: widget.readOnly
-          ? null
-          : IconButton(
-              tooltip: 'Thêm',
-              onPressed: _busy ? null : _add,
-              icon: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add_a_photo_outlined),
-            ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (items.isEmpty && _pending.isEmpty)
-            const Text(
-              'Chưa có thông tin',
-              style: TextStyle(color: Colors.grey),
-            )
-          else
-            Wrap(
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (items.isEmpty && _pending.isEmpty)
+          const Text(
+            'Chưa có thông tin',
+            style: TextStyle(color: Colors.grey),
+          )
+        else
+          Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
@@ -286,12 +290,43 @@ class _EvidenceSectionState extends State<EvidenceSection> {
                   ),
               ],
             ),
-          if (widget.noteField != null) ...[
-            const SizedBox(height: 12),
-            widget.noteField!,
-          ],
+        if (widget.noteField != null) ...[
+          const SizedBox(height: 12),
+          widget.noteField!,
         ],
-      ),
+      ],
+    );
+
+    if (widget.wrapInCard) {
+      return SectionCard(
+        title: widget.title,
+        titleTrailing: _addButton,
+        child: body,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.title.isNotEmpty) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: text.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+              if (_addButton != null) _addButton!,
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        body,
+      ],
     );
   }
 }

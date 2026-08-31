@@ -28,6 +28,8 @@ class SignaturePadSection extends StatefulWidget {
     this.title,
     this.hidePadWhenSigned = false,
     this.header,
+    this.onSave,
+    this.onRemove,
   });
 
   final String ticketId;
@@ -41,6 +43,9 @@ class SignaturePadSection extends StatefulWidget {
   final bool hidePadWhenSigned;
   /// Widget phía trên pad (vd. dropdown NV tiếp nhận).
   final Widget? header;
+  /// Ghi đè API phiếu SC (vd. chữ ký đơn giao).
+  final Future<void> Function(String imageUrl)? onSave;
+  final Future<void> Function(String signatureId)? onRemove;
 
   @override
   State<SignaturePadSection> createState() => _SignaturePadSectionState();
@@ -58,7 +63,11 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
   bool get wantKeepAlive => true;
 
   List<TicketSignaturePublic> get _existing => widget.signatures
-      .where((s) => s.stage == widget.stage && s.signer == widget.signer)
+      .where(
+        (s) =>
+            s.signer == widget.signer &&
+            (widget.stage.isEmpty || s.stage == widget.stage),
+      )
       .toList();
 
   Future<void> _previewSignature(TicketSignaturePublic sig) async {
@@ -93,10 +102,14 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await context.read<ServiceRequestsProvider>().removeSignature(
-            widget.ticketId,
-            sig.id,
-          );
+      if (widget.onRemove != null) {
+        await widget.onRemove!(sig.id);
+      } else {
+        await context.read<ServiceRequestsProvider>().removeSignature(
+              widget.ticketId,
+              sig.id,
+            );
+      }
       if (!mounted) return;
       setState(() => _resign = false);
       widget.onChanged();
@@ -145,14 +158,18 @@ class _SignaturePadSectionState extends State<SignaturePadSection>
       if (url == null || url.isEmpty) {
         throw Exception('Upload chữ ký thất bại');
       }
-      await context.read<ServiceRequestsProvider>().addSignature(
-        widget.ticketId,
-        {
-          'stage': widget.stage,
-          'signer': widget.signer,
-          'imageUrl': url,
-        },
-      );
+      if (widget.onSave != null) {
+        await widget.onSave!(url);
+      } else {
+        await context.read<ServiceRequestsProvider>().addSignature(
+          widget.ticketId,
+          {
+            'stage': widget.stage,
+            'signer': widget.signer,
+            'imageUrl': url,
+          },
+        );
+      }
       if (!mounted) return;
       setState(() {
         _strokes.clear();

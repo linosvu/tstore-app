@@ -267,6 +267,18 @@ class ServiceRequestListCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if ((request.customerAddress ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            request.customerAddress!.trim(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                         Text(
                           request.productName,
                           style: const TextStyle(color: Colors.grey),
@@ -470,42 +482,44 @@ class ServiceRequestListCard extends StatelessWidget {
                       request.managerName,
                     ],
                   ),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () => onOpenTicket(latest),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest
-                          .withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          latest.type == 'repair'
-                              ? Icons.build_outlined
-                              : latest.type == 'onsite'
-                                  ? Icons.home_repair_service_outlined
-                                  : Icons.headset_mic_outlined,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${latest.displayCode} · ${ticketTypeLabel(latest.type)}',
-                            style: const TextStyle(fontSize: 13),
+                if (!isRepair) ...[
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () => onOpenTicket(latest),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            latest.type == 'repair'
+                                ? Icons.build_outlined
+                                : latest.type == 'onsite'
+                                    ? Icons.home_repair_service_outlined
+                                    : Icons.headset_mic_outlined,
+                            size: 18,
                           ),
-                        ),
-                        const Icon(Icons.chevron_right, size: 18),
-                      ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${latest.displayCode} · ${ticketTypeLabel(latest.type)}',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, size: 18),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ],
           ),

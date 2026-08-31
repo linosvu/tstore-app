@@ -12,6 +12,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
   List<ServiceRequestPublic> _items = [];
   int _page = 1;
   int _totalPages = 1;
+  int _total = 0;
   bool _loading = false;
   bool _loadingMore = false;
   String? _error;
@@ -23,6 +24,8 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? _ticketStatus;
   bool _overdueOnly = false;
   bool _dueSoonOnly = false;
+  bool _dueTodayOnly = false;
+  bool _openOnly = false;
   String? _subStatusIn;
   String? _repairType;
   String? _vendorId;
@@ -33,20 +36,10 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? _receivedTo;
   String _search = '';
 
-  List<ServiceRequestPublic> get items {
-    if (_tab == 'repair') {
-      return _items;
-    }
-    if (_overdueOnly) {
-      return _items.where((r) => r.hasOverdueTicket).toList();
-    }
-    if (_dueSoonOnly) {
-      return _items.where((r) => r.hasDueSoonTicket).toList();
-    }
-    return _items;
-  }
+  List<ServiceRequestPublic> get items => _items;
 
   int get page => _page;
+  int get total => _total;
   int get totalPages => _totalPages;
   bool get isLoading => _loading;
   bool get isLoadingMore => _loadingMore;
@@ -59,6 +52,8 @@ class ServiceRequestsProvider extends ChangeNotifier {
   String? get ticketStatus => _ticketStatus;
   bool get overdueOnly => _overdueOnly;
   bool get dueSoonOnly => _dueSoonOnly;
+  bool get dueTodayOnly => _dueTodayOnly;
+  bool get openOnly => _openOnly;
   String get search => _search;
 
   void setTab(String tab) {
@@ -72,6 +67,8 @@ class ServiceRequestsProvider extends ChangeNotifier {
     _ticketStatus = null;
     _overdueOnly = false;
     _dueSoonOnly = false;
+    _dueTodayOnly = false;
+    _openOnly = false;
     notifyListeners();
   }
 
@@ -95,6 +92,23 @@ class ServiceRequestsProvider extends ChangeNotifier {
     _statusFilter = null;
     _overdueOnly = false;
     _dueSoonOnly = false;
+    _dueTodayOnly = false;
+    _openOnly = false;
+    notifyListeners();
+  }
+
+  void setOpenOnly(bool value) {
+    _openOnly = value;
+    if (value) {
+      _statusFilter = null;
+      _ticketStatus = null;
+      _overdueOnly = false;
+      _dueSoonOnly = false;
+      _dueTodayOnly = false;
+      _repairOverdue = false;
+      _dueWithinHours = null;
+      if (_tab == 'repair') _subStatusIn = null;
+    }
     notifyListeners();
   }
 
@@ -104,8 +118,12 @@ class ServiceRequestsProvider extends ChangeNotifier {
       _statusFilter = null;
       _ticketStatus = null;
       _dueSoonOnly = false;
-      if (_tab == 'repair') _repairOverdue = true;
-    } else if (_tab == 'repair') {
+      _dueTodayOnly = false;
+      _openOnly = false;
+      _repairOverdue = true;
+      _dueWithinHours = null;
+      if (_tab == 'repair') _subStatusIn = null;
+    } else {
       _repairOverdue = false;
     }
     notifyListeners();
@@ -117,9 +135,26 @@ class ServiceRequestsProvider extends ChangeNotifier {
       _statusFilter = null;
       _ticketStatus = null;
       _overdueOnly = false;
-      if (_tab == 'repair') _dueWithinHours = 12;
-    } else if (_tab == 'repair') {
+      _dueTodayOnly = false;
+      _openOnly = false;
+      _repairOverdue = false;
       _dueWithinHours = null;
+      if (_tab == 'repair') _subStatusIn = null;
+    }
+    notifyListeners();
+  }
+
+  void setDueTodayOnly(bool value) {
+    _dueTodayOnly = value;
+    if (value) {
+      _statusFilter = null;
+      _ticketStatus = null;
+      _overdueOnly = false;
+      _dueSoonOnly = false;
+      _openOnly = false;
+      _repairOverdue = false;
+      _dueWithinHours = null;
+      if (_tab == 'repair') _subStatusIn = null;
     }
     notifyListeners();
   }
@@ -172,12 +207,14 @@ class ServiceRequestsProvider extends ChangeNotifier {
     if (_repairType != null) q['repairType'] = _repairType;
     if (_vendorId != null) q['vendorId'] = _vendorId;
     if (_technicianId != null) q['technicianId'] = _technicianId;
-    if (_repairOverdue) q['overdue'] = 'true';
-    if (_dueWithinHours != null) q['dueWithinHours'] = _dueWithinHours;
-    if (_tab == 'repair') {
-      if (_overdueOnly) q['overdue'] = 'true';
-      if (_dueSoonOnly) q['dueWithinHours'] = 12;
+    if (_openOnly) q['openOnly'] = 'true';
+    if (_overdueOnly || _repairOverdue) q['overdue'] = 'true';
+    if (_dueTodayOnly) {
+      q['dueTodayOnly'] = 'true';
+    } else if (_dueSoonOnly) {
+      q['dueTodayOrTomorrow'] = 'true';
     }
+    if (_dueWithinHours != null) q['dueWithinHours'] = _dueWithinHours;
     if (_receivedFrom != null && _receivedFrom!.isNotEmpty) {
       q['receivedFrom'] = _receivedFrom;
     }
@@ -203,6 +240,7 @@ class ServiceRequestsProvider extends ChangeNotifier {
           _items.addAll(parsed.items);
         }
         _page = nextPage;
+        _total = parsed.total;
         _totalPages = parsed.totalPages;
       }
     } on DioException catch (e) {
@@ -524,14 +562,32 @@ class ServiceRequestsProvider extends ChangeNotifier {
     bool clearTechnician = false,
     bool clearReceivedDates = false,
   }) {
-    if (clearSubStatus) _subStatusIn = null;
-    else if (subStatusIn != null) _subStatusIn = subStatusIn;
-    if (clearRepairType) _repairType = null;
-    else if (repairType != null) _repairType = repairType;
-    if (clearVendor) _vendorId = null;
-    else if (vendorId != null) _vendorId = vendorId;
-    if (clearTechnician) _technicianId = null;
-    else if (technicianId != null) _technicianId = technicianId;
+    if (clearSubStatus) {
+      _subStatusIn = null;
+    } else if (subStatusIn != null) {
+      _subStatusIn = subStatusIn;
+      _openOnly = false;
+      _overdueOnly = false;
+      _dueSoonOnly = false;
+      _dueTodayOnly = false;
+      _repairOverdue = false;
+      _dueWithinHours = null;
+    }
+    if (clearRepairType) {
+      _repairType = null;
+    } else if (repairType != null) {
+      _repairType = repairType;
+    }
+    if (clearVendor) {
+      _vendorId = null;
+    } else if (vendorId != null) {
+      _vendorId = vendorId;
+    }
+    if (clearTechnician) {
+      _technicianId = null;
+    } else if (technicianId != null) {
+      _technicianId = technicianId;
+    }
     if (repairOverdue != null) _repairOverdue = repairOverdue;
     if (dueWithinHours != null) _dueWithinHours = dueWithinHours;
     if (clearReceivedDates) {

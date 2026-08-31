@@ -24,13 +24,20 @@ class ServiceRequestListScreen extends StatefulWidget {
     required this.tab,
     this.initialStatusFilter,
     this.initialOverdue = false,
+    this.initialDueTodayOnly = false,
     this.embedded = false,
+    this.listOnly = false,
+    this.onTotalChanged,
   });
 
   final String tab;
   final String? initialStatusFilter;
   final bool initialOverdue;
+  final bool initialDueTodayOnly;
   final bool embedded;
+  /// Chỉ danh sách (không search/filter/FAB).
+  final bool listOnly;
+  final ValueChanged<int>? onTotalChanged;
 
   @override
   State<ServiceRequestListScreen> createState() =>
@@ -71,10 +78,14 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     if (widget.initialOverdue) {
       _prov.setOverdueOnly(true);
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadUsers();
-      if (widget.tab == 'repair') _loadRepairFilters();
-      _prov.load(reset: true);
+    if (widget.initialDueTodayOnly) {
+      _prov.setDueTodayOnly(true);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!widget.listOnly) _loadUsers();
+      if (widget.tab == 'repair' && !widget.listOnly) _loadRepairFilters();
+      await _prov.load(reset: true);
+      if (mounted) widget.onTotalChanged?.call(_prov.total);
     });
   }
 
@@ -92,7 +103,8 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
 
   Future<void> _reloadList() async {
     await _prov.load(reset: true);
-    if (widget.tab == 'repair') await _loadRepairFilters();
+    widget.onTotalChanged?.call(_prov.total);
+    if (widget.tab == 'repair' && !widget.listOnly) await _loadRepairFilters();
   }
 
   Future<void> _openRepairFilterSheet(ServiceRequestsProvider prov) async {
@@ -357,6 +369,9 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
       value: _prov,
       child: Consumer<ServiceRequestsProvider>(
         builder: (context, prov, _) {
+          if (widget.listOnly) {
+            return _buildBody(l10n, prov);
+          }
           final body = Column(
             children: [
               Padding(
@@ -486,17 +501,19 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
 
   Widget _filterChips(ServiceRequestsProvider prov) {
     final supportTicketFilters = <(String, String)>[
-      ('processing', 'Đang xử lý'),
       ('contact_failed', 'Không liên lạc/gặp được'),
       ('done', 'Hoàn thành'),
       ('failed', 'Không xử lý được'),
       ('cancelled', 'Hủy'),
     ];
 
-    final repairClearAll = prov.statusFilter == null &&
+    final clearCommon = prov.statusFilter == null &&
         prov.ticketStatus == null &&
         !prov.overdueOnly &&
         !prov.dueSoonOnly &&
+        !prov.openOnly;
+
+    final repairClearAll = clearCommon &&
         prov.subStatusIn == null &&
         prov.vendorIdFilter == null &&
         prov.technicianIdFilter == null &&
@@ -511,15 +528,11 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
         children: [
           FilterChip(
             label: const Text('Tất cả'),
-            selected: widget.tab == 'repair'
-                ? repairClearAll
-                : prov.statusFilter == null &&
-                    prov.ticketStatus == null &&
-                    !prov.overdueOnly &&
-                    !prov.dueSoonOnly,
+            selected: widget.tab == 'repair' ? repairClearAll : clearCommon,
             onSelected: (_) {
               prov.setTicketStatus(null);
               prov.setStatusFilter(null);
+              prov.setOpenOnly(false);
               prov.setOverdueOnly(false);
               prov.setDueSoonOnly(false);
               if (widget.tab == 'repair') {
@@ -536,7 +549,16 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
           ),
           const SizedBox(width: 6),
           FilterChip(
-            label: const Text('Sắp hết hạn (<12h)'),
+            label: const Text('Đang xử lý'),
+            selected: prov.openOnly,
+            onSelected: (_) {
+              prov.setOpenOnly(true);
+              _reloadList();
+            },
+          ),
+          const SizedBox(width: 6),
+          FilterChip(
+            label: const Text('Cần xử lý'),
             selected: prov.dueSoonOnly,
             onSelected: (_) {
               prov.setDueSoonOnly(true);
@@ -612,7 +634,11 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
     if (prov.items.isEmpty) {
       return EmptyState(
         icon: Icons.support_agent_outlined,
-        message: l10n.serviceListEmpty,
+        message: widget.initialDueTodayOnly
+            ? (widget.tab == 'repair'
+                ? l10n.actionTodayRepairEmpty
+                : l10n.actionTodaySupportEmpty)
+            : l10n.serviceListEmpty,
       );
     }
     return RefreshIndicator(
@@ -620,16 +646,18 @@ class _ServiceRequestListScreenState extends State<ServiceRequestListScreen> {
       child: NotificationListener<ScrollNotification>(
         onNotification: (n) {
           if (n.metrics.pixels > n.metrics.maxScrollExtent - 200) {
-            prov.load(reset: false);
+            prov.load(reset: false).then((_) {
+              widget.onTotalChanged?.call(prov.total);
+            });
           }
           return false;
         },
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             AppSpacing.screenHorizontal,
-            0,
+            widget.listOnly ? AppSpacing.space2 : 0,
             AppSpacing.screenHorizontal,
-            88,
+            widget.listOnly ? AppSpacing.space4 : 88,
           ),
           itemCount: prov.items.length + (prov.isLoadingMore ? 1 : 0),
           separatorBuilder: (_, __) => const SizedBox(height: 10),

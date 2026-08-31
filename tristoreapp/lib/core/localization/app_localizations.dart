@@ -306,6 +306,7 @@ class AppLocalizations {
   String get deliverySetStatus => 'Đổi trạng thái';
   String get deliveryReason => 'Lý do';
   String get deliveryImages => 'Ảnh check-in';
+  String get deliveryCheckinNoteLabel => 'Ghi chú';
   String get deliveryAddImage => 'Thêm ảnh';
   String get deliveryCheckinTabEmpty => 'Chưa có ảnh trong mục này.';
   String get deliveryAssignMe => 'Nhận đơn';
@@ -922,6 +923,17 @@ class AppLocalizations {
   String get tasksDashboardEmpty => 'Không có nhiệm vụ phù hợp.';
 
   String get dashboardTodayTitle => 'Tổng quan hôm nay';
+  String get dashboardActionTodayButton => 'Cần xử lý hôm nay';
+  String get actionTodayTitle => 'Cần xử lý hôm nay';
+  String actionTodayTabOrders(int count) => 'Đơn hàng ($count)';
+  String actionTodayTabSupport(int count) => 'Hỗ trợ ($count)';
+  String actionTodayTabRepair(int count) => 'Sửa chữa ($count)';
+  String get actionTodayOrdersEmpty =>
+      'Không có đơn hẹn giao hôm nay.';
+  String get actionTodaySupportEmpty =>
+      'Không có yêu cầu hỗ trợ hạn xử lý hôm nay.';
+  String get actionTodayRepairEmpty =>
+      'Không có phiếu sửa chữa hạn xử lý hôm nay.';
   String get dashboardStatOrdersTodayTotal => 'Tổng tiền đơn hôm nay';
   String get dashboardStatOrdersTodayTotalHint =>
       'Tổng giá trị đơn được tạo trong ngày';

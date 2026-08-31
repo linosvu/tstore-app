@@ -74,6 +74,30 @@ class DeliveryCheckinImage {
   }
 }
 
+/// Chữ ký check-in giao hàng (NV giao / khách hàng).
+class DeliverySignaturePublic {
+  const DeliverySignaturePublic({
+    required this.id,
+    required this.signer,
+    required this.imageUrl,
+    this.signedAt,
+  });
+
+  final String id;
+  final String signer;
+  final String imageUrl;
+  final String? signedAt;
+
+  factory DeliverySignaturePublic.fromJson(Map<String, dynamic> json) {
+    return DeliverySignaturePublic(
+      id: json['id'] as String,
+      signer: json['signer'] as String? ?? 'staff',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      signedAt: json['signedAt'] as String?,
+    );
+  }
+}
+
 class DeliveryUserBrief {
   const DeliveryUserBrief({required this.id, required this.name});
 
@@ -146,10 +170,12 @@ class DeliveryPublic {
     this.cancelReason,
     required this.paymentCollected,
     this.deliveryNote,
+    this.checkinNote,
     required this.priority,
     this.shippingCarrier,
     required this.isPublicBoard,
     required this.checkinImages,
+    required this.signatures,
     this.deliveredAt,
     required this.createdAt,
     required this.updatedAt,
@@ -170,10 +196,12 @@ class DeliveryPublic {
   final String? cancelReason;
   final bool paymentCollected;
   final String? deliveryNote;
+  final String? checkinNote;
   final String priority;
   final String? shippingCarrier;
   final bool isPublicBoard;
   final List<DeliveryCheckinImage> checkinImages;
+  final List<DeliverySignaturePublic> signatures;
   final String? deliveredAt;
   final String createdAt;
   final String updatedAt;
@@ -192,6 +220,7 @@ class DeliveryPublic {
 
   factory DeliveryPublic.fromJson(Map<String, dynamic> json) {
     final imgs = json['checkinImages'];
+    final sigs = json['signatures'];
     final linesRaw = json['lines'];
     final so = json['saleOrder'];
     final cb = json['createdBy'];
@@ -206,6 +235,7 @@ class DeliveryPublic {
       cancelReason: json['cancelReason'] as String?,
       paymentCollected: json['paymentCollected'] as bool? ?? false,
       deliveryNote: json['deliveryNote'] as String?,
+      checkinNote: json['checkinNote'] as String?,
       priority: json['priority'] as String? ?? 'normal',
       shippingCarrier: json['shippingCarrier'] as String?,
       isPublicBoard: json['isPublicBoard'] as bool? ?? false,
@@ -213,6 +243,15 @@ class DeliveryPublic {
           ? imgs
               .map(
                 (e) => DeliveryCheckinImage.fromJson(e as Map<String, dynamic>),
+              )
+              .toList()
+          : const [],
+      signatures: sigs is List
+          ? sigs
+              .map(
+                (e) => DeliverySignaturePublic.fromJson(
+                  e as Map<String, dynamic>,
+                ),
               )
               .toList()
           : const [],

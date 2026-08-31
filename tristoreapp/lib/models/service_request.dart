@@ -3,6 +3,12 @@ library;
 
 import 'dart:convert';
 
+/// 00:00:00 hôm nay (giờ máy).
+DateTime startOfTodayLocal() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
 /// 23:59:59.999 ngày mai (giờ máy).
 DateTime endOfTomorrowLocal() {
   final now = DateTime.now();
@@ -74,6 +80,7 @@ class ServiceTicketBrief {
     this.isOverdue = false,
     this.subStatus,
     this.repairType,
+    this.technicianName,
     this.vendorName,
     this.statusChangedAt,
     this.createdAt,
@@ -110,6 +117,7 @@ class ServiceTicketBrief {
   final bool isOverdue;
   final String? subStatus;
   final String? repairType;
+  final String? technicianName;
   final String? vendorName;
   final String? statusChangedAt;
   final String? createdAt;
@@ -162,12 +170,13 @@ class ServiceTicketBrief {
     return best?.toLocal();
   }
 
-  /// Có hạn xử lý ≤ 23:59 ngày mai (kèm quá hạn).
+  /// Có hạn xử lý trong khoảng hôm nay → hết ngày mai (không gồm quá hạn ngày trước).
   bool get isDueSoon {
     if (isTicketClosedStatus) return false;
     final due = dueHandleAt;
     if (due == null) return false;
-    return !due.isAfter(endOfTomorrowLocal());
+    return !due.isBefore(startOfTodayLocal()) &&
+        !due.isAfter(endOfTomorrowLocal());
   }
 
   bool get isTicketClosedStatus {
@@ -220,6 +229,7 @@ class ServiceTicketBrief {
       isOverdue: json['isOverdue'] as bool? ?? false,
       subStatus: json['subStatus'] as String?,
       repairType: json['repairType'] as String?,
+      technicianName: json['technicianName'] as String?,
       vendorName: json['vendorName'] as String?,
       statusChangedAt: json['statusChangedAt'] as String?,
       createdAt: json['createdAt'] as String?,
@@ -453,6 +463,7 @@ class RepairDetailPublic {
     this.rejectCountResult = 0,
     this.approvedInspectAt,
     this.approvedInspectBy,
+    this.approvedInspectByName,
     this.repairResult,
     this.warrantyMonths,
     this.receiveBackNote,
@@ -473,7 +484,9 @@ class RepairDetailPublic {
     this.paymentSubmittedAt,
     this.paymentConfirmedAt,
     this.paymentConfirmedBy,
+    this.paymentConfirmedByName,
     this.paymentSubmittedBy,
+    this.paymentSubmittedByName,
     this.customerRejectPending = false,
     this.subStatus,
     this.repairType,
@@ -485,6 +498,7 @@ class RepairDetailPublic {
     this.checkedAt,
     this.repairWorkSavedAt,
     this.repairWorkSavedBy,
+    this.repairWorkSavedByName,
     this.movements = const [],
     this.deadlineChanges = const [],
     this.paymentRecords = const [],
@@ -508,6 +522,7 @@ class RepairDetailPublic {
   final int rejectCountResult;
   final String? approvedInspectAt;
   final String? approvedInspectBy;
+  final String? approvedInspectByName;
   final String? repairResult;
   final int? warrantyMonths;
   final String? receiveBackNote;
@@ -528,7 +543,9 @@ class RepairDetailPublic {
   final String? paymentSubmittedAt;
   final String? paymentConfirmedAt;
   final String? paymentConfirmedBy;
+  final String? paymentConfirmedByName;
   final String? paymentSubmittedBy;
+  final String? paymentSubmittedByName;
   final bool customerRejectPending;
   final String? subStatus;
   final String? repairType;
@@ -540,6 +557,7 @@ class RepairDetailPublic {
   final String? checkedAt;
   final String? repairWorkSavedAt;
   final String? repairWorkSavedBy;
+  final String? repairWorkSavedByName;
   final List<TicketMovementPublic> movements;
   final List<DeadlineChangePublic> deadlineChanges;
   final List<RepairPaymentRecordPublic> paymentRecords;
@@ -567,6 +585,7 @@ class RepairDetailPublic {
       rejectCountResult: (json['rejectCountResult'] as num?)?.toInt() ?? 0,
       approvedInspectAt: json['approvedInspectAt'] as String?,
       approvedInspectBy: json['approvedInspectBy'] as String?,
+      approvedInspectByName: json['approvedInspectByName'] as String?,
       repairResult: json['repairResult'] as String?,
       warrantyMonths: (json['warrantyMonths'] as num?)?.toInt(),
       receiveBackNote: json['receiveBackNote'] as String?,
@@ -589,7 +608,9 @@ class RepairDetailPublic {
       paymentSubmittedAt: json['paymentSubmittedAt'] as String?,
       paymentConfirmedAt: json['paymentConfirmedAt'] as String?,
       paymentConfirmedBy: json['paymentConfirmedBy'] as String?,
+      paymentConfirmedByName: json['paymentConfirmedByName'] as String?,
       paymentSubmittedBy: json['paymentSubmittedBy'] as String?,
+      paymentSubmittedByName: json['paymentSubmittedByName'] as String?,
       customerRejectPending: json['customerRejectPending'] as bool? ?? false,
       subStatus: json['subStatus'] as String?,
       repairType: json['repairType'] as String?,
@@ -601,6 +622,7 @@ class RepairDetailPublic {
       checkedAt: json['checkedAt'] as String?,
       repairWorkSavedAt: json['repairWorkSavedAt'] as String?,
       repairWorkSavedBy: json['repairWorkSavedBy'] as String?,
+      repairWorkSavedByName: json['repairWorkSavedByName'] as String?,
       movements: _parseMovements(json['movements']),
       deadlineChanges: _parseDeadlineChanges(json['deadlineChanges']),
       paymentRecords: _parsePaymentRecords(json['paymentRecords']),
@@ -701,6 +723,7 @@ class RepairPaymentRecordPublic {
     this.note,
     this.dueDate,
     this.submittedBy,
+    this.submittedByName,
     this.submittedAt,
     this.supersededAt,
     this.reviseReason,
@@ -713,6 +736,7 @@ class RepairPaymentRecordPublic {
   final String? note;
   final String? dueDate;
   final String? submittedBy;
+  final String? submittedByName;
   final String? submittedAt;
   final String? supersededAt;
   final String? reviseReason;
@@ -729,6 +753,7 @@ class RepairPaymentRecordPublic {
       note: json['note'] as String?,
       dueDate: json['dueDate'] as String?,
       submittedBy: json['submittedBy'] as String?,
+      submittedByName: json['submittedByName'] as String?,
       submittedAt: json['submittedAt'] as String?,
       supersededAt: json['supersededAt'] as String?,
       reviseReason: json['reviseReason'] as String?,
