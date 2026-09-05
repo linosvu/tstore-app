@@ -223,13 +223,23 @@ class _RecordSaleOrderPaymentScreenState
         return;
       }
       if (amt > o.availableToRecordPayment) {
-        AppMessenger.showSnackBar(
-          context,
-          SnackBar(
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
             content: Text(l10n.saleOrderRecordPaymentAmountTooHigh),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l10n.saleOrderRecordPaymentAmountTooHighContinue),
+              ),
+            ],
           ),
         );
-        return;
+        if (proceed != true || !mounted) return;
       }
       data = {
         'amount': amt,

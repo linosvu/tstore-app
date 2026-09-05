@@ -714,7 +714,8 @@ class AppLocalizations {
   String get saleOrderRecordPaymentInvalidAmount =>
       'Nhập số tiền hợp lệ (đồng).';
   String get saleOrderRecordPaymentAmountTooHigh =>
-      'Số tiền không được vượt quá số còn phải thu.';
+      'Ghi nhận thanh toán đang cao hơn số tiền phải thanh toán';
+  String get saleOrderRecordPaymentAmountTooHighContinue => 'Tiếp tục';
   String get saleOrderRecordPaymentTransferProofTitle =>
       'Ảnh xác nhận chuyển khoản';
   String get saleOrderRecordPaymentTransferProofHint =>

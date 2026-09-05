@@ -623,7 +623,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           _allChip(l10n, scheme),
           _dueSoonChip(l10n, scheme),
           ...primaryChips,
-          _paymentChip('unpaid', l10n.ordersFilterPaymentUnpaid, scheme),
+          _paymentChip('scheduled', l10n.ordersFilterPaymentUnpaid, scheme),
           _filtersToggleChip(
             l10n.ordersFilterShowMore,
             Icons.add_rounded,
@@ -648,7 +648,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         _dueSoonChip(l10n, scheme),
         ...primaryChips.expand((w) => [gap, w]),
         ...extraChips.expand((w) => [gap, w]),
-        _paymentChip('unpaid', l10n.ordersFilterPaymentUnpaid, scheme),
+        _paymentChip('scheduled', l10n.ordersFilterPaymentUnpaid, scheme),
         if (_isElevated(context)) ...[
           gap,
           FilterChip(
