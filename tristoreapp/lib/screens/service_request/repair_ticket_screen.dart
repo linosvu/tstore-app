@@ -14,6 +14,7 @@ import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/integer_thousands_input_formatter.dart';
+import 'package:tstore/widgets/ui/confirm_delete_payment_dialog.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
@@ -701,6 +702,12 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     );
   }
 
+  String _stepLabel(int index) {
+    if (index < 0) return repairStepLabels.first;
+    if (index >= repairStepLabels.length) return repairStepLabels.last;
+    return repairStepLabels[index];
+  }
+
   bool get _historyView {
     final t = _ticket;
     if (t == null || _previewStepIndex == null) return false;
@@ -711,7 +718,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
 
   void _onStepperTap(int stepIndex, ServiceTicketPublic t, RepairDetailPublic? d) {
     final cur = _currentStepIndex(t, d);
-    if (stepIndex > cur || stepIndex >= 5) return;
+    if (stepIndex > cur || stepIndex >= repairStepLabels.length) return;
     setState(() {
       // Bấm bước hiện tại → thoát chế độ xem lại.
       if (stepIndex == cur) {
@@ -749,7 +756,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
     if (stepIndex >= currentIdx) return;
 
     final targetStatus = _targetStatusFromStepIndex(stepIndex);
-    final title = 'Làm lại từ: ${repairStepLabels[stepIndex]}';
+    final title = 'Làm lại từ: ${_stepLabel(stepIndex)}';
 
     final go = await showDialog<bool>(
       context: context,
@@ -1396,7 +1403,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Đang xem lại: ${repairStepLabels[_previewStepIndex!]}. '
+                            'Đang xem lại: ${_stepLabel(_previewStepIndex!)}. '
                             'Dữ liệu các bước sau vẫn được giữ — không chỉnh sửa tại đây.',
                             style: const TextStyle(fontSize: 13),
                           ),
@@ -1409,7 +1416,7 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                                 onPressed: () =>
                                     setState(() => _previewStepIndex = null),
                                 child: Text(
-                                  'Về ${repairStepLabels[_currentStepIndex(t, d)]}',
+                                  'Về ${_stepLabel(_currentStepIndex(t, d))}',
                                 ),
                               ),
                               if (_canRewindRepair(t, d))
@@ -3275,6 +3282,26 @@ class _RepairTicketScreenState extends State<RepairTicketScreen> {
                       ? null
                       : () => _action('confirm-payment'),
                   child: Text(aborted ? 'Duyệt kết thúc' : 'Duyệt thanh toán'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          final ok = await confirmDeletePaymentRecord(context);
+                          if (!ok || !mounted) return;
+                          await _action(
+                            'revise-payment',
+                            body: {
+                              'reason': 'Xóa ghi nhận thanh toán',
+                            },
+                          );
+                        },
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Xóa'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton(

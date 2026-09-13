@@ -226,6 +226,7 @@ String yyyyMmDd(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}';
 
 /// Repair wizard steps — derive from sub_status when available.
+/// Trả về 0..4 = bước đang làm; >= [repairStepLabels.length] = tất cả xong.
 int repairStepIndex(
   String status, {
   bool customerRejectPending = false,
@@ -249,11 +250,11 @@ int repairStepIndex(
       case 'pending_payment':
       case 'pending_approval':
       case 'debt_open':
-      case 'completed':
         return 4;
+      case 'completed':
       case 'cancelled':
       case 'customer_rejected':
-        return 5;
+        return repairStepLabels.length;
     }
   }
   switch (status) {
@@ -272,7 +273,7 @@ int repairStepIndex(
     case 'completed':
     case 'customer_rejected':
     case 'cancelled':
-      return 5;
+      return repairStepLabels.length;
     default:
       return 0;
   }
@@ -284,7 +285,6 @@ const repairStepLabels = [
   'Sửa chữa',
   'Trả khách',
   'Thanh toán & Duyệt',
-  'Xong',
 ];
 
 String repairSubStatusLabel(String? sub, [AppLocalizations? l10n]) {

@@ -23,7 +23,7 @@ class ServiceRequestListCard extends StatelessWidget {
   ({String? label, bool overdue, bool showScheduleIcon, bool isExpected})
       _repairSecondarySchedule(ServiceTicketBrief ticket) {
     final step = repairStepIndex(ticket.status);
-    if (step >= 5) {
+    if (step >= repairStepLabels.length) {
       return (
         label: null,
         overdue: false,
@@ -215,7 +215,7 @@ class ServiceRequestListCard extends StatelessWidget {
       timeOverdue = schedule.overdue;
       showScheduleIcon = schedule.showScheduleIcon;
       timeIsExpected = schedule.isExpected;
-      if (repairStepIndex(latest.status) >= 5) {
+      if (repairStepIndex(latest.status) >= repairStepLabels.length) {
         final doneAt = formatServiceTime(
           latest.statusChangedAt ?? latest.createdAt,
         );
@@ -441,10 +441,13 @@ class ServiceRequestListCard extends StatelessWidget {
                         latest.status,
                         subStatus: latest.subStatus,
                       );
+                      final last = repairStepLabels.length - 1;
                       if (failed) {
-                        return raw >= 5 ? 4 : raw.clamp(0, 4);
+                        return raw >= repairStepLabels.length
+                            ? last
+                            : raw.clamp(0, last);
                       }
-                      return raw >= 5 ? 5 : raw;
+                      return raw;
                     }(),
                     failed: latest.status == 'cancelled' ||
                         latest.status == 'customer_rejected',

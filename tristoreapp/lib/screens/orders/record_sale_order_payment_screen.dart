@@ -19,6 +19,7 @@ import 'package:tstore/models/sale_order.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/screens/products/product_media_widgets.dart';
 import 'package:tstore/widgets/integer_thousands_input_formatter.dart';
+import 'package:tstore/widgets/ui/confirm_delete_payment_dialog.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
@@ -419,6 +420,43 @@ class _RecordSaleOrderPaymentScreenState
     }
   }
 
+  Future<void> _deleteProposal(
+    AppLocalizations l10n,
+    String proposalId,
+  ) async {
+    final ok = await confirmDeletePaymentRecord(context);
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.delete<Map<String, dynamic>>(
+        '/admin/sale-orders/payment-proposals/$proposalId',
+      );
+      if (!mounted) return;
+      final data = res.data;
+      if (data != null) {
+        final updated = SaleOrderPublic.fromJson(data);
+        setState(() {
+          _order = updated;
+          _busy = false;
+        });
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã xóa ghi nhận thanh toán.')),
+        );
+        return;
+      }
+      setState(() => _busy = false);
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(_dioMsg(e))),
+      );
+    }
+  }
+
   Widget _buildPendingPaymentCard(
     BuildContext context,
     AppLocalizations l10n,
@@ -487,6 +525,24 @@ class _RecordSaleOrderPaymentScreenState
                     ? null
                     : () => _confirmProposal(l10n, pending.id),
                 child: Text(l10n.saleOrderRecordPaymentConfirm),
+              ),
+            ),
+          ],
+          if (context.read<AuthProvider>().user?.role == 'admin' &&
+              !pending.isScheduleReminder &&
+              (pending.kiotVietPaymentId ?? '').trim().isEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _deleteProposal(l10n, pending.id),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Xóa'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
               ),
             ),
           ],

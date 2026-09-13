@@ -31,6 +31,7 @@ import 'package:tstore/providers/delivery_provider.dart';
 import 'package:tstore/providers/preparation_provider.dart';
 import 'package:tstore/screens/delivery/create_delivery_sheet.dart';
 import 'package:tstore/widgets/assign_target_dropdown.dart';
+import 'package:tstore/widgets/ui/confirm_delete_payment_dialog.dart';
 import 'package:tstore/screens/delivery/delivery_detail_screen.dart';
 import 'package:tstore/screens/delivery/delivery_ui.dart';
 import 'package:tstore/screens/orders/record_sale_order_payment_screen.dart';
@@ -798,6 +799,48 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
+  }
+
+  Future<void> _deletePaymentProposal(String proposalId) async {
+    final ok = await confirmDeletePaymentRecord(context);
+    if (!ok || !mounted) return;
+    setState(() => _actionBusy = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.delete<Map<String, dynamic>>(
+        '/admin/sale-orders/payment-proposals/$proposalId',
+      );
+      if (!mounted) return;
+      if (res.data != null) {
+        setState(() {
+          _order = SaleOrderPublic.fromJson(res.data!);
+          _notesDirty = false;
+        });
+        _markListNeedsRefresh();
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã xóa ghi nhận thanh toán.')),
+        );
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data is Map &&
+              (e.response!.data as Map)['message'] != null
+          ? (e.response!.data as Map)['message'].toString()
+          : (e.message ?? AppLocalizations.of(context).error);
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(msg)));
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  bool _isAdminRole(String? role) => role == 'admin';
+
+  bool _canDeletePayment(SaleOrderPaymentPublic p, String? role) {
+    if (!_isAdminRole(role)) return false;
+    if (p.isScheduleReminder) return false;
+    if ((p.kiotVietPaymentId ?? '').trim().isNotEmpty) return false;
+    return p.recordStatus == 'pending' || p.recordStatus == 'confirmed';
   }
 
   bool get _deliveryBlockedByCancelledPrep =>
@@ -2299,6 +2342,32 @@ class _SaleOrderDetailScreenState extends State<SaleOrderDetailScreen> {
                                 ),
                               ),
                               child: Text(l10n.saleOrderConfirmPaymentProposal),
+                            ),
+                          ),
+                        ],
+                        if (_canDeletePayment(
+                          p,
+                          context.read<AuthProvider>().user?.role,
+                        )) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton.icon(
+                              onPressed: _actionBusy
+                                  ? null
+                                  : () => unawaited(
+                                        _deletePaymentProposal(p.id),
+                                      ),
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              label: const Text('Xóa'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: scheme.error,
+                                minimumSize: const Size(88, 36),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                              ),
                             ),
                           ),
                         ],

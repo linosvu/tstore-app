@@ -701,7 +701,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   Widget _allChip(AppLocalizations l10n, ColorScheme scheme) {
-    final selected = _statusFilter == null && !_dueSoonOnly;
+    final selected =
+        _statusFilter == null && !_dueSoonOnly && _paymentFilter == null;
     return FilterChip(
       label: Text(
         l10n.ordersFilterAll,
@@ -718,6 +719,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         setState(() {
           _statusFilter = null;
           _dueSoonOnly = false;
+          _paymentFilter = null;
         });
         _load(reset: true);
       },
@@ -741,6 +743,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         setState(() {
           _dueSoonOnly = true;
           _statusFilter = null;
+          _paymentFilter = null;
         });
         _load(reset: true);
       },
@@ -765,6 +768,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         setState(() {
           _statusFilter = sel ? value : null;
           _dueSoonOnly = false;
+          // Phiếu tạm / trạng thái khác không kết hợp chip Công nợ.
+          if (sel) _paymentFilter = null;
         });
         _load(reset: true);
       },
@@ -786,7 +791,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       side: BorderSide.none,
       shape: const StadiumBorder(),
       onSelected: (sel) {
-        setState(() => _paymentFilter = sel ? value : null);
+        setState(() {
+          _paymentFilter = sel ? value : null;
+          // Công nợ tách khỏi Phiếu tạm / filter trạng thái.
+          if (sel) {
+            _statusFilter = null;
+            _dueSoonOnly = false;
+          }
+        });
         _load(reset: true);
       },
     );

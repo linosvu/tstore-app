@@ -11,6 +11,7 @@ import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/status_badge.dart';
+import 'package:tstore/widgets/ui/confirm_delete_payment_dialog.dart';
 
 import 'contact_fail_reasons.dart';
 import 'record_onsite_payment_screen.dart';
@@ -128,6 +129,16 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
   bool get _isManager {
     final role = context.read<AuthProvider>().user?.role;
     return role == 'admin' || role == 'manager';
+  }
+
+  bool get _isAdmin {
+    final role = context.read<AuthProvider>().user?.role;
+    return role == 'admin';
+  }
+
+  bool _canDeleteOnsitePayment(ServiceTicketPaymentPublic p) {
+    if (!_isAdmin) return false;
+    return p.isPending || p.isConfirmed;
   }
 
   bool _hasContactEvidence(ServiceTicketPublic t) =>
@@ -254,6 +265,34 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
               AppLocalizations.of(context).saleOrderRecordPaymentConfirmSuccess,
             ),
           ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteOnsitePayment(String proposalId) async {
+    if (_busy) return;
+    final ok = await confirmDeletePaymentRecord(context);
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await context
+          .read<ServiceRequestsProvider>()
+          .deleteOnsitePaymentProposal(proposalId);
+      if (!mounted) return;
+      if (updated != null) {
+        setState(() => _ticket = updated);
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã xóa ghi nhận thanh toán.')),
         );
       }
     } catch (e) {
@@ -401,6 +440,27 @@ class _OnsiteTicketScreenState extends State<OnsiteTicketScreen> {
                             ),
                           ),
                           child: Text(l10n.saleOrderConfirmPaymentProposal),
+                        ),
+                      ),
+                    ],
+                    if (_canDeleteOnsitePayment(p)) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: _busy
+                              ? null
+                              : () => _deleteOnsitePayment(p.id),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Xóa'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: scheme.error,
+                            minimumSize: const Size(88, 36),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                          ),
                         ),
                       ),
                     ],

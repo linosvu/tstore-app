@@ -492,6 +492,17 @@ class ServiceRequestsProvider extends ChangeNotifier {
     return ServiceTicketPublic.fromJson(data);
   }
 
+  Future<ServiceTicketPublic?> deleteOnsitePaymentProposal(
+    String proposalId,
+  ) async {
+    final res = await _api.delete<Map<String, dynamic>>(
+      '/admin/service-tickets/payment-proposals/$proposalId',
+    );
+    final data = res.data;
+    if (data == null) return null;
+    return ServiceTicketPublic.fromJson(data);
+  }
+
   Future<ServiceTicketPublic?> ticketAction(
     String ticketId,
     String action, {

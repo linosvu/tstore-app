@@ -18,6 +18,7 @@ import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/auth_provider.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
 import 'package:tstore/screens/products/product_media_widgets.dart';
+import 'package:tstore/widgets/ui/confirm_delete_payment_dialog.dart';
 import 'package:tstore/widgets/ui/section_card.dart';
 import 'package:tstore/widgets/ui/ts_dropdown_field.dart';
 
@@ -58,6 +59,8 @@ class _RecordOnsitePaymentScreenState extends State<RecordOnsitePaymentScreen> {
 
   bool _canManage(AuthUser? u) =>
       u != null && (u.role == 'admin' || u.role == 'manager');
+
+  bool _isAdmin(AuthUser? u) => u != null && u.role == 'admin';
 
   String _money(int v) =>
       '${formatIntegerWithSeparator(v, _thousandsSep)} đ';
@@ -285,6 +288,34 @@ class _RecordOnsitePaymentScreenState extends State<RecordOnsitePaymentScreen> {
     }
   }
 
+  Future<void> _delete(String id) async {
+    final ok = await confirmDeletePaymentRecord(context);
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await context
+          .read<ServiceRequestsProvider>()
+          .deleteOnsitePaymentProposal(id);
+      if (!mounted) return;
+      if (updated != null) {
+        setState(() {
+          _ticket = updated;
+          _busy = false;
+        });
+        AppMessenger.showSnackBar(
+          context,
+          const SnackBar(content: Text('Đã xóa ghi nhận thanh toán.')),
+        );
+        return;
+      }
+      setState(() => _busy = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppMessenger.showSnackBar(context, SnackBar(content: Text(_dioMsg(e))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -408,6 +439,17 @@ class _RecordOnsitePaymentScreenState extends State<RecordOnsitePaymentScreen> {
             FilledButton(
               onPressed: _busy ? null : () => _confirm(l10n, p.id),
               child: Text(l10n.saleOrderConfirmPaymentProposal),
+            ),
+          ],
+          if (_isAdmin(context.read<AuthProvider>().user)) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _delete(p.id),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Xóa'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
             ),
           ],
         ],

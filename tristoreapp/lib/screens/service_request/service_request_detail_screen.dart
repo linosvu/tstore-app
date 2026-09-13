@@ -15,6 +15,7 @@ import 'onsite_ticket_screen.dart';
 import 'other_ticket_screen.dart';
 import 'repair_ticket_screen.dart';
 import 'service_ui.dart';
+import 'widgets/edit_service_request_sheet.dart';
 
 class ServiceRequestDetailScreen extends StatefulWidget {
   const ServiceRequestDetailScreen({super.key, required this.requestId});
@@ -216,6 +217,98 @@ class _ServiceRequestDetailScreenState
     return item.status != 'completed' && item.status != 'cancelled';
   }
 
+  bool get _isElevated {
+    final role = context.read<AuthProvider>().user?.role;
+    return role == 'admin' || role == 'manager';
+  }
+
+  bool get _canAdminMutate {
+    final item = _item;
+    if (item == null || !_isElevated) return false;
+    return item.status != 'completed' && item.status != 'cancelled';
+  }
+
+  Future<void> _editRequest() async {
+    final item = _item;
+    if (item == null || _busy) return;
+    final updated = await showEditServiceRequestSheet(
+      context: context,
+      request: item,
+    );
+    if (updated != null && mounted) {
+      setState(() => _item = updated);
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Đã cập nhật thông tin yêu cầu.')),
+      );
+    }
+  }
+
+  Future<void> _softDeleteTickets() async {
+    final item = _item;
+    if (item == null || _busy) return;
+    if (item.tickets.isEmpty) {
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Không có phiếu xử lý để xóa.')),
+      );
+      return;
+    }
+
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Xóa phiếu xử lý'),
+          content: Text(
+            item.tickets.length == 1
+                ? 'Phiếu xử lý sẽ bị ẩn khỏi danh sách (có thể khôi phục trong chi tiết phiếu). Tiếp tục?'
+                : 'Sẽ ẩn ${item.tickets.length} phiếu xử lý khỏi danh sách (có thể khôi phục trong chi tiết phiếu). Tiếp tục?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Xóa'),
+            ),
+          ],
+        );
+      },
+    );
+    if (go != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final provider = context.read<ServiceRequestsProvider>();
+      for (final t in item.tickets) {
+        await provider.softDeleteTicket(t.id);
+      }
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        const SnackBar(content: Text('Đã xóa phiếu xử lý.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppMessenger.showSnackBar(
+        context,
+        SnackBar(content: Text(ServiceRequestsProvider.dioMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -378,12 +471,32 @@ class _ServiceRequestDetailScreenState
                           const SizedBox(height: 16),
                           if (item.status != 'completed' &&
                               item.status != 'cancelled') ...[
+                            if (_canAdminMutate) ...[
+                              OutlinedButton.icon(
+                                onPressed: _busy ? null : _editRequest,
+                                icon: const Icon(Icons.edit_outlined),
+                                label: const Text('Sửa'),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _busy || item.tickets.isEmpty
+                                    ? null
+                                    : _softDeleteTickets,
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Xóa'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor:
+                                      Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
                             if (item.canComplete)
                               FilledButton(
                                 onPressed: _busy ? null : _complete,
                                 child: Text(l10n.serviceCompleteRequest),
                               ),
-                            const SizedBox(height: 8),
+                            if (item.canComplete) const SizedBox(height: 8),
                             OutlinedButton(
                               onPressed: _busy ? null : _cancel,
                               child: Text(

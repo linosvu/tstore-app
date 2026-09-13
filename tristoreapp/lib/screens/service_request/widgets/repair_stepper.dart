@@ -43,7 +43,10 @@ class RepairStepper extends StatelessWidget {
                     ? Theme.of(context).colorScheme.primary
                     : Colors.grey.shade300,
               ),
-            if (onStepTap != null && browsable && i <= idx && i < 5)
+            if (onStepTap != null &&
+                browsable &&
+                i <= idx &&
+                i < repairStepLabels.length)
               InkWell(
                 onTap: () => onStepTap!.call(i),
                 borderRadius: BorderRadius.circular(14),
