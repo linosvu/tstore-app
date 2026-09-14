@@ -456,7 +456,7 @@ class ServiceRequestListCard extends StatelessWidget {
                       latest.staffName,
                       latest.staffName,
                       latest.deliveryStaffName,
-                      request.managerName,
+                      latest.staffName,
                     ],
                   )
                 else if (!isRepair)
@@ -482,7 +482,7 @@ class ServiceRequestListCard extends StatelessWidget {
                     stepSubtitles: [
                       request.managerName,
                       latest.staffName,
-                      request.managerName,
+                      latest.staffName,
                     ],
                   ),
                 if (!isRepair) ...[
