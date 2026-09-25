@@ -181,11 +181,7 @@ class DashboardPaymentRecordTile extends StatelessWidget {
         '${formatIntegerWithSeparator(item.amount, ThousandsGroupSeparatorKey.dot)} đ';
     final dueText =
         '${formatIntegerWithSeparator(item.parentAmountDue, ThousandsGroupSeparatorKey.dot)} đ';
-    final titleParts = <String>[
-      item.parentCode,
-      if (showManager && (item.managerName ?? '').trim().isNotEmpty)
-        item.managerName!.trim(),
-    ];
+    final manager = showManager ? (item.managerName ?? '').trim() : '';
     final subtitleParts = <String>[
       item.recordStatusLabelVi,
       formatPaymentRecordWhen(item.createdAt),
@@ -213,11 +209,27 @@ class DashboardPaymentRecordTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    titleParts.join(' · '),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: item.parentCode,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                        if (manager.isNotEmpty)
+                          TextSpan(
+                            text: ' · $manager',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 2),
