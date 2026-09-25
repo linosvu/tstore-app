@@ -1,16 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_spacing.dart';
-import '../../core/constants/routes.dart';
-import '../../core/localization/app_localizations.dart';
-import '../../providers/auth_provider.dart';
-import '../../widgets/ui/branded_app_bar.dart';
-import '../../widgets/ui/menu_group_card.dart';
-import '../../widgets/app_version_label.dart';
-import '../profile/profile_content.dart';
+import 'package:tstore/core/constants/app_colors.dart';
+import 'package:tstore/core/constants/app_spacing.dart';
+import 'package:tstore/core/constants/routes.dart';
+import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/design_system/design_system.dart';
+import 'package:tstore/providers/auth_provider.dart';
+import 'package:tstore/screens/profile/profile_content.dart';
+import 'package:tstore/screens/tristore/dashboard_shortcuts.dart';
+import 'package:tstore/widgets/app_version_label.dart';
+import 'package:tstore/widgets/ui/branded_app_bar.dart';
+import 'package:tstore/widgets/ui/menu_group_card.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -51,16 +52,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: AppSpacing.space3),
-                  if (user != null)
-                    const ProfileContent(embedInSettings: true)
-                  else ...[
+                  if (user != null) ...[
+                    ProfileContent(
+                      embedInSettings: true,
+                      belowHeader: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Phím tắt',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: AppSpacing.space2),
+                          TsCompactServiceGrid(
+                            items:
+                                buildDashboardShortcutItems(context, l10n),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
                     Text(
                       'Chưa đăng nhập.',
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                      onPressed: () =>
+                          Navigator.of(context).pushNamedAndRemoveUntil(
                         AppRoutes.login,
                         (_) => false,
                       ),

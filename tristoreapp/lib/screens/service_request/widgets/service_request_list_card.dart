@@ -454,7 +454,9 @@ class ServiceRequestListCard extends StatelessWidget {
                     stepSubtitles: [
                       request.managerName,
                       latest.staffName,
-                      latest.staffName,
+                      latest.repairType == 'external'
+                          ? latest.vendorName
+                          : latest.staffName,
                       latest.deliveryStaffName,
                       latest.staffName,
                     ],

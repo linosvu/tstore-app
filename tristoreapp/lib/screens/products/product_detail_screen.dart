@@ -1,15 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:tstore/core/widgets/app_messenger.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
-import '../../core/config/api_config.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/localization/app_localizations.dart';
-import '../../models/auth_user.dart';
-import '../../models/product.dart';
-import '../../providers/auth_provider.dart';
+import 'package:tstore/core/config/api_config.dart';
+import 'package:tstore/core/constants/app_colors.dart';
+import 'package:tstore/core/localization/app_localizations.dart';
+import 'package:tstore/core/widgets/app_messenger.dart';
+import 'package:tstore/models/auth_user.dart';
+import 'package:tstore/models/product.dart';
+import 'package:tstore/providers/auth_provider.dart';
 import 'create_product_sheet.dart';
 import 'product_media_widgets.dart';
 

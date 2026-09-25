@@ -27,10 +27,14 @@ class ProfileContent extends StatefulWidget {
   const ProfileContent({
     super.key,
     this.embedInSettings = false,
+    this.belowHeader,
   });
 
   /// `true` khi nằm trong [SettingsScreen] — header gọn, không nút Home/Cài đặt.
   final bool embedInSettings;
+
+  /// Widget chèn giữa header hồ sơ và section Tài khoản (vd. phím tắt).
+  final Widget? belowHeader;
 
   @override
   State<ProfileContent> createState() => _ProfileContentState();
@@ -474,6 +478,10 @@ class _ProfileContentState extends State<ProfileContent> {
             ),
           ),
         const SizedBox(height: AppSpacing.sectionGap),
+        if (widget.belowHeader != null) ...[
+          widget.belowHeader!,
+          const SizedBox(height: AppSpacing.sectionGap),
+        ],
         MenuGroupCard(
           title: l10n.settingsAccountSection,
           items: [

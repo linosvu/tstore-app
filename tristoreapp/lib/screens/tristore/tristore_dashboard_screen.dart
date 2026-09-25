@@ -10,7 +10,6 @@ import 'package:tstore/core/utils/user_role_labels.dart';
 import 'package:tstore/core/utils/amount_input.dart';
 import 'package:tstore/models/dashboard_today.dart';
 import 'package:tstore/providers/auth_provider.dart';
-import 'package:tstore/screens/main_shell.dart';
 import 'package:tstore/models/task.dart';
 import 'package:tstore/models/service_request.dart';
 import 'package:tstore/providers/service_requests_provider.dart';
@@ -21,12 +20,12 @@ import 'package:tstore/screens/tasks/task_detail_screen.dart';
 import 'package:tstore/screens/tasks/task_ui.dart';
 import 'package:tstore/screens/tasks/tasks_list_screen.dart';
 import 'package:tstore/widgets/ui/app_surface_card.dart';
-import 'package:tstore/screens/orders/sale_order_flow_screen.dart';
-import 'package:tstore/screens/products/products_screen.dart';
 import 'package:tstore/screens/management/management_hub_screen.dart';
 import 'package:tstore/screens/tristore/action_today_screen.dart';
 import 'package:tstore/screens/tristore/dashboard_drill_down_config.dart';
 import 'package:tstore/screens/tristore/dashboard_drill_down_screen.dart';
+import 'package:tstore/screens/tristore/dashboard_payment_section.dart';
+import 'package:tstore/models/dashboard_payment_record.dart';
 import 'package:tstore/design_system/design_system.dart';
 import 'package:tstore/widgets/ui/menu_group_card.dart';
 
@@ -41,6 +40,8 @@ class TristoreDashboardScreen extends StatefulWidget {
 class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
   DashboardTodayResponse? _summary;
   RepairSupportStats? _repairSupport;
+  DashboardPaymentRecordsPage? _paymentRecords;
+  bool _paymentsLoading = true;
   String? _err;
   bool _loading = true;
   String? _taskFilter;
@@ -69,10 +70,12 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
   Future<void> _fetch() async {
     setState(() {
       _loading = true;
+      _paymentsLoading = true;
       _err = null;
     });
     try {
-      final res = await context.read<AuthProvider>().api.get<Map<String, dynamic>>(
+      final auth = context.read<AuthProvider>();
+      final res = await auth.api.get<Map<String, dynamic>>(
             '/admin/dashboard/today',
           );
       final data = res.data;
@@ -93,17 +96,26 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
       if (mounted && stats != null) {
         setState(() => _repairSupport = stats);
       }
+      final pay = await fetchDashboardPaymentRecords(auth, page: 1, limit: 5);
+      if (mounted) {
+        setState(() {
+          _paymentRecords = pay;
+          _paymentsLoading = false;
+        });
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() {
         _err = e.response?.data?.toString() ?? e.message ?? 'Lỗi mạng';
         _loading = false;
+        _paymentsLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _err = e.toString();
         _loading = false;
+        _paymentsLoading = false;
       });
     }
   }
@@ -116,11 +128,6 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
   String _money(int? v) {
     if (_loading || v == null) return '—';
     return '${formatIntegerWithSeparator(v, ThousandsGroupSeparatorKey.dot)} đ';
-  }
-
-  void _launchOrders({String? status, bool useListAll = true}) {
-    MainShellController.maybeOf(context)
-        ?.launchOrdersTab(status: status, useListAll: useListAll);
   }
 
   void _openDrillDown(DashboardDrillDownKind kind) {
@@ -234,7 +241,7 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
                   AppSpacing.screenHorizontal,
                   AppSpacing.space3,
                   AppSpacing.screenHorizontal,
-                  AppSpacing.sectionGap,
+                  AppSpacing.space4,
                 ),
                 child: SafeArea(
                   bottom: false,
@@ -286,73 +293,17 @@ class _TristoreDashboardScreenState extends State<TristoreDashboardScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.screenHorizontal,
-                AppSpacing.space3,
+                AppSpacing.space2,
                 AppSpacing.screenHorizontal,
                 AppSpacing.space6,
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  TsCompactServiceGrid(
-                    items: [
-                      TsCompactServiceItem(
-                        label: l10n.ordersDashboardCreate,
-                        icon: Icons.add_shopping_cart_outlined,
-                        iconColor: AppColors.primary,
-                        onTap: () async {
-                          await Navigator.push<bool>(
-                            context,
-                            MaterialPageRoute<bool>(
-                              builder: (_) => const SaleOrderFlowScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      TsCompactServiceItem(
-                        label: l10n.ordersDashboardList,
-                        icon: Icons.receipt_long_outlined,
-                        iconColor: AppColors.secondary,
-                        onTap: () => _launchOrders(useListAll: true),
-                      ),
-                      TsCompactServiceItem(
-                        label: l10n.dashboardStatPrepToday,
-                        icon: Icons.checklist_rounded,
-                        iconColor: AppColors.success,
-                        onTap: () =>
-                            _openDrillDown(DashboardDrillDownKind.prepToday),
-                      ),
-                      TsCompactServiceItem(
-                        label: l10n.dashboardStatDeliveryToday,
-                        icon: Icons.local_shipping_outlined,
-                        iconColor: AppColors.primary,
-                        onTap: () => _openDrillDown(
-                          DashboardDrillDownKind.deliveryToday,
-                        ),
-                      ),
-                      TsCompactServiceItem(
-                        label: l10n.ordersSubTabRepair,
-                        icon: Icons.build_outlined,
-                        iconColor: AppColors.warning,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const RepairOrdersScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      TsCompactServiceItem(
-                        label: l10n.productsNav,
-                        icon: Icons.inventory_2_outlined,
-                        iconColor: AppColors.secondary,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const ProductsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                  DashboardPaymentSection(
+                    page: _paymentRecords,
+                    loading: _paymentsLoading,
+                    showManager: user?.role == 'admin' ||
+                        user?.role == 'manager',
                   ),
                   if (user != null &&
                       (user.role == 'admin' || user.role == 'manager')) ...[
